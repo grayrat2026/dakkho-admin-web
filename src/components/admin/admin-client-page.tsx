@@ -36,12 +36,36 @@ const pageComponents: Record<string, React.ComponentType> = {
   settings: SettingsPanel,
 };
 
-export default function Home() {
-  const { adminUser, setAdminUser, currentPage, sidebarCollapsed, isLoading, setIsLoading } = useAdminStore();
+const validPages = Object.keys(pageComponents);
+
+export default function AdminClientPage({ currentPage: initialPage }: { currentPage: string }) {
+  const { adminUser, setAdminUser, sidebarCollapsed } = useAdminStore();
   const [checking, setChecking] = useState(true);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [currentPage, setCurrentPage] = useState(initialPage);
+
+  // Listen for popstate (back/forward browser navigation)
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.slice(1) || 'dashboard';
+      setCurrentPage(validPages.includes(path) ? path : 'dashboard');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Sync initial page from URL on mount
+  useEffect(() => {
+    const path = window.location.pathname.slice(1) || 'dashboard';
+    setCurrentPage(validPages.includes(path) ? path : 'dashboard');
+  }, []);
 
   useEffect(() => {
     checkAuth();
+    const handleResize = () => setIsDesktop(window.innerWidth >= 1024);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const checkAuth = async () => {
@@ -57,7 +81,6 @@ export default function Home() {
     }
   };
 
-  // Loading state while checking auth
   if (checking) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: '#0F0F1A' }}>
@@ -78,28 +101,26 @@ export default function Home() {
     );
   }
 
-  // Not authenticated - show login
   if (!adminUser) {
     return <LoginForm />;
   }
 
-  // Authenticated - show admin dashboard
-  const PageComponent = pageComponents[currentPage] || Dashboard;
+  const pageKey = validPages.includes(currentPage) ? currentPage : 'dashboard';
+  const PageComponent = pageComponents[pageKey] || Dashboard;
 
   return (
     <div className="min-h-screen" style={{ background: '#0F0F1A' }}>
       <Sidebar />
       <Header />
-
       <motion.main
         initial={false}
-        animate={{ paddingLeft: sidebarCollapsed ? 72 : 256 }}
+        animate={{ paddingLeft: isDesktop ? (sidebarCollapsed ? 72 : 256) : 0 }}
         transition={{ duration: 0.2, ease: 'easeInOut' }}
         className="pt-16 min-h-screen"
       >
-        <div className="p-6">
+        <div className="p-4 md:p-6">
           <motion.div
-            key={currentPage}
+            key={pageKey}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}

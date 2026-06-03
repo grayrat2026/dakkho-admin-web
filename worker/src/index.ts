@@ -27,6 +27,7 @@ import notificationRoutes from './routes/notifications';
 import analyticsRoutes from './routes/analytics';
 import uploadRoutes from './routes/upload';
 import emailRoutes from './routes/email';
+import adminRoutes from './routes/admin';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -75,6 +76,7 @@ app.route('/admin/notifications', notificationRoutes);
 app.route('/admin/analytics', analyticsRoutes);
 app.route('/admin/upload', uploadRoutes);
 app.route('/admin/email', emailRoutes);
+app.route('/admin/admin', adminRoutes);
 
 // ─── 404 Handler ───
 

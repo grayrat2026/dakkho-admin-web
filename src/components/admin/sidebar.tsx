@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname, useRouter } from 'next/navigation';
 import { useAdminStore } from '@/lib/store';
 import { assetUrl } from '@/lib/api-client';
 import {
@@ -16,9 +17,9 @@ import {
   Tags,
   ChevronLeft,
   ChevronRight,
-  Wrench,
+  X,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -32,18 +33,100 @@ const navItems = [
   { id: 'config', label: 'App Config', icon: Settings },
   { id: 'email', label: 'Email', icon: Mail },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-  { id: 'settings', label: 'System', icon: Wrench },
+  { id: 'settings', label: 'System', icon: Settings },
 ];
 
 export default function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar, currentPage, setCurrentPage } = useAdminStore();
+  const pathname = usePathname();
+  const router = useRouter();
+  const { sidebarCollapsed, toggleSidebar, sidebarMobileOpen, setSidebarMobileOpen } = useAdminStore();
 
-  return (
+  const currentPage = pathname?.split('/').filter(Boolean)[0] || 'dashboard';
+
+  const handleNav = (id: string) => {
+    router.push(`/${id}`);
+    setSidebarMobileOpen(false);
+  };
+
+  // Mobile overlay sidebar
+  const mobileSidebar = (
+    <AnimatePresence>
+      {sidebarMobileOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+            onClick={() => setSidebarMobileOpen(false)}
+          />
+          <motion.aside
+            initial={{ x: -280 }}
+            animate={{ x: 0 }}
+            exit={{ x: -280 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="fixed left-0 top-0 bottom-0 z-50 w-[280px] flex flex-col border-r border-white/[0.06] bg-[rgba(15,15,26,0.98)] backdrop-blur-xl lg:hidden"
+          >
+            {/* Logo */}
+            <div className="flex items-center justify-between h-16 px-4 border-b border-white/[0.06]">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  <img src={assetUrl('/dakkho-logo.png')} alt="DAKKHO" className="w-7 h-7 object-contain" />
+                </div>
+                <div className="overflow-hidden">
+                  <h1 className="text-lg font-bold text-white whitespace-nowrap">DAKKHO</h1>
+                  <p className="text-[10px] text-muted-foreground whitespace-nowrap">Admin Panel</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSidebarMobileOpen(false)}
+                className="p-1 rounded-lg text-muted-foreground hover:text-white hover:bg-white/5"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Navigation */}
+            <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentPage === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNav(item.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative ${
+                      isActive
+                        ? 'bg-dakkho-blue/10 text-dakkho-blue'
+                        : 'text-muted-foreground hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="sidebar-active-mobile"
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full gradient-primary"
+                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                      />
+                    )}
+                    <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-dakkho-blue' : ''}`} />
+                    <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </motion.aside>
+        </>
+      )}
+    </AnimatePresence>
+  );
+
+  // Desktop sidebar
+  const desktopSidebar = (
     <motion.aside
       initial={false}
       animate={{ width: sidebarCollapsed ? 72 : 256 }}
       transition={{ duration: 0.2, ease: 'easeInOut' }}
-      className="fixed left-0 top-0 bottom-0 z-40 flex flex-col border-r border-white/[0.06] bg-[rgba(15,15,26,0.95)] backdrop-blur-xl"
+      className="fixed left-0 top-0 bottom-0 z-40 hidden lg:flex flex-col border-r border-white/[0.06] bg-[rgba(15,15,26,0.95)] backdrop-blur-xl"
     >
       {/* Logo */}
       <div className="flex items-center h-16 px-4 border-b border-white/[0.06]">
@@ -73,7 +156,7 @@ export default function Sidebar() {
           return (
             <button
               key={item.id}
-              onClick={() => setCurrentPage(item.id)}
+              onClick={() => handleNav(item.id)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative ${
                 isActive
                   ? 'bg-dakkho-blue/10 text-dakkho-blue'
@@ -114,5 +197,12 @@ export default function Sidebar() {
         </button>
       </div>
     </motion.aside>
+  );
+
+  return (
+    <>
+      {mobileSidebar}
+      {desktopSidebar}
+    </>
   );
 }

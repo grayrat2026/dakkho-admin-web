@@ -1,5 +1,5 @@
 /**
- * Analytics routes — GET
+ * Analytics routes — GET /, GET /charts
  */
 
 import { Hono } from 'hono';
@@ -69,10 +69,123 @@ analyticsRoutes.get('/', async (c) => {
       // Ignore D1 errors
     }
 
+    // Get recent audit logs for activity timeline
+    let recentLogs: unknown[] = [];
+    try {
+      const logsResult = await c.env.DB.prepare(
+        'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 10'
+      ).all();
+      recentLogs = logsResult.results || [];
+    } catch {
+      // Ignore D1 errors
+    }
+
     return c.json({
       stats,
       recentEnrollments: recentEnrollments.documents,
       popularCourses: popularCourses.documents,
+      recentLogs,
+    });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    return c.json({ error: message }, 500);
+  }
+});
+
+// GET /charts — Get chart data (real analytics from database)
+analyticsRoutes.get('/charts', async (c) => {
+  try {
+    // Calculate date range for last 6 months
+    const now = new Date();
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    const sixMonthsAgoISO = sixMonthsAgo.toISOString();
+
+    // Month names for the last 6 months
+    const monthNames: string[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthNames.push(d.toLocaleString('en', { month: 'short' }));
+    }
+
+    // Fetch all data in parallel
+    const [enrollmentsRes, coursesRes, usersRes] = await Promise.all([
+      listDocuments(c.env, APPWRITE_COLLECTIONS.ENROLLMENTS, [
+        Query.greaterThanEqual('$createdAt', sixMonthsAgoISO),
+        Query.limit(5000),
+        Query.orderAsc('$createdAt'),
+      ]).catch(() => ({ documents: [] as Record<string, unknown>[], total: 0 })),
+      listDocuments(c.env, APPWRITE_COLLECTIONS.COURSES, [
+        Query.limit(5000),
+      ]).catch(() => ({ documents: [] as Record<string, unknown>[], total: 0 })),
+      listDocuments(c.env, APPWRITE_COLLECTIONS.USERS, [
+        Query.greaterThanEqual('$createdAt', sixMonthsAgoISO),
+        Query.limit(5000),
+        Query.orderAsc('$createdAt'),
+      ]).catch(() => ({ documents: [] as Record<string, unknown>[], total: 0 })),
+    ]);
+
+    // Build enrollment trend (monthly counts)
+    const enrollmentByMonth = new Map<string, number>();
+    for (let i = 0; i < 6; i++) enrollmentByMonth.set(monthNames[i], 0);
+
+    for (const doc of enrollmentsRes.documents) {
+      const created = doc.$createdAt as string;
+      if (created) {
+        const d = new Date(created);
+        const monthKey = d.toLocaleString('en', { month: 'short' });
+        if (enrollmentByMonth.has(monthKey)) {
+          enrollmentByMonth.set(monthKey, (enrollmentByMonth.get(monthKey) || 0) + 1);
+        }
+      }
+    }
+
+    const enrollmentTrend = monthNames.map(month => ({
+      month,
+      enrollments: enrollmentByMonth.get(month) || 0,
+    }));
+
+    // Build course distribution by level
+    const levelCounts: Record<string, number> = { beginner: 0, intermediate: 0, advanced: 0, expert: 0 };
+    for (const doc of coursesRes.documents) {
+      const level = String(doc.level || 'beginner').toLowerCase();
+      if (levelCounts[level] !== undefined) {
+        levelCounts[level]++;
+      } else {
+        levelCounts['beginner']++;
+      }
+    }
+
+    const courseDistribution = Object.entries(levelCounts).map(([name, value]) => ({
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      value,
+    }));
+
+    // Build user growth (cumulative monthly counts)
+    const usersByMonth = new Map<string, number>();
+    for (let i = 0; i < 6; i++) usersByMonth.set(monthNames[i], 0);
+
+    for (const doc of usersRes.documents) {
+      const created = doc.$createdAt as string;
+      if (created) {
+        const d = new Date(created);
+        const monthKey = d.toLocaleString('en', { month: 'short' });
+        if (usersByMonth.has(monthKey)) {
+          usersByMonth.set(monthKey, (usersByMonth.get(monthKey) || 0) + 1);
+        }
+      }
+    }
+
+    // Make cumulative
+    let cumulative = 0;
+    const userGrowth = monthNames.map(month => {
+      cumulative += usersByMonth.get(month) || 0;
+      return { month, users: cumulative };
+    });
+
+    return c.json({
+      enrollmentTrend,
+      courseDistribution,
+      userGrowth,
     });
   } catch (error) {
     const message = getErrorMessage(error);

@@ -1,5 +1,5 @@
 /**
- * Config routes — GET, PUT
+ * Config routes — GET, PUT, PUT /reset
  * Uses D1 for persistence and KV for broadcast (replaces MQTT)
  */
 
@@ -91,6 +91,43 @@ configRoutes.put('/', async (c) => {
 
     const user = c.get('user');
     await logAudit(c.env, user.id, 'UPDATE_CONFIG', 'config', undefined, config);
+
+    return c.json({ success: true, config });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    return c.json({ error: message }, 500);
+  }
+});
+
+// PUT /reset — Reset config to defaults
+configRoutes.put('/reset', async (c) => {
+  try {
+    const config = DEFAULT_CONFIG;
+
+    const sections: Record<string, unknown> = {
+      featureToggles: config.featureToggles,
+      homePageSections: config.homePageSections,
+      sidebarVisibility: config.sidebarVisibility,
+      bottomNavTabs: config.bottomNavTabs,
+      topBarElements: config.topBarElements,
+      cardStyle: config.cardStyle,
+      contentProtection: config.contentProtection,
+    };
+
+    for (const [key, value] of Object.entries(sections)) {
+      await c.env.DB.prepare(
+        `INSERT INTO app_config (key, value, updated_at) VALUES (?, ?, datetime('now'))
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
+      )
+        .bind(key, JSON.stringify(value))
+        .run();
+    }
+
+    await c.env.KV_CONFIG.put('server_config', JSON.stringify(config));
+    await c.env.KV_CONFIG.put('config_updated_at', new Date().toISOString());
+
+    const user = c.get('user');
+    await logAudit(c.env, user.id, 'RESET_CONFIG', 'config', undefined, { action: 'reset_to_defaults' });
 
     return c.json({ success: true, config });
   } catch (error) {

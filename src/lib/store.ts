@@ -11,8 +11,8 @@ interface AdminStore {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
 
-  currentPage: string;
-  setCurrentPage: (page: string) => void;
+  sidebarMobileOpen: boolean;
+  setSidebarMobileOpen: (open: boolean) => void;
 
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
@@ -28,8 +28,8 @@ export const useAdminStore = create<AdminStore>((set) => ({
   sidebarCollapsed: false,
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
-  currentPage: 'dashboard',
-  setCurrentPage: (page) => set({ currentPage: page }),
+  sidebarMobileOpen: false,
+  setSidebarMobileOpen: (open) => set({ sidebarMobileOpen: open }),
 
   isLoading: false,
   setIsLoading: (loading) => set({ isLoading: loading }),

@@ -130,4 +130,21 @@ authRoutes.delete('/logout', adminAuthMiddleware, async (c) => {
   }
 });
 
+// DELETE /sessions — Clear all admin sessions (danger zone)
+authRoutes.delete('/sessions', adminAuthMiddleware, async (c) => {
+  try {
+    const result = await c.env.DB.prepare(
+      "UPDATE admin_sessions SET is_active = 0 WHERE is_active = 1"
+    ).run();
+
+    const user = c.get('user');
+    await logAudit(c.env, user.id, 'CLEAR_ALL_SESSIONS', 'auth', undefined, { action: 'clear_all' });
+
+    return c.json({ success: true, cleared: result.meta?.changes || 0 });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    return c.json({ error: message }, 500);
+  }
+});
+
 export default authRoutes;
