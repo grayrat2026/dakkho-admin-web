@@ -144,3 +144,69 @@ Stage Summary:
   - Resend SDK → Resend REST API (fetch to api.resend.com)
   - MQTT → Not supported; status check returns "limited" with credentials check only
 - All functions handle CORS (OPTIONS preflight), method routing (GET/POST/PUT/DELETE), and return JSON responses
+
+---
+Task ID: worker-1
+Agent: general-purpose
+Task: Create Cloudflare Worker project configuration files for DAKKHO Admin API backend
+
+Work Log:
+- Read worklog.md to understand project context and existing infrastructure
+- Created /home/z/my-project/worker/ directory structure (worker/src/)
+- Created 6 configuration/setup files for the Cloudflare Worker project
+- All files follow the exact specifications provided
+
+Stage Summary:
+- 6 files created under /home/z/my-project/worker/:
+  - package.json — Project manifest with hono, node-appwrite, wrangler, typescript deps
+  - tsconfig.json — TypeScript config targeting ES2022 with Cloudflare Workers types and path aliases
+  - wrangler.toml — Cloudflare Workers config with R2 buckets (4), KV namespace, D1 database, env vars, and secret placeholders
+  - src/env.ts — TypeScript interface for all Worker bindings (R2, KV, D1, env vars, secrets)
+  - DEPLOY.md — Step-by-step deployment guide with KV/D1 setup, secret configuration, and full API endpoint table (32+ endpoints)
+  - schema.sql — D1 database schema with admin_sessions, app_config, audit_logs tables, indexes, and seed data
+
+---
+Task ID: worker-2
+Agent: general-purpose
+Task: Migrate API routes to Hono (Cloudflare Workers)
+
+Work Log:
+- Read all 14 Next.js API route files and 7 library files to understand existing business logic
+- Read existing worker configuration files (env.ts, wrangler.toml, package.json, schema.sql)
+- Removed node-appwrite dependency from package.json (Workers use REST API directly)
+- Created 6 library files in worker/src/lib/
+- Created 13 route files in worker/src/routes/
+- Created main entry point worker/src/index.ts
+- Fixed all TypeScript compilation errors — `npx tsc --noEmit` passes cleanly
+
+Stage Summary:
+- 20 files created under /home/z/my-project/worker/:
+  - src/index.ts — Main Hono app with CORS, logger, health check, route mounting, 404/error handlers
+  - src/lib/appwrite.ts — Appwrite REST API helper: Query builder, document CRUD (list/get/create/update/delete), auth (createSession/deleteSession/getAccount/listUsers), health/database checks
+  - src/lib/r2.ts — Native R2Bucket binding helper: uploadFile, deleteFile, getFile, getFileInfo, listFiles, checkBucket, getBucketForType, getPublicUrl
+  - src/lib/resend.ts — Resend REST API helper: sendEmail, sendTestEmail
+  - src/lib/auth.ts — Auth middleware: adminAuthMiddleware (Bearer token → D1 session lookup), optionalAuthMiddleware
+  - src/lib/utils.ts — Utilities: generateId, jsonResponse, errorResponse, parseBody, getErrorMessage, formatDate, getSessionExpiry
+  - src/lib/audit.ts — D1 audit logging: logAudit (writes to audit_logs table)
+  - src/lib/types.ts — Type definitions: APPWRITE_COLLECTIONS, ServerConfig, FeatureToggles, AdminUser, D1 row types, ServiceStatus
+  - src/routes/auth.ts — POST /login, POST /check, DELETE /logout
+  - src/routes/system.ts — GET /status (Appwrite + R2 + D1 + KV + Resend checks), POST /api-key
+  - src/routes/users.ts — GET (list with search/filter), PUT (update), DELETE (with auth)
+  - src/routes/categories.ts — GET, POST, PUT, DELETE (with auth)
+  - src/routes/instructors.ts — GET, POST, PUT, DELETE (with auth)
+  - src/routes/courses.ts — GET (search/filter by level/published/featured), POST, PUT, DELETE (with auth)
+  - src/routes/videos.ts — GET (filter by courseId/published), POST, PUT, DELETE (with auth)
+  - src/routes/institutes.ts — GET, POST, PUT, DELETE (with auth)
+  - src/routes/config.ts — GET (D1+KV cached), PUT (D1+KV broadcast, replaces MQTT)
+  - src/routes/notifications.ts — GET (filter by userId), POST (targetAll/targetInstitute/targetUserId)
+  - src/routes/analytics.ts — GET (stats, recent enrollments, popular courses, active D1 sessions)
+  - src/routes/upload.ts — POST (multipart→R2), DELETE (R2, with auth)
+  - src/routes/email.ts — POST /test (with auth)
+- Key migration decisions:
+  - node-appwrite SDK → Appwrite REST API with fetch() (no SDK in Workers)
+  - @aws-sdk/client-s3 → Native R2Bucket bindings (c.env.R2_VIDEOS, etc.)
+  - Prisma/SQLite → D1 database (c.env.DB)
+  - MQTT broadcast → Workers KV (c.env.KV_CONFIG) for config caching + timestamp polling
+  - Cookie-based auth → Bearer token auth (Authorization: Bearer <user_id>)
+  - Supabase → Removed (Workers have native D1 + KV)
+  - File system (.env writes) → KV storage for API key overrides

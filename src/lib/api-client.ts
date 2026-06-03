@@ -1,9 +1,9 @@
 /**
  * DAKKHO Admin — Unified API Client
  *
- * Automatically routes requests to either:
- *   • Supabase Edge Functions  (when NEXT_PUBLIC_API_BASE_URL is set)
- *   • Local Next.js API routes (default, /api/admin/...)
+ * Automatically routes requests to:
+ *   1. Cloudflare Workers (when NEXT_PUBLIC_API_BASE_URL is set) — PREFERRED
+ *   2. Local Next.js API routes (default, /api/admin/...)
  *
  * Usage:
  *   import { apiGet, apiPost, apiPut, apiDelete, apiUpload } from '@/lib/api-client';
@@ -21,24 +21,24 @@
 // ---------------------------------------------------------------------------
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-const IS_SUPABASE_EDGE = API_BASE_URL.length > 0;
+const IS_REMOTE_API = API_BASE_URL.length > 0;
 
 /**
  * Build the full URL for a given path.
  *
  * Local mode:      /api/admin/users?limit=20
- * Supabase mode:   https://<project>.supabase.co/functions/v1/users?limit=20
+ * Workers mode:    https://dakkho-admin-api.<account>.workers.dev/admin/users?limit=20
  */
 function buildUrl(path: string): string {
   // Normalise: strip leading slash so we can safely join
   const clean = path.replace(/^\/+/, '');
 
-  if (IS_SUPABASE_EDGE) {
-    // Supabase Edge Functions URL pattern:
-    //   <BASE_URL>/functions/v1/<function-name>
-    // The function name maps to the first path segment (e.g. "users", "courses")
+  if (IS_REMOTE_API) {
+    // Cloudflare Workers URL pattern:
+    //   <BASE_URL>/admin/<path>
+    // e.g. https://dakkho-admin-api.xxx.workers.dev/admin/users?limit=20
     const base = API_BASE_URL.replace(/\/+$/, '');
-    return `${base}/functions/v1/${clean}`;
+    return `${base}/admin/${clean}`;
   }
 
   // Local Next.js API routes
@@ -111,17 +111,11 @@ async function request<T = unknown>(path: string, options: RequestOptions): Prom
     headers['Content-Type'] = 'application/json';
   }
 
-  // For Supabase Edge Functions, attach Bearer token
-  if (IS_SUPABASE_EDGE) {
+  // For remote API (Cloudflare Workers), attach Bearer token
+  if (IS_REMOTE_API) {
     const token = getAuthToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    // Also send the Supabase anon key if available (required for RLS-protected functions)
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (anonKey) {
-      headers['apikey'] = anonKey;
     }
   }
 
@@ -220,7 +214,7 @@ export async function apiDelete<T = unknown>(path: string): Promise<T> {
  *   const fd = new FormData();
  *   fd.append('file', fileInput.files[0]);
  *   fd.append('courseId', 'abc');
- *   const result = await apiUpload('/videos/upload', fd);
+ *   const result = await apiUpload('/upload', fd);
  */
 export async function apiUpload<T = unknown>(path: string, formData: FormData): Promise<T> {
   // Do NOT set Content-Type — the browser sets it with the correct boundary
@@ -248,14 +242,10 @@ export async function apiRaw(path: string, init?: RequestInit): Promise<Response
 
   const headers: Record<string, string> = {};
 
-  if (IS_SUPABASE_EDGE) {
+  if (IS_REMOTE_API) {
     const token = getAuthToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-    }
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (anonKey) {
-      headers['apikey'] = anonKey;
     }
   }
 
@@ -280,44 +270,26 @@ export async function apiRaw(path: string, init?: RequestInit): Promise<Response
 }
 
 // ---------------------------------------------------------------------------
-// Path mapping reference (for Supabase Edge Function naming)
+// Path mapping reference
 // ---------------------------------------------------------------------------
 
 /**
- * When IS_SUPABASE_EDGE is true, the path suffix maps to an Edge Function name.
+ * Path mapping for Cloudflare Workers:
  *
- * Component call              →  apiClient path  →  Edge Function name
+ * Component call              →  apiClient path  →  Worker route
  * ────────────────────────────────────────────────────────────────────
- * GET  /api/admin/analytics   →  /analytics      →  analytics
- * GET  /api/admin/users       →  /users          →  users
- * PUT  /api/admin/users       →  /users          →  users
- * DEL  /api/admin/users?id=   →  /users?id=      →  users
- * GET  /api/admin/courses     →  /courses        →  courses
- * POST /api/admin/courses     →  /courses        →  courses
- * PUT  /api/admin/courses     →  /courses        →  courses
- * DEL  /api/admin/courses?id= →  /courses?id=    →  courses
- * GET  /api/admin/videos      →  /videos         →  videos
- * POST /api/admin/videos      →  /videos         →  videos
- * PUT  /api/admin/videos      →  /videos         →  videos
- * DEL  /api/admin/videos?id=  →  /videos?id=     →  videos
- * GET  /api/admin/instructors →  /instructors    →  instructors
- * POST /api/admin/instructors →  /instructors    →  instructors
- * PUT  /api/admin/instructors →  /instructors    →  instructors
- * DEL  /api/admin/instructors?id= → /instructors?id= → instructors
- * GET  /api/admin/categories  →  /categories     →  categories
- * POST /api/admin/categories  →  /categories     →  categories
- * PUT  /api/admin/categories  →  /categories     →  categories
- * DEL  /api/admin/categories?id= → /categories?id= → categories
- * GET  /api/admin/institutes  →  /institutes     →  institutes
- * POST /api/admin/institutes  →  /institutes     →  institutes
- * PUT  /api/admin/institutes  →  /institutes     →  institutes
- * DEL  /api/admin/institutes?id= → /institutes?id= → institutes
- * GET  /api/admin/notifications → /notifications →  notifications
- * POST /api/admin/notifications → /notifications →  notifications
- * GET  /api/admin/config      →  /config         →  config
- * PUT  /api/admin/config      →  /config         →  config
- * GET  /api/admin/system/status → /system/status →  system-status
- * POST /api/admin/system/api-key → /system/api-key → system-api-key
- * POST /api/admin/email/test  →  /email/test     →  email-test
- * POST /api/admin/auth        →  /auth           →  auth
+ * POST /api/admin/auth        →  /auth           →  /admin/auth
+ * GET  /api/admin/auth/check  →  /auth/check     →  /admin/auth/check
+ * GET  /api/admin/system/status → /system/status →  /admin/system/status
+ * GET  /api/admin/users       →  /users          →  /admin/users
+ * GET  /api/admin/categories  →  /categories     →  /admin/categories
+ * GET  /api/admin/instructors →  /instructors    →  /admin/instructors
+ * GET  /api/admin/courses     →  /courses        →  /admin/courses
+ * GET  /api/admin/videos      →  /videos         →  /admin/videos
+ * GET  /api/admin/institutes  →  /institutes     →  /admin/institutes
+ * GET  /api/admin/config      →  /config         →  /admin/config
+ * GET  /api/admin/notifications → /notifications →  /admin/notifications
+ * GET  /api/admin/analytics   →  /analytics      →  /admin/analytics
+ * POST /api/admin/upload      →  /upload         →  /admin/upload
+ * POST /api/admin/email/test  →  /email/test     →  /admin/email/test
  */

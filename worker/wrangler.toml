@@ -1,0 +1,51 @@
+name = "dakkho-admin-api"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Custom domain (requires DNS setup)
+# routes = [
+#   { pattern = "api.dakkho.pro.bd/*", zone_name = "dakkho.pro.bd" }
+# ]
+
+# R2 Buckets (native binding — no HTTP API needed!)
+[[r2_buckets]]
+binding = "R2_VIDEOS"
+bucket_name = "dakkho-videos"
+
+[[r2_buckets]]
+binding = "R2_THUMBNAILS"
+bucket_name = "dakkho-thumbnails"
+
+[[r2_buckets]]
+binding = "R2_AVATARS"
+bucket_name = "dakkho-avatars"
+
+[[r2_buckets]]
+binding = "R2_RESOURCES"
+bucket_name = "dakkho-resources"
+
+# Workers KV — for config/cache (alternative to MQTT broadcast)
+[[kv_namespaces]]
+binding = "KV_CONFIG"
+id = "YOUR_KV_NAMESPACE_ID"
+
+# D1 Database — for audit logs and sessions
+[[d1_databases]]
+binding = "DB"
+database_name = "dakkho-admin-db"
+database_id = "YOUR_D1_DATABASE_ID"
+
+# Environment Variables (secrets should use `wrangler secret put`)
+[vars]
+APPWRITE_ENDPOINT = "https://sgp.cloud.appwrite.io/v1"
+APPWRITE_PROJECT_ID = "dakkho"
+APPWRITE_DATABASE_ID = "dakkho_main"
+RESEND_FROM_EMAIL = "noreply@dakkho.pro.bd"
+RESEND_SUPPORT_EMAIL = "support@dakkho.pro.bd"
+ENVIRONMENT = "production"
+
+# Secrets (set via `wrangler secret put`):
+# APPWRITE_API_KEY
+# RESEND_API_KEY
+# ADMIN_SECRET_KEY
