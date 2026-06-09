@@ -188,10 +188,14 @@ async function request<T = unknown>(path: string, options: RequestOptions): Prom
     data = { raw: text };
   }
 
-  // Transform snake_case D1 responses to camelCase for frontend compatibility
-  if (data && typeof data === 'object') {
-    data = transformResponse(data);
-  }
+  // NOTE: snake_case → camelCase transform is DISABLED.
+  // The panel components use snake_case property names that match the D1 API
+  // response format. The transform was causing "undefined" property access
+  // and crashes (e.g. .toLowerCase() on undefined). Keeping snake_case
+  // ensures compatibility with all existing components.
+  // if (data && typeof data === 'object') {
+  //   data = transformResponse(data);
+  // }
 
   // Throw on non-2xx
   if (!res.ok) {

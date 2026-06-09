@@ -314,14 +314,17 @@ export interface User {
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
+  isHydrated: boolean;  // true once we've read localStorage on the client
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (data: { fullName: string; email: string; password: string; instituteId?: number; technology?: string }) => Promise<{ token: string; userId: string }>;
   logout: () => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (email: string, otp: string, newPassword: string) => Promise<boolean>;
   verifyOTP: (email: string, otp: string) => Promise<boolean>;
   resendOTP: (email: string) => Promise<void>;
   setUser: (user: User | null) => void;
+  hydrateAuth: () => void;  // read localStorage and set isHydrated
   refreshUser: () => Promise<void>;
 }
 
@@ -357,11 +360,14 @@ const saveAuthSession = (user: User | null, isAuthenticated: boolean) => {
   } catch {}
 };
 
-const initialAuth = loadAuthSession();
-
+// IMPORTANT: Always initialise as unauthenticated so that the first
+// client render matches the server render (SSR always renders as
+// unauthenticated).  The real session is loaded in a useEffect via
+// hydrateAuth() which runs AFTER hydration, avoiding a mismatch.
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: initialAuth.user,
-  isAuthenticated: initialAuth.isAuthenticated,
+  user: null,
+  isAuthenticated: false,
+  isHydrated: false,
   isLoading: false,
   login: async (email, password) => {
     set({ isLoading: true });
@@ -444,6 +450,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: false });
     }
   },
+  resetPassword: async (email, otp, newPassword) => {
+    set({ isLoading: true });
+    try {
+      const res = await authApi.resetPassword({ email, otp, newPassword });
+      if (res.success) {
+        return true;
+      }
+      throw new Error(res.message || 'Password reset failed');
+    } catch (err: any) {
+      throw new Error(err.message || 'Password reset failed');
+    } finally {
+      set({ isLoading: false });
+    }
+  },
   verifyOTP: async (email, otp) => {
     try {
       const res = await authApi.verifyOTP({ email, otp });
@@ -469,6 +489,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUser: (user) => {
     set({ user, isAuthenticated: !!user });
     saveAuthSession(user, !!user);
+  },
+  hydrateAuth: () => {
+    const session = loadAuthSession();
+    set({
+      user: session.user,
+      isAuthenticated: session.isAuthenticated,
+      isHydrated: true,
+    });
   },
   refreshUser: async () => {
     try {
@@ -496,18 +524,54 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 // ============ THEME STORE ============
 interface ThemeState {
   theme: 'light' | 'dark';
+  themeMode: 'light' | 'dark' | 'system';
+  setThemeMode: (mode: 'light' | 'dark' | 'system') => void;
   toggleTheme: () => void;
+  loadFromPreferences: (mode: 'light' | 'dark' | 'system') => void;
 }
+
+const applyThemeMode = (mode: 'light' | 'dark' | 'system'): 'light' | 'dark' => {
+  let effectiveTheme: 'light' | 'dark';
+  if (mode === 'system') {
+    effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  } else {
+    effectiveTheme = mode;
+  }
+  if (effectiveTheme === 'dark') {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+  return effectiveTheme;
+};
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
   theme: 'light',
+  themeMode: 'system',
+  setThemeMode: (mode) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dakkho_theme_mode', mode);
+      const effectiveTheme = applyThemeMode(mode);
+      set({ themeMode: mode, theme: effectiveTheme });
+    }
+  },
   toggleTheme: () => {
     const next = get().theme === 'light' ? 'dark' : 'light';
-    set({ theme: next });
+    set({ theme: next, themeMode: next });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dakkho_theme_mode', next);
+    }
     if (next === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
+    }
+  },
+  loadFromPreferences: (mode) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dakkho_theme_mode', mode);
+      const effectiveTheme = applyThemeMode(mode);
+      set({ themeMode: mode, theme: effectiveTheme });
     }
   },
 }));
@@ -607,39 +671,87 @@ export interface AppNotification {
   actionUrl?: string;
 }
 
+// ── localStorage persistence helpers ──
+const NOTIF_STORAGE_KEY = 'dakkho_notifications';
+
+const saveNotifToStorage = (notifs: AppNotification[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifs));
+  } catch {}
+};
+
+const loadNotifFromStorage = (): AppNotification[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(NOTIF_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch { return []; }
+};
+
 interface NotificationState {
   notifications: AppNotification[];
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   unreadCount: () => number;
   addNotification: (notification: AppNotification) => void;
+  addNotifications: (notifications: AppNotification[]) => void;
   removeNotification: (id: string) => void;
+  hydrateFromStorage: () => void;
 }
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
   notifications: [],
   markAsRead: (id) => {
-    set((s) => ({
-      notifications: s.notifications.map((n) =>
+    set((s) => {
+      const updated = s.notifications.map((n) =>
         n.id === id ? { ...n, isRead: true } : n
-      ),
-    }));
+      );
+      saveNotifToStorage(updated);
+      return { notifications: updated };
+    });
   },
   markAllAsRead: () => {
-    set((s) => ({
-      notifications: s.notifications.map((n) => ({ ...n, isRead: true })),
-    }));
+    set((s) => {
+      const updated = s.notifications.map((n) => ({ ...n, isRead: true }));
+      saveNotifToStorage(updated);
+      return { notifications: updated };
+    });
   },
   unreadCount: () => get().notifications.filter((n) => !n.isRead).length,
   addNotification: (notification) => {
-    set((s) => ({
-      notifications: [notification, ...s.notifications],
-    }));
+    set((s) => {
+      // Avoid duplicates by ID
+      if (s.notifications.some((n) => n.id === notification.id)) {
+        return s;
+      }
+      const updated = [notification, ...s.notifications];
+      saveNotifToStorage(updated);
+      return { notifications: updated };
+    });
+  },
+  addNotifications: (newNotifs) => {
+    set((s) => {
+      const existingIds = new Set(s.notifications.map((n) => n.id));
+      const unique = newNotifs.filter((n) => !existingIds.has(n.id));
+      if (unique.length === 0) return s;
+      const updated = [...unique, ...s.notifications];
+      saveNotifToStorage(updated);
+      return { notifications: updated };
+    });
   },
   removeNotification: (id) => {
-    set((s) => ({
-      notifications: s.notifications.filter((n) => n.id !== id),
-    }));
+    set((s) => {
+      const updated = s.notifications.filter((n) => n.id !== id);
+      saveNotifToStorage(updated);
+      return { notifications: updated };
+    });
+  },
+  hydrateFromStorage: () => {
+    const stored = loadNotifFromStorage();
+    if (stored.length > 0) {
+      set({ notifications: stored });
+    }
   },
 }));
 

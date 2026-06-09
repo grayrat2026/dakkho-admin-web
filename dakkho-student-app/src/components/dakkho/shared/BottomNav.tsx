@@ -27,7 +27,7 @@ export function BottomNav() {
 
   return (
     <motion.nav
-      className="fixed bottom-0 left-0 right-0 z-30 md:hidden bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl border-t border-white/30 dark:border-white/5"
+      className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl border-t border-white/30 dark:border-white/5"
       initial={{ y: 64 }}
       animate={{ y: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}

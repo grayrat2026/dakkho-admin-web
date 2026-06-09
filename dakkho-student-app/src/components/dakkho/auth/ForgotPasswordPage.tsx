@@ -82,6 +82,7 @@ function MailCheckAnimation() {
 export function ForgotPasswordPage() {
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
+  const [otpValue, setOtpValue] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -89,7 +90,7 @@ export function ForgotPasswordPage() {
   const [otpError, setOtpError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const { forgotPassword, verifyOTP, isLoading } = useAuthStore();
+  const { forgotPassword, resetPassword, resendOTP, isLoading } = useAuthStore();
   const navigate = useNavigationStore((s) => s.navigate);
 
   useEffect(() => {
@@ -118,15 +119,12 @@ export function ForgotPasswordPage() {
   }, [email, forgotPassword]);
 
   const handleOTPComplete = async (otp: string) => {
-    const result = await verifyOTP(email, otp);
-    if (result) {
-      setStep('success');
-    } else {
-      setOtpError('Invalid OTP. Please try again.');
-    }
+    // Store the OTP value for when the user clicks "Reset Password"
+    setOtpValue(otp);
+    setOtpError('');
   };
 
-  const handleResetPassword = (e: React.FormEvent) => {
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
 
@@ -138,7 +136,22 @@ export function ForgotPasswordPage() {
       setPasswordError('Passwords do not match');
       return;
     }
-    setStep('success');
+
+    if (!otpValue || otpValue.length !== 6) {
+      setOtpError('Please enter the complete 6-digit code');
+      return;
+    }
+
+    try {
+      const result = await resetPassword(email, otpValue, newPassword);
+      if (result) {
+        setStep('success');
+      } else {
+        setOtpError('Invalid or expired reset code. Please try again.');
+      }
+    } catch (err: any) {
+      setOtpError(err.message || 'Password reset failed. Please try again.');
+    }
   };
 
   const getStepIcon = () => {

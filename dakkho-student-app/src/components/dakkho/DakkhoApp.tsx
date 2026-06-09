@@ -2,10 +2,11 @@
 
 import { useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useNavigationStore, useAuthStore, useNotificationStore, useServerConfigStore, urlToPage } from '@/lib/store';
+import { useNavigationStore, useAuthStore, useNotificationStore, useServerConfigStore, useThemeStore, urlToPage } from '@/lib/store';
 // Notifications now come from OneSignal push notifications
 import { ContentProtection } from './ContentProtection';
 import { AppShell } from './AppShell';
+import { ErrorBoundary } from './ErrorBoundary';
 
 // Auth pages
 import { LoginPage } from './auth/LoginPage';
@@ -141,6 +142,8 @@ function PageRouter() {
   const pageParams = useNavigationStore((s) => s.pageParams);
 
   const pages: Record<string, React.ReactNode> = {
+    // Auth pages (also accessible when authenticated, e.g. forgot-password)
+    'forgot-password': <ForgotPasswordPage />,
     // Main pages
     home: <HomePage />,
     explore: <ExplorePage />,
@@ -282,20 +285,37 @@ function PageRouter() {
 
 export function DakkhoApp() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const hydrateAuth = useAuthStore((s) => s.hydrateAuth);
   const currentPage = useNavigationStore((s) => s.currentPage);
   const navigate = useNavigationStore((s) => s.navigate);
   const syncFromUrl = useNavigationStore((s) => s.syncFromUrl);
-  const notifications = useNotificationStore((s) => s.notifications);
+  const loadFromPreferences = useThemeStore((s) => s.loadFromPreferences);
+  const hydrateFromStorage = useNotificationStore((s) => s.hydrateFromStorage);
 
   // Initialize server config on mount
   const fetchConfig = useServerConfigStore((s) => s.fetchConfig);
 
+  // ── Hydrate ALL client-only state in a single useEffect ──
+  // This runs AFTER the first render, so the first client render
+  // matches the server render (both unauthenticated), avoiding the
+  // hydration mismatch that previously caused the AppShell to flash.
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    // 1. Auth session from localStorage
+    hydrateAuth();
 
-  // Notifications managed by OneSignal + store
-  // No longer seeding from mock data
+    // 2. Theme preference from localStorage
+    const stored = localStorage.getItem('dakkho_theme_mode');
+    if (stored === 'light' || stored === 'dark' || stored === 'system') {
+      loadFromPreferences(stored as 'light' | 'dark' | 'system');
+    }
+
+    // 3. Notifications from localStorage
+    hydrateFromStorage();
+
+    // 4. Server config
+    fetchConfig();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync from browser URL on initial load
   useEffect(() => {
@@ -324,7 +344,9 @@ export function DakkhoApp() {
   };
 
   // Redirect authenticated users away from auth pages
-  const authPageKeys = ['login', 'signup', 'forgot-password'];
+  // Note: 'forgot-password' is allowed even when authenticated — a logged-in
+  // user who forgot their password needs to be able to access this flow.
+  const authPageKeys = ['login', 'signup'];
   const redirectingRef = useRef(false);
   useEffect(() => {
     if (isAuthenticated && authPageKeys.includes(currentPage) && !redirectingRef.current) {
@@ -334,34 +356,59 @@ export function DakkhoApp() {
     }
   }, [isAuthenticated, currentPage, navigate]);
 
-  if (!isAuthenticated) {
+  // ── While auth is being hydrated, show a loading screen ──
+  // This avoids the flash where SSR renders auth pages but the
+  // client would render the AppShell (hydration mismatch), and
+  // also avoids the blank "return null" when on an auth page.
+  if (!isHydrated) {
     return (
-      <ContentProtection>
-        <AnimatePresence mode="wait">
+      <ErrorBoundary>
+        <div className="min-h-screen bg-background flex items-center justify-center">
           <motion.div
-            key={currentPage}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            {authPages[currentPage] || <LoginPage />}
-          </motion.div>
-        </AnimatePresence>
-      </ContentProtection>
+            className="w-8 h-8 rounded-full border-2 border-sky-500 border-t-transparent"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          />
+        </div>
+      </ErrorBoundary>
     );
   }
 
-  // If authenticated and still on an auth page, show loading while redirecting
-  if (authPageKeys.includes(currentPage)) {
-    return null;
+  // ── Unauthenticated: show auth pages (no shell) ──
+  if (!isAuthenticated) {
+    return (
+      <ErrorBoundary>
+        <ContentProtection>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentPage}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              {authPages[currentPage] || <LoginPage />}
+            </motion.div>
+          </AnimatePresence>
+        </ContentProtection>
+      </ErrorBoundary>
+    );
   }
 
-  // Authenticated pages (with shell)
+  // ── Authenticated but on an auth page → fall through to AppShell ──
+  // The redirect useEffect above will fire on the next tick and
+  // navigate to 'home'. Previously this returned `null` causing a
+  // blank flash while the redirect was pending.
+
+  // ── Authenticated pages (with shell) ──
+  // ErrorBoundary wraps ONLY the PageRouter so that page errors
+  // don't unmount the AppShell (TopBar, Sidebar, BottomNav).
   return (
     <ContentProtection>
       <AppShell>
-        <PageRouter />
+        <ErrorBoundary>
+          <PageRouter />
+        </ErrorBoundary>
       </AppShell>
     </ContentProtection>
   );
