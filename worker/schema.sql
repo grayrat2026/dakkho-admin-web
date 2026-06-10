@@ -100,6 +100,8 @@ CREATE TABLE IF NOT EXISTS courses (
   is_featured INTEGER DEFAULT 0,
   is_published INTEGER DEFAULT 0,
   tags TEXT,
+  semester TEXT,
+  what_you_learn TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -122,6 +124,10 @@ CREATE TABLE IF NOT EXISTS videos (
   thumbnail_url TEXT,
   duration INTEGER DEFAULT 0,
   sort_order INTEGER DEFAULT 0,
+  lesson_id TEXT,
+  lesson_type TEXT,
+  chapter_id TEXT,
+  subject_id TEXT,
   is_preview INTEGER DEFAULT 0,
   is_published INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
@@ -305,6 +311,63 @@ CREATE TABLE IF NOT EXISTS course_instructors (
 );
 CREATE INDEX IF NOT EXISTS idx_course_instructors_course ON course_instructors(course_id);
 CREATE INDEX IF NOT EXISTS idx_course_instructors_instructor ON course_instructors(instructor_id);
+
+-- ============================================================
+-- CHAPTERS TABLE (curriculum structure: Subject → Chapter)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS chapters (
+  id TEXT PRIMARY KEY,
+  course_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  sort_order INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_chapters_course ON chapters(course_id);
+CREATE INDEX IF NOT EXISTS idx_chapters_subject ON chapters(subject_id);
+CREATE INDEX IF NOT EXISTS idx_chapters_order ON chapters(course_id, subject_id, sort_order);
+
+-- ============================================================
+-- LESSONS TABLE (curriculum structure: Chapter → Lesson)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS lessons (
+  id TEXT PRIMARY KEY,
+  chapter_id TEXT NOT NULL,
+  course_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  lesson_type TEXT DEFAULT 'video',
+  sort_order INTEGER DEFAULT 0,
+  is_preview INTEGER DEFAULT 0,
+  duration INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_lessons_chapter ON lessons(chapter_id);
+CREATE INDEX IF NOT EXISTS idx_lessons_course ON lessons(course_id);
+CREATE INDEX IF NOT EXISTS idx_lessons_subject ON lessons(subject_id);
+CREATE INDEX IF NOT EXISTS idx_lessons_order ON lessons(chapter_id, sort_order);
+
+-- ============================================================
+-- COURSE_LEARNING_POINTS TABLE
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS course_learning_points (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id TEXT NOT NULL,
+  point_text TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_learning_points_course ON course_learning_points(course_id);
 
 -- ============================================================
 -- INSTITUTE_REQUESTS TABLE

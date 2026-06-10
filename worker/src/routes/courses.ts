@@ -87,14 +87,14 @@ courseRoutes.get('/', async (c) => {
 courseRoutes.post('/', async (c) => {
   try {
     const rawData = await c.req.json<Record<string, unknown>>();
-    const allowedFields = ['title', 'slug', 'description', 'thumbnail_url', 'preview_video_url', 'category_id', 'instructor_id', 'technology_id', 'level', 'language', 'duration', 'total_videos', 'rating', 'total_reviews', 'total_students', 'price', 'is_featured', 'is_published', 'tags'];
+    const allowedFields = ['title', 'slug', 'description', 'thumbnail_url', 'preview_video_url', 'category_id', 'instructor_id', 'technology_id', 'level', 'language', 'duration', 'total_videos', 'rating', 'total_reviews', 'total_students', 'price', 'is_featured', 'is_published', 'tags', 'semester', 'what_you_learn'];
     const data = normalizeKeys(rawData, allowedFields);
     const id = crypto.randomUUID();
     const slug = (data.slug as string) || slugify(data.title as string);
 
     await c.env.DB.prepare(`
-      INSERT INTO courses (id, title, slug, description, thumbnail_url, preview_video_url, category_id, instructor_id, technology_id, level, language, duration, total_videos, rating, total_reviews, total_students, price, is_featured, is_published, tags)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO courses (id, title, slug, description, thumbnail_url, preview_video_url, category_id, instructor_id, technology_id, level, language, duration, total_videos, rating, total_reviews, total_students, price, is_featured, is_published, tags, semester, what_you_learn)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       id,
       data.title || '',
@@ -115,7 +115,9 @@ courseRoutes.post('/', async (c) => {
       data.price || 0,
       data.is_featured ? 1 : 0,
       data.is_published ? 1 : 0,
-      data.tags || null
+      data.tags || null,
+      data.semester || null,
+      data.what_you_learn || null
     ).run();
 
     // Save junction table entries for multiple categories, instructors, subjects
@@ -147,6 +149,18 @@ courseRoutes.post('/', async (c) => {
       }
     }
 
+    // Save learning points
+    const learningPoints = rawData.learning_points ? (Array.isArray(rawData.learning_points) ? rawData.learning_points : JSON.parse(String(rawData.learning_points))) : [];
+    if (learningPoints.length > 0) {
+      await c.env.DB.prepare('DELETE FROM course_learning_points WHERE course_id = ?').bind(id).run();
+      for (let i = 0; i < learningPoints.length; i++) {
+        const pointText = typeof learningPoints[i] === 'string' ? learningPoints[i] : (learningPoints[i] as any).point_text || '';
+        if (pointText) {
+          await c.env.DB.prepare('INSERT INTO course_learning_points (course_id, point_text, sort_order) VALUES (?, ?, ?)').bind(id, pointText, i).run();
+        }
+      }
+    }
+
     const created = await c.env.DB.prepare('SELECT * FROM courses WHERE id = ?').bind(id).first();
 
     const user = c.get('user');
@@ -169,7 +183,7 @@ courseRoutes.put('/', async (c) => {
       return c.json({ error: 'Course ID required' }, 400);
     }
 
-    const allowedFields = ['title', 'slug', 'description', 'thumbnail_url', 'preview_video_url', 'category_id', 'instructor_id', 'technology_id', 'level', 'language', 'duration', 'total_videos', 'rating', 'total_reviews', 'total_students', 'price', 'is_featured', 'is_published', 'tags'];
+    const allowedFields = ['title', 'slug', 'description', 'thumbnail_url', 'preview_video_url', 'category_id', 'instructor_id', 'technology_id', 'level', 'language', 'duration', 'total_videos', 'rating', 'total_reviews', 'total_students', 'price', 'is_featured', 'is_published', 'tags', 'semester', 'what_you_learn'];
     // Normalize camelCase keys from admin panel to snake_case for D1
     const updates = normalizeKeys(rawUpdates, allowedFields);
     const setClauses: string[] = [];
@@ -225,6 +239,18 @@ courseRoutes.put('/', async (c) => {
       await c.env.DB.prepare('DELETE FROM course_subjects WHERE course_id = ?').bind(String(courseId)).run();
       for (let i = 0; i < subjectIds.length; i++) {
         await c.env.DB.prepare('INSERT OR IGNORE INTO course_subjects (course_id, subject_id, sort_order) VALUES (?, ?, ?)').bind(String(courseId), String(subjectIds[i]), i).run();
+      }
+    }
+
+    // Save learning points
+    const learningPoints = rawData.learning_points ? (Array.isArray(rawData.learning_points) ? rawData.learning_points : JSON.parse(String(rawData.learning_points))) : [];
+    if (learningPoints.length > 0) {
+      await c.env.DB.prepare('DELETE FROM course_learning_points WHERE course_id = ?').bind(String(courseId)).run();
+      for (let i = 0; i < learningPoints.length; i++) {
+        const pointText = typeof learningPoints[i] === 'string' ? learningPoints[i] : (learningPoints[i] as any).point_text || '';
+        if (pointText) {
+          await c.env.DB.prepare('INSERT INTO course_learning_points (course_id, point_text, sort_order) VALUES (?, ?, ?)').bind(String(courseId), pointText, i).run();
+        }
       }
     }
 

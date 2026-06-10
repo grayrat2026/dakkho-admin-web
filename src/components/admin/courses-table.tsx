@@ -18,6 +18,10 @@ import {
   Link,
   Clock,
   Users,
+  GraduationCap,
+  X,
+  ListChecks,
+  ArrowLeft,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -62,6 +66,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { apiGet, apiPost, apiPut, apiDelete, apiUpload } from '@/lib/api-client';
 import type { Course } from '@/lib/types';
+import CourseCurriculum from '@/components/admin/course-curriculum';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -139,6 +144,11 @@ export default function CoursesTable() {
   const [deleteTarget, setDeleteTarget] = useState<Course | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Curriculum view state
+  const [curriculumCourseId, setCurriculumCourseId] = useState<string | null>(null);
+  const [curriculumCourseTitle, setCurriculumCourseTitle] = useState('');
+  const [savedCourseId, setSavedCourseId] = useState<string | null>(null);
+
   // Form state
   const [form, setForm] = useState({
     title: '',
@@ -148,6 +158,7 @@ export default function CoursesTable() {
     instructorIds: [] as string[],
     subjectIds: [] as string[],
     technologyId: '',
+    semester: '',
     level: 'beginner' as Course['level'],
     language: 'bangla' as Course['language'],
     duration: 0,
@@ -157,12 +168,15 @@ export default function CoursesTable() {
     tags: '',
     thumbnailUrl: '',
     thumbnailFile: null as File | null,
+    learningPoints: [] as string[],
   });
+  const [newLearningPoint, setNewLearningPoint] = useState('');
 
   // Dropdown data
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [instructors, setInstructors] = useState<{ id: string; name: string }[]>([]);
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
+  const [technologies, setTechnologies] = useState<{ id: string; name: string }[]>([]);
   const [newSubjectName, setNewSubjectName] = useState('');
 
   // -------------------------------------------------------------------------
@@ -194,14 +208,16 @@ export default function CoursesTable() {
 
   const fetchDropdownData = useCallback(async () => {
     try {
-      const [catData, instData, subData] = await Promise.all([
+      const [catData, instData, subData, techData] = await Promise.all([
         apiGet('/categories?limit=200') as Promise<Record<string, unknown>>,
         apiGet('/instructors?limit=200') as Promise<Record<string, unknown>>,
         apiGet('/subjects?limit=200') as Promise<Record<string, unknown>>,
+        apiGet('/technologies?limit=200') as Promise<Record<string, unknown>>,
       ]);
       const catDocs = (catData.categories as Record<string, unknown>[]) || (catData.documents as Record<string, unknown>[]) || [];
       const instDocs = (instData.instructors as Record<string, unknown>[]) || (instData.documents as Record<string, unknown>[]) || [];
       const subDocs = (subData.subjects as Record<string, unknown>[]) || (subData.documents as Record<string, unknown>[]) || [];
+      const techDocs = (techData.technologies as Record<string, unknown>[]) || (techData.documents as Record<string, unknown>[]) || [];
       setCategories(
         catDocs.map((d) => ({ id: String(d.id), name: String(d.name ?? 'Unknown') })),
       );
@@ -210,6 +226,9 @@ export default function CoursesTable() {
       );
       setSubjects(
         subDocs.map((d) => ({ id: String(d.id), name: String(d.name ?? 'Unknown') })),
+      );
+      setTechnologies(
+        techDocs.map((d) => ({ id: String(d.id), name: String(d.name ?? 'Unknown') })),
       );
     } catch {
       // silent — dropdowns can be empty
@@ -230,6 +249,7 @@ export default function CoursesTable() {
 
   const openCreateDialog = () => {
     setEditCourse(null);
+    setSavedCourseId(null);
     setForm({
       title: '',
       slug: '',
@@ -238,6 +258,7 @@ export default function CoursesTable() {
       instructorIds: [] as string[],
       subjectIds: [] as string[],
       technologyId: '',
+      semester: '',
       level: 'beginner',
       language: 'bangla',
       duration: 0,
@@ -247,12 +268,34 @@ export default function CoursesTable() {
       tags: '',
       thumbnailUrl: '',
       thumbnailFile: null,
+      learningPoints: [],
     });
+    setNewLearningPoint('');
     setFormOpen(true);
   };
 
-  const openEditDialog = (course: Course) => {
+  const openEditDialog = async (course: Course) => {
     setEditCourse(course);
+    setSavedCourseId(null);
+    // Try to fetch full course detail (which includes learningPoints)
+    let fetchedLearningPoints: string[] = [];
+    let fetchedSemester = '';
+    try {
+      const detail = (await apiGet(`/courses?id=${course.id}`)) as Record<string, unknown>;
+      const courseData = (detail.course as Record<string, unknown>) || detail;
+      if (courseData.learningPoints) {
+        const lp = courseData.learningPoints;
+        fetchedLearningPoints = Array.isArray(lp) ? lp.map(String) : (typeof lp === 'string' ? JSON.parse(lp) : []);
+      } else if (courseData.learning_points) {
+        const lp = courseData.learning_points;
+        fetchedLearningPoints = Array.isArray(lp) ? lp.map(String) : (typeof lp === 'string' ? JSON.parse(lp) : []);
+      }
+      if (courseData.semester != null) {
+        fetchedSemester = String(courseData.semester);
+      }
+    } catch {
+      // Fall back to course data we already have
+    }
     setForm({
       title: course.title,
       slug: course.slug,
@@ -261,6 +304,7 @@ export default function CoursesTable() {
       instructorIds: course.instructorId ? [course.instructorId] : ([] as string[]),
       subjectIds: [] as string[],
       technologyId: course.technologyId ? String(course.technologyId) : '',
+      semester: fetchedSemester,
       level: course.level,
       language: course.language,
       duration: course.duration,
@@ -270,7 +314,9 @@ export default function CoursesTable() {
       tags: course.tags ?? '',
       thumbnailUrl: course.thumbnailUrl ?? '',
       thumbnailFile: null,
+      learningPoints: fetchedLearningPoints,
     });
+    setNewLearningPoint('');
     setFormOpen(true);
   };
 
@@ -304,6 +350,7 @@ export default function CoursesTable() {
         instructor_ids: form.instructorIds.length > 0 ? JSON.stringify(form.instructorIds) : undefined,
         subject_ids: form.subjectIds.length > 0 ? JSON.stringify(form.subjectIds) : undefined,
         technology_id: form.technologyId ? Number(form.technologyId) : undefined,
+        semester: form.semester ? Number(form.semester) : undefined,
         level: form.level,
         language: form.language,
         duration: form.duration,
@@ -311,23 +358,28 @@ export default function CoursesTable() {
         is_featured: form.isFeatured,
         is_published: form.isPublished,
         tags: form.tags || undefined,
+        learning_points: form.learningPoints.length > 0 ? JSON.stringify(form.learningPoints) : undefined,
       };
 
       if (editCourse) {
         await apiPut('/courses', { courseId: editCourse.id, ...payload });
         toast({ title: 'Success', description: 'Course updated successfully' });
+        setSavedCourseId(editCourse.id);
       } else {
-        await apiPost('/courses', {
+        const result = await apiPost('/courses', {
           ...payload,
           total_videos: 0,
           rating: 0,
           total_reviews: 0,
           total_students: 0,
-        });
+        }) as Record<string, unknown>;
+        const created = (result.course as Record<string, unknown>) || result;
+        const createdId = String(created.id || '');
         toast({ title: 'Success', description: 'Course created successfully' });
+        setSavedCourseId(createdId);
       }
 
-      setFormOpen(false);
+      // Don't close dialog immediately — show "Manage Curriculum" link
       fetchCourses();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save course';
@@ -386,6 +438,32 @@ export default function CoursesTable() {
   // -------------------------------------------------------------------------
   // JSX
   // -------------------------------------------------------------------------
+
+  // If curriculum view is active, show the curriculum component
+  if (curriculumCourseId) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setCurriculumCourseId(null);
+              setCurriculumCourseTitle('');
+            }}
+            className="border-white/[0.08] bg-white/[0.04] gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back to Courses
+          </Button>
+          <div className="flex items-center gap-2 min-w-0">
+            <GraduationCap className="h-5 w-5 text-dakkho-purple flex-shrink-0" />
+            <h1 className="page-title truncate">Curriculum: {curriculumCourseTitle}</h1>
+          </div>
+        </div>
+        <CourseCurriculum courseId={curriculumCourseId} />
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -691,6 +769,15 @@ export default function CoursesTable() {
                             <Pencil className="h-4 w-4" /> Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            onClick={() => {
+                              setCurriculumCourseId(course.id);
+                              setCurriculumCourseTitle(course.title);
+                            }}
+                            className="gap-2"
+                          >
+                            <GraduationCap className="h-4 w-4" /> Manage Curriculum
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             onClick={() => togglePublished(course)}
                             className="gap-2"
                           >
@@ -831,6 +918,15 @@ export default function CoursesTable() {
                         className="gap-2"
                       >
                         <Pencil className="h-4 w-4" /> Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setCurriculumCourseId(course.id);
+                          setCurriculumCourseTitle(course.title);
+                        }}
+                        className="gap-2"
+                      >
+                        <GraduationCap className="h-4 w-4" /> Manage Curriculum
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => togglePublished(course)}
@@ -986,6 +1082,72 @@ export default function CoursesTable() {
                       placeholder="Or paste image URL"
                     />
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* What You'll Learn */}
+            <div className="space-y-2">
+              <Label className="text-muted-foreground flex items-center gap-1.5">
+                <ListChecks className="h-3.5 w-3.5" /> What You'll Learn
+              </Label>
+              <div className="space-y-2">
+                {form.learningPoints.map((point, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      value={point}
+                      onChange={(e) => {
+                        const updated = [...form.learningPoints];
+                        updated[idx] = e.target.value;
+                        setForm({ ...form, learningPoints: updated });
+                      }}
+                      className="bg-white/[0.04] border-white/[0.08] flex-1 h-9 text-sm"
+                      placeholder={`Learning point ${idx + 1}`}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 flex-shrink-0 hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => {
+                        setForm({
+                          ...form,
+                          learningPoints: form.learningPoints.filter((_, i) => i !== idx),
+                        });
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <div className="flex gap-2">
+                  <Input
+                    value={newLearningPoint}
+                    onChange={(e) => setNewLearningPoint(e.target.value)}
+                    className="bg-white/[0.04] border-white/[0.08] flex-1 h-9 text-sm"
+                    placeholder="Add a learning point..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newLearningPoint.trim()) {
+                        e.preventDefault();
+                        setForm({ ...form, learningPoints: [...form.learningPoints, newLearningPoint.trim()] });
+                        setNewLearningPoint('');
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-white/[0.08] bg-white/[0.04] h-9 gap-1"
+                    onClick={() => {
+                      if (newLearningPoint.trim()) {
+                        setForm({ ...form, learningPoints: [...form.learningPoints, newLearningPoint.trim()] });
+                        setNewLearningPoint('');
+                      }
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1149,6 +1311,48 @@ export default function CoursesTable() {
               )}
             </div>
 
+            {/* Technology + Semester */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Technology</Label>
+                <Select
+                  value={form.technologyId || '_none'}
+                  onValueChange={(v) => setForm({ ...form, technologyId: v === '_none' ? '' : v })}
+                >
+                  <SelectTrigger className="bg-white/[0.04] border-white/[0.08]">
+                    <SelectValue placeholder="Select technology" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">None</SelectItem>
+                    {technologies.map((tech) => (
+                      <SelectItem key={tech.id} value={tech.id}>
+                        {tech.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Semester</Label>
+                <Select
+                  value={form.semester || '_none'}
+                  onValueChange={(v) => setForm({ ...form, semester: v === '_none' ? '' : v })}
+                >
+                  <SelectTrigger className="bg-white/[0.04] border-white/[0.08]">
+                    <SelectValue placeholder="Select semester" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">None</SelectItem>
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                      <SelectItem key={s} value={String(s)}>
+                        Semester {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             {/* Level + Language */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -1256,22 +1460,50 @@ export default function CoursesTable() {
             </div>
           </div>
 
-          <DialogFooter className="mt-6 gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setFormOpen(false)}
-              className="border-white/[0.08] bg-transparent"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSave}
-              disabled={saving || !form.title.trim()}
-              className="gradient-purple text-white gap-2"
-            >
-              {saving && <RefreshCw className="h-4 w-4 animate-spin" />}
-              {editCourse ? 'Update Course' : 'Create Course'}
-            </Button>
+          <DialogFooter className="mt-6 gap-2 flex-wrap">
+            {savedCourseId ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setFormOpen(false);
+                    setSavedCourseId(null);
+                  }}
+                  className="border-white/[0.08] bg-transparent"
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={() => {
+                    setCurriculumCourseId(savedCourseId);
+                    setCurriculumCourseTitle(form.title);
+                    setFormOpen(false);
+                    setSavedCourseId(null);
+                  }}
+                  className="gradient-purple text-white gap-2"
+                >
+                  <GraduationCap className="h-4 w-4" /> Manage Curriculum
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setFormOpen(false)}
+                  className="border-white/[0.08] bg-transparent"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSave}
+                  disabled={saving || !form.title.trim()}
+                  className="gradient-purple text-white gap-2"
+                >
+                  {saving && <RefreshCw className="h-4 w-4 animate-spin" />}
+                  {editCourse ? 'Update Course' : 'Create Course'}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

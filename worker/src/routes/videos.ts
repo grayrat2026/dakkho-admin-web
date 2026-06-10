@@ -58,14 +58,14 @@ videoRoutes.get('/', async (c) => {
 videoRoutes.post('/', async (c) => {
   try {
     const rawData = await c.req.json<Record<string, unknown>>();
-    const allowedFields = ['title', 'slug', 'description', 'course_id', 'video_url', 'thumbnail_url', 'duration', 'sort_order', 'is_preview', 'is_published'];
+    const allowedFields = ['title', 'slug', 'description', 'course_id', 'video_url', 'thumbnail_url', 'duration', 'sort_order', 'is_preview', 'is_published', 'lesson_id', 'lesson_type'];
     const data = normalizeKeys(rawData, allowedFields);
     const id = crypto.randomUUID();
     const slug = (data.slug as string) || ((data.title as string) || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
     await c.env.DB.prepare(`
-      INSERT INTO videos (id, title, slug, description, course_id, video_url, thumbnail_url, duration, sort_order, is_preview, is_published)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO videos (id, title, slug, description, course_id, video_url, thumbnail_url, duration, sort_order, is_preview, is_published, lesson_id, lesson_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       id,
       data.title || '',
@@ -77,7 +77,9 @@ videoRoutes.post('/', async (c) => {
       data.duration || 0,
       data.sort_order || 0,
       data.is_preview ? 1 : 0,
-      data.is_published ? 1 : 0
+      data.is_published ? 1 : 0,
+      data.lesson_id || null,
+      data.lesson_type || null
     ).run();
 
     const created = await c.env.DB.prepare('SELECT * FROM videos WHERE id = ?').bind(id).first();
@@ -102,7 +104,7 @@ videoRoutes.put('/', async (c) => {
       return c.json({ error: 'Video ID required' }, 400);
     }
 
-    const allowedFields = ['title', 'slug', 'description', 'course_id', 'video_url', 'thumbnail_url', 'duration', 'sort_order', 'is_preview', 'is_published'];
+    const allowedFields = ['title', 'slug', 'description', 'course_id', 'video_url', 'thumbnail_url', 'duration', 'sort_order', 'is_preview', 'is_published', 'lesson_id', 'lesson_type'];
     // Normalize camelCase keys from admin panel to snake_case for D1
     const updates = normalizeKeys(rawUpdates, allowedFields);
     const setClauses: string[] = [];

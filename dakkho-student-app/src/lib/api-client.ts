@@ -292,6 +292,8 @@ export interface Course {
   isFeatured: boolean;
   tags: string[];
   price: number;
+  semester: number | null;
+  whatYouLearn: string[];
 }
 
 export interface Instructor {
@@ -316,11 +318,47 @@ export interface Category {
   courseCount: number;
 }
 
+export interface Chapter {
+  id: string;
+  courseId: string;
+  subjectId: string;
+  title: string;
+  slug: string;
+  description: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface Lesson {
+  id: string;
+  chapterId: string;
+  courseId: string;
+  subjectId: string;
+  title: string;
+  slug: string;
+  description: string;
+  lessonType: 'lecture' | 'unit' | 'part' | 'extra_class' | 'assignment' | 'quiz' | 'note' | 'other';
+  sortOrder: number;
+  isPreview: boolean;
+  isActive: boolean;
+  duration: number;
+}
+
+export interface LearningPoint {
+  id: number;
+  pointText: string;
+  sortOrder: number;
+}
+
 export interface Video {
   id: string;
   title: string;
   slug: string;
   courseId: string;
+  subjectId: string;
+  chapterId: string;
+  lessonId: string;
+  lessonType: string;
   duration: number;
   order: number;
   isPreview: boolean;
@@ -364,6 +402,8 @@ function mapCourse(raw: Record<string, unknown>): Course {
     isFeatured: Boolean(raw.is_featured ?? raw.isFeatured ?? false),
     tags: parseTags(raw.tags),
     price: Number(raw.price_bdt ?? raw.price ?? 0),
+    semester: raw.semester != null ? Number(raw.semester) : null,
+    whatYouLearn: parseTags(raw.what_you_learn ?? raw.whatYouLearn),
   };
 }
 
@@ -392,10 +432,55 @@ function mapVideo(raw: Record<string, unknown>): Video {
     title: String(raw.title ?? ''),
     slug: String(raw.slug ?? ''),
     courseId: String(raw.course_id ?? raw.courseId ?? ''),
+    subjectId: String(raw.subject_id ?? raw.subjectId ?? ''),
+    chapterId: String(raw.chapter_id ?? raw.chapterId ?? ''),
+    lessonId: String(raw.lesson_id ?? raw.lessonId ?? ''),
+    lessonType: String(raw.lesson_type ?? raw.lessonType ?? ''),
     duration: Number(raw.duration_seconds ?? raw.duration ?? 0),
     order: Number(raw.sort_order ?? raw.order ?? 0),
     isPreview: Boolean(raw.is_preview ?? raw.isPreview ?? false),
     description: String(raw.description ?? ''),
+  };
+}
+
+/** Map a raw D1 chapter row → our Chapter interface */
+function mapChapter(raw: Record<string, unknown>): Chapter {
+  return {
+    id: String(raw.id ?? ''),
+    courseId: String(raw.course_id ?? raw.courseId ?? ''),
+    subjectId: String(raw.subject_id ?? raw.subjectId ?? ''),
+    title: String(raw.title ?? ''),
+    slug: String(raw.slug ?? ''),
+    description: String(raw.description ?? ''),
+    sortOrder: Number(raw.sort_order ?? raw.sortOrder ?? 0),
+    isActive: Boolean(raw.is_active ?? raw.isActive ?? true),
+  };
+}
+
+/** Map a raw D1 lesson row → our Lesson interface */
+function mapLesson(raw: Record<string, unknown>): Lesson {
+  return {
+    id: String(raw.id ?? ''),
+    chapterId: String(raw.chapter_id ?? raw.chapterId ?? ''),
+    courseId: String(raw.course_id ?? raw.courseId ?? ''),
+    subjectId: String(raw.subject_id ?? raw.subjectId ?? ''),
+    title: String(raw.title ?? ''),
+    slug: String(raw.slug ?? ''),
+    description: String(raw.description ?? ''),
+    lessonType: (String(raw.lesson_type ?? raw.lessonType ?? 'other')) as Lesson['lessonType'],
+    sortOrder: Number(raw.sort_order ?? raw.sortOrder ?? 0),
+    isPreview: Boolean(raw.is_preview ?? raw.isPreview ?? false),
+    isActive: Boolean(raw.is_active ?? raw.isActive ?? true),
+    duration: Number(raw.duration_seconds ?? raw.duration ?? 0),
+  };
+}
+
+/** Map a raw D1 learning_point row → our LearningPoint interface */
+function mapLearningPoint(raw: Record<string, unknown>): LearningPoint {
+  return {
+    id: Number(raw.id ?? 0),
+    pointText: String(raw.point_text ?? raw.pointText ?? ''),
+    sortOrder: Number(raw.sort_order ?? raw.sortOrder ?? 0),
   };
 }
 
@@ -420,6 +505,16 @@ export const courseApi = {
   videos: async (id: string): Promise<{ videos: Video[]; total: number }> => {
     const res = await api.get<{ videos: Record<string, unknown>[]; total: number }>(`/api/courses/${id}/videos`);
     return { videos: res.videos.map(mapVideo), total: res.total };
+  },
+  curriculum: async (id: string): Promise<{ subjects: any[]; chapters: Chapter[]; lessons: Lesson[]; videos: Video[]; learningPoints: LearningPoint[] }> => {
+    const res = await api.get<{ subjects: Record<string, unknown>[]; chapters: Record<string, unknown>[]; lessons: Record<string, unknown>[]; videos: Record<string, unknown>[]; learningPoints: Record<string, unknown>[] }>(`/api/courses/${id}/curriculum`);
+    return {
+      subjects: res.subjects || [],
+      chapters: (res.chapters || []).map(mapChapter),
+      lessons: (res.lessons || []).map(mapLesson),
+      videos: (res.videos || []).map(mapVideo),
+      learningPoints: (res.learningPoints || (res as any).learning_points || []).map(mapLearningPoint),
+    };
   },
 };
 

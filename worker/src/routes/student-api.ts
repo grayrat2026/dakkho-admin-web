@@ -349,7 +349,110 @@ studentApiRoutes.get('/courses/:id', async (c) => {
       // course_instructors table may not exist or no entries — fallback empty
     }
 
-    return c.json({ course, instructors });
+    // Fetch learning points for this course
+    let learningPoints: unknown[] = [];
+    try {
+      const lpResult = await c.env.DB.prepare(
+        'SELECT id, point_text, sort_order FROM course_learning_points WHERE course_id = ? ORDER BY sort_order ASC'
+      ).bind(id).all();
+      learningPoints = lpResult.results;
+    } catch {
+      // course_learning_points table may not exist — fallback empty
+    }
+
+    // Fetch subjects for this course via course_subjects join table
+    let subjects: unknown[] = [];
+    try {
+      const subResult = await c.env.DB.prepare(
+        'SELECT s.* FROM subjects s JOIN course_subjects cs ON s.id = cs.subject_id WHERE cs.course_id = ? ORDER BY cs.sort_order ASC'
+      ).bind(id).all();
+      subjects = subResult.results;
+    } catch {
+      // course_subjects or subjects table may not exist — fallback empty
+    }
+
+    return c.json({ course, instructors, learningPoints, subjects });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// GET /courses/:id/curriculum — Get full curriculum structure for a course
+studentApiRoutes.get('/courses/:id/curriculum', async (c) => {
+  try {
+    const id = c.req.param('id');
+
+    // Verify course exists
+    const course = await c.env.DB.prepare(
+      'SELECT id FROM courses WHERE id = ? AND is_published = 1'
+    ).bind(id).first();
+
+    if (!course) {
+      return c.json({ error: 'Course not found' }, 404);
+    }
+
+    // Fetch subjects for this course via course_subjects join table
+    let subjects: unknown[] = [];
+    try {
+      const subResult = await c.env.DB.prepare(
+        'SELECT s.* FROM subjects s JOIN course_subjects cs ON s.id = cs.subject_id WHERE cs.course_id = ? ORDER BY cs.sort_order ASC'
+      ).bind(id).all();
+      subjects = subResult.results;
+    } catch {
+      // fallback empty
+    }
+
+    // Fetch chapters for this course
+    let chapters: unknown[] = [];
+    try {
+      const chapResult = await c.env.DB.prepare(
+        'SELECT * FROM chapters WHERE course_id = ? ORDER BY subject_id, sort_order ASC'
+      ).bind(id).all();
+      chapters = chapResult.results;
+    } catch {
+      // fallback empty
+    }
+
+    // Fetch lessons for this course
+    let lessons: unknown[] = [];
+    try {
+      const lesResult = await c.env.DB.prepare(
+        'SELECT * FROM lessons WHERE course_id = ? ORDER BY chapter_id, sort_order ASC'
+      ).bind(id).all();
+      lessons = lesResult.results;
+    } catch {
+      // fallback empty
+    }
+
+    // Fetch videos for this course
+    let videos: unknown[] = [];
+    try {
+      const vidResult = await c.env.DB.prepare(
+        'SELECT * FROM videos WHERE course_id = ? ORDER BY sort_order ASC'
+      ).bind(id).all();
+      videos = vidResult.results;
+    } catch {
+      // fallback empty
+    }
+
+    // Fetch learning points for this course
+    let learningPoints: unknown[] = [];
+    try {
+      const lpResult = await c.env.DB.prepare(
+        'SELECT id, point_text, sort_order FROM course_learning_points WHERE course_id = ? ORDER BY sort_order ASC'
+      ).bind(id).all();
+      learningPoints = lpResult.results;
+    } catch {
+      // fallback empty
+    }
+
+    return c.json({
+      subjects,
+      chapters,
+      lessons,
+      videos,
+      learningPoints,
+    });
   } catch (error) {
     return c.json({ error: getErrorMessage(error) }, 500);
   }

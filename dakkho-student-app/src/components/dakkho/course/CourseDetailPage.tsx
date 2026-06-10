@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Star, Users, Clock, BookOpen, Play, ChevronLeft, Heart, Share2, Award, CheckCircle, ChevronDown, User } from 'lucide-react';
+import { Star, Users, Clock, BookOpen, Play, ChevronLeft, Heart, Share2, Award, CheckCircle, ChevronDown, User, Layers, Puzzle, Sparkles, FileText, HelpCircle, StickyNote, MoreHorizontal, Lock, Eye } from 'lucide-react';
 import { useNavigationStore, useBookmarkStore } from '@/lib/store';
-import { type Course, type Instructor, type Video, courseApi, categoryApi } from '@/lib/api-client';
+import { type Course, type Instructor, type Video, type Chapter, type Lesson, type LearningPoint, courseApi, categoryApi } from '@/lib/api-client';
 import { formatDuration, getLevelColor } from '@/lib/utils';
 import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
@@ -12,10 +12,41 @@ import { ProgressBar } from '../shared/ProgressBar';
 import { CourseCardGrid } from '../shared/CourseCardGrid';
 import { LoadingSkeleton } from '../shared/LoadingSkeleton';
 
+// Lesson type badge config
+const LESSON_TYPE_CONFIG: Record<string, { icon: typeof BookOpen; label: string; color: string; bg: string; darkBg: string }> = {
+  lecture: { icon: BookOpen, label: 'Lecture', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50', darkBg: 'dark:bg-blue-900/20' },
+  unit: { icon: Layers, label: 'Unit', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50', darkBg: 'dark:bg-purple-900/20' },
+  part: { icon: Puzzle, label: 'Part', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50', darkBg: 'dark:bg-amber-900/20' },
+  extra_class: { icon: Sparkles, label: 'Extra Class', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50', darkBg: 'dark:bg-emerald-900/20' },
+  assignment: { icon: FileText, label: 'Assignment', color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50', darkBg: 'dark:bg-orange-900/20' },
+  quiz: { icon: HelpCircle, label: 'Quiz', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50', darkBg: 'dark:bg-red-900/20' },
+  note: { icon: StickyNote, label: 'Note', color: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-50', darkBg: 'dark:bg-teal-900/20' },
+  other: { icon: MoreHorizontal, label: 'Other', color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50', darkBg: 'dark:bg-gray-900/20' },
+};
+
+function LessonTypeBadge({ type }: { type: string }) {
+  const config = LESSON_TYPE_CONFIG[type] || LESSON_TYPE_CONFIG.other;
+  const Icon = config.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${config.color} ${config.bg} ${config.darkBg}`}>
+      <Icon className="w-3 h-3" />
+      {config.label}
+    </span>
+  );
+}
+
 export function CourseDetailPage() {
   const { pageParams, navigate, goBack } = useNavigationStore();
   const { isBookmarked, toggleBookmark } = useBookmarkStore();
-  const [activeTab, setActiveTab] = useState<'overview' | 'curriculum' | 'reviews' | 'instructor'>('overview');
+
+  // Initialize activeTab from URL params
+  const [activeTab, setActiveTab] = useState<'overview' | 'curriculum' | 'reviews' | 'instructor'>(() => {
+    const tabParam = pageParams.tab as string;
+    if (tabParam && ['overview', 'curriculum', 'reviews', 'instructor'].includes(tabParam)) {
+      return tabParam as 'overview' | 'curriculum' | 'reviews' | 'instructor';
+    }
+    return 'overview';
+  });
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ 'section-1': true });
 
   const courseId = pageParams.courseId as string;
@@ -23,8 +54,19 @@ export function CourseDetailPage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [learningPoints, setLearningPoints] = useState<LearningPoint[]>([]);
   const [relatedCourses, setRelatedCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Handle tab changes — update URL
+  const handleTabChange = (tab: 'overview' | 'curriculum' | 'reviews' | 'instructor') => {
+    setActiveTab(tab);
+    if (courseId) {
+      navigate('course-detail', { courseId, tab });
+    }
+  };
 
   useEffect(() => {
     if (!courseId) { setLoading(false); return; }
@@ -39,10 +81,20 @@ export function CourseDetailPage() {
         // Set instructors from API (multiple instructors support)
         setInstructors(res.instructors);
 
-        // Fetch videos for this course
-        courseApi.videos(courseId)
-          .then((vidRes) => setVideos(vidRes.videos))
-          .catch(() => {});
+        // Fetch curriculum data (chapters, lessons, videos, learning points)
+        courseApi.curriculum(courseId)
+          .then((currRes) => {
+            setChapters(currRes.chapters);
+            setLessons(currRes.lessons);
+            setVideos(currRes.videos);
+            setLearningPoints(currRes.learningPoints);
+          })
+          .catch(() => {
+            // Fallback: fetch videos only if curriculum endpoint fails
+            courseApi.videos(courseId)
+              .then((vidRes) => setVideos(vidRes.videos))
+              .catch(() => {});
+          });
 
         // Fetch related courses (same technology/category)
         if (c.categoryId) {
@@ -57,29 +109,106 @@ export function CourseDetailPage() {
       .finally(() => setLoading(false));
   }, [courseId]);
 
+  // Sync activeTab from URL params when they change externally (e.g., back/forward)
+  useEffect(() => {
+    const tabParam = pageParams.tab as string;
+    const validTabs = ['overview', 'curriculum', 'reviews', 'instructor'];
+    if (tabParam && validTabs.includes(tabParam)) {
+      // Use microtask to avoid synchronous setState in effect body
+      queueMicrotask(() => setActiveTab(tabParam as 'overview' | 'curriculum' | 'reviews' | 'instructor'));
+    }
+  }, [pageParams.tab]);
+
   const bookmarked = course ? isBookmarked(course.id) : false;
 
-  // What You'll Learn items (derived from tags and course content)
-  const learnings = course ? [
-    `Master the fundamentals of ${course.tags[0] || course.title.split(' ').slice(0, 2).join(' ')}`,
-    `Build real-world projects with hands-on practice`,
-    `Understand core concepts and industry best practices`,
-    `Prepare effectively for BTEB examinations`,
-    `Gain practical skills for professional development`,
-    ...(course.tags.length > 1 ? [`Work with ${course.tags.slice(1).join(', ')} technologies`] : []),
-  ] : [];
+  // What You'll Learn items — use learningPoints from API if available, else fallback to tag-based generation
+  const learnings = useMemo(() => {
+    if (learningPoints.length > 0) {
+      return learningPoints
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((lp) => lp.pointText);
+    }
+    // Fallback: generate from tags
+    if (!course) return [];
+    return [
+      `Master the fundamentals of ${course.tags[0] || course.title.split(' ').slice(0, 2).join(' ')}`,
+      `Build real-world projects with hands-on practice`,
+      `Understand core concepts and industry best practices`,
+      `Prepare effectively for BTEB examinations`,
+      `Gain practical skills for professional development`,
+      ...(course.tags.length > 1 ? [`Work with ${course.tags.slice(1).join(', ')} technologies`] : []),
+    ];
+  }, [learningPoints, course]);
 
-  // Group videos into sections (every 8 videos = 1 section)
-  const sections = videos.length > 0
-    ? Array.from(
-        { length: Math.ceil(videos.length / 8) },
-        (_, i) => ({
-          id: `section-${i + 1}`,
-          title: `Section ${i + 1}: ${i === 0 ? 'Fundamentals' : i === 1 ? 'Core Concepts' : i === 2 ? 'Advanced Topics' : 'Projects & Practice'}`,
-          videos: videos.slice(i * 8, (i + 1) * 8),
-        })
-      )
-    : [];
+  // Determine if the course has chapters (new curriculum structure)
+  const hasChapters = chapters.length > 0;
+
+  // Build the structured curriculum for the new hierarchy
+  const structuredCurriculum = useMemo(() => {
+    if (!hasChapters) return null;
+
+    // Group chapters, sort by sortOrder
+    const sortedChapters = [...chapters]
+      .filter((ch) => ch.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    return sortedChapters.map((chapter) => {
+      // Get lessons for this chapter
+      const chapterLessons = lessons
+        .filter((l) => l.chapterId === chapter.id && l.isActive)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+
+      // Group lessons by type
+      const lessonsWithType = chapterLessons.map((lesson) => {
+        const lessonVideos = videos
+          .filter((v) => v.lessonId === lesson.id)
+          .sort((a, b) => a.order - b.order);
+        return { ...lesson, videos: lessonVideos };
+      });
+
+      // Total duration for this chapter
+      const totalDuration = lessonsWithType.reduce(
+        (sum, l) => sum + l.videos.reduce((vSum, v) => vSum + v.duration, 0) + l.duration,
+        0
+      );
+
+      const totalVideos = lessonsWithType.reduce((sum, l) => sum + l.videos.length, 0);
+
+      return {
+        ...chapter,
+        lessons: lessonsWithType,
+        totalDuration,
+        totalVideos,
+      };
+    });
+  }, [hasChapters, chapters, lessons, videos]);
+
+  // Legacy section grouping (flat video list)
+  const sections = useMemo(() => {
+    if (hasChapters) return [];
+    return videos.length > 0
+      ? Array.from(
+          { length: Math.ceil(videos.length / 8) },
+          (_, i) => ({
+            id: `section-${i + 1}`,
+            title: `Section ${i + 1}: ${i === 0 ? 'Fundamentals' : i === 1 ? 'Core Concepts' : i === 2 ? 'Advanced Topics' : 'Projects & Practice'}`,
+            videos: videos.slice(i * 8, (i + 1) * 8),
+          })
+        )
+      : [];
+  }, [hasChapters, videos]);
+
+  // Curriculum stats
+  const curriculumStats = useMemo(() => {
+    if (hasChapters && structuredCurriculum) {
+      const totalChapters = structuredCurriculum.length;
+      const totalLessons = structuredCurriculum.reduce((sum, ch) => sum + ch.lessons.length, 0);
+      const totalVids = structuredCurriculum.reduce((sum, ch) => sum + ch.totalVideos, 0);
+      const totalDur = structuredCurriculum.reduce((sum, ch) => sum + ch.totalDuration, 0);
+      return { chapters: totalChapters, lessons: totalLessons, videos: totalVids, duration: totalDur };
+    }
+    return { chapters: 0, lessons: 0, videos: videos.length, duration: course?.duration ?? 0 };
+  }, [hasChapters, structuredCurriculum, videos.length, course?.duration]);
 
   if (loading) {
     return (
@@ -182,7 +311,7 @@ export function CourseDetailPage() {
                     ? 'bg-white dark:bg-slate-800 shadow-sm text-sky-600 dark:text-sky-400'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => handleTabChange(tab.key)}
                 whileTap={{ scale: 0.97 }}
               >
                 {tab.label}
@@ -220,6 +349,12 @@ export function CourseDetailPage() {
                       <Users className="w-4 h-4 text-sky-500" />
                       <span className="text-muted-foreground">Students: <span className="font-semibold text-foreground">{course.totalStudents}</span></span>
                     </div>
+                    {course.semester != null && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Layers className="w-4 h-4 text-sky-500" />
+                        <span className="text-muted-foreground">Semester: <span className="font-semibold text-foreground">{course.semester}</span></span>
+                      </div>
+                    )}
                   </div>
                   {course.tags.length > 0 && (
                     <div className="flex flex-wrap gap-2 pt-2">
@@ -233,23 +368,25 @@ export function CourseDetailPage() {
                 </GlassCard>
 
                 {/* What You'll Learn */}
-                <GlassCard className="p-6">
-                  <h2 className="text-lg font-bold mb-4">What You&apos;ll Learn</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {learnings.map((item, i) => (
-                      <motion.div
-                        key={i}
-                        className="flex items-start gap-3"
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                      >
-                        <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-foreground">{item}</span>
-                      </motion.div>
-                    ))}
-                  </div>
-                </GlassCard>
+                {learnings.length > 0 && (
+                  <GlassCard className="p-6">
+                    <h2 className="text-lg font-bold mb-4">What You&apos;ll Learn</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {learnings.map((item, i) => (
+                        <motion.div
+                          key={i}
+                          className="flex items-start gap-3"
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                        >
+                          <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                          <span className="text-sm text-foreground">{item}</span>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </GlassCard>
+                )}
 
                 {/* Instructors Card */}
                 {instructors.length > 0 && (
@@ -309,13 +446,123 @@ export function CourseDetailPage() {
               <div className="space-y-3">
                 {/* Overview stats */}
                 <GlassCard className="p-4 flex items-center gap-6 text-sm">
-                  <span className="text-muted-foreground">{sections.length} sections</span>
-                  <span className="text-muted-foreground">{videos.length} lectures</span>
-                  <span className="text-muted-foreground">{formatDuration(course.duration)} total</span>
+                  {hasChapters && (
+                    <>
+                      <span className="text-muted-foreground">{curriculumStats.chapters} chapters</span>
+                      <span className="text-muted-foreground">{curriculumStats.lessons} lessons</span>
+                    </>
+                  )}
+                  {!hasChapters && (
+                    <span className="text-muted-foreground">{sections.length} sections</span>
+                  )}
+                  <span className="text-muted-foreground">{curriculumStats.videos} lectures</span>
+                  <span className="text-muted-foreground">{formatDuration(curriculumStats.duration)} total</span>
                 </GlassCard>
 
-                {/* Expandable sections */}
-                {sections.length > 0 ? sections.map((section, si) => {
+                {/* New curriculum: Subject → Chapter → Lesson → Video */}
+                {hasChapters && structuredCurriculum ? structuredCurriculum.map((chapter, ci) => {
+                  const isExpanded = expandedSections[chapter.id] ?? ci === 0;
+                  return (
+                    <motion.div
+                      key={chapter.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: ci * 0.05 }}
+                    >
+                      <GlassCard className="overflow-hidden">
+                        {/* Chapter header */}
+                        <button
+                          className="w-full p-4 flex items-center justify-between text-left"
+                          onClick={() => toggleSection(chapter.id)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="w-7 h-7 rounded-lg bg-sky-50 dark:bg-sky-900/20 flex items-center justify-center text-sky-500 text-xs font-bold">
+                              {ci + 1}
+                            </span>
+                            <div>
+                              <h3 className="text-sm font-bold text-foreground">{chapter.title}</h3>
+                              <p className="text-xs text-muted-foreground">
+                                {chapter.lessons.length} lesson{chapter.lessons.length !== 1 ? 's' : ''} &middot; {chapter.totalVideos} video{chapter.totalVideos !== 1 ? 's' : ''} &middot; {formatDuration(chapter.totalDuration)}
+                              </p>
+                            </div>
+                          </div>
+                          <motion.div
+                            animate={{ rotate: isExpanded ? 180 : 0 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          </motion.div>
+                        </button>
+
+                        {/* Lessons and videos */}
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.3 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="border-t border-white/20 dark:border-white/5">
+                                {chapter.lessons.map((lesson, li) => (
+                                  <div key={lesson.id}>
+                                    {/* Lesson header */}
+                                    <div className="px-4 py-2.5 bg-muted/20 flex items-center gap-2">
+                                      <LessonTypeBadge type={lesson.lessonType} />
+                                      <span className="text-sm font-semibold text-foreground line-clamp-1">{lesson.title}</span>
+                                                      {lesson.isPreview && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20">
+                                  <Eye className="w-2.5 h-2.5" />
+                                  Preview
+                                </span>
+                              )}
+                                      <span className="text-xs text-muted-foreground ml-auto flex-shrink-0">{formatDuration(lesson.duration || lesson.videos.reduce((s, v) => s + v.duration, 0))}</span>
+                                    </div>
+                                    {/* Videos within lesson */}
+                                    {lesson.videos.map((video, vi) => (
+                                      <motion.div
+                                        key={video.id}
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: vi * 0.03 }}
+                                        className="flex items-center gap-4 px-6 py-3 hover:bg-white/30 dark:hover:bg-slate-800/30 transition-colors cursor-pointer border-b border-white/10 dark:border-white/5 last:border-b-0"
+                                        onClick={() => navigate('video-player', { videoId: video.id, courseId: course.id })}
+                                      >
+                                        <div className="w-7 h-7 rounded-lg bg-muted/50 flex items-center justify-center text-muted-foreground font-medium text-[10px] flex-shrink-0">
+                                          {vi + 1}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <h4 className="text-sm font-medium text-foreground line-clamp-1">{video.title}</h4>
+                                          <div className="flex items-center gap-2 mt-0.5">
+                                            <span className="text-xs text-muted-foreground">{formatDuration(video.duration)}</span>
+                                            {video.isPreview && (
+                                              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                                <Eye className="w-2.5 h-2.5" />
+                                                Preview
+                                              </span>
+                                            )}
+                                            {video.lessonType && !video.isPreview && (
+                                              <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                                                <Lock className="w-2.5 h-2.5" />
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <Play className="w-4 h-4 text-sky-500 flex-shrink-0" />
+                                      </motion.div>
+                                    ))}
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </GlassCard>
+                    </motion.div>
+                  );
+                }) : !hasChapters && sections.length > 0 ? sections.map((section, si) => {
+                  // Legacy flat section grouping
                   const isExpanded = expandedSections[section.id] ?? false;
                   return (
                     <motion.div
@@ -372,7 +619,12 @@ export function CourseDetailPage() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <h4 className="text-sm font-medium text-foreground line-clamp-1">{video.title}</h4>
-                                      <p className="text-xs text-muted-foreground mt-0.5">{formatDuration(video.duration)}{video.isPreview ? ' \u00B7 Preview' : ''}</p>
+                                      <div className="flex items-center gap-2 mt-0.5">
+                                        <span className="text-xs text-muted-foreground">{formatDuration(video.duration)}</span>
+                                        {video.isPreview && (
+                                          <span className="text-xs text-emerald-500 font-medium">Preview</span>
+                                        )}
+                                      </div>
                                     </div>
                                     <Play className="w-4 h-4 text-sky-500 flex-shrink-0" />
                                   </motion.div>
@@ -517,6 +769,12 @@ export function CourseDetailPage() {
                 <span className="text-muted-foreground">Students</span>
                 <span className="font-semibold">{course.totalStudents.toLocaleString()}</span>
               </div>
+              {course.semester != null && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Semester</span>
+                  <span className="font-semibold">{course.semester}</span>
+                </div>
+              )}
             </div>
           </GlassCard>
         </div>

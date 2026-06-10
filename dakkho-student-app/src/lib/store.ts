@@ -173,6 +173,10 @@ export function pageToUrl(page: string, params?: Record<string, unknown>): strin
   if (params) {
     const extraSegments: string[] = [];
     if (params.courseId) extraSegments.push(String(params.courseId));
+    // Course detail deep links: /course/detail/{courseId}/{tab}
+    if (page === 'course-detail' && params.tab && params.courseId) {
+      extraSegments.push(String(params.tab));
+    }
     if (params.videoId) extraSegments.push(String(params.videoId));
     if (params.instructorId) extraSegments.push(String(params.instructorId));
     if (params.query) extraSegments.push(encodeURIComponent(String(params.query)));
@@ -219,7 +223,17 @@ export function urlToPage(urlPath: string): { page: string; params: Record<strin
       const params: Record<string, string> = {};
 
       // Assign extra segments to known param keys based on page type
-      if (match === 'course-detail' && extraSegments[0]) params.courseId = extraSegments[0];
+      if (match === 'course-detail' && extraSegments[0]) {
+        params.courseId = extraSegments[0];
+        // Support deep link tabs: /course/detail/{courseId}/{tab}
+        // tab can be: 'overview', 'curriculum', 'reviews', 'instructor'
+        if (extraSegments[1]) {
+          const validTabs = ['overview', 'curriculum', 'reviews', 'instructor'];
+          if (validTabs.includes(extraSegments[1])) {
+            params.tab = extraSegments[1];
+          }
+        }
+      }
       else if (match === 'video-player' && extraSegments[0]) params.videoId = extraSegments[0];
       else if (match === 'instructor-profile' && extraSegments[0]) params.instructorId = extraSegments[0];
       else if (match === 'search' && extraSegments[0]) params.query = decodeURIComponent(extraSegments[0]);
