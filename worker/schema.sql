@@ -319,7 +319,7 @@ CREATE INDEX IF NOT EXISTS idx_course_instructors_instructor ON course_instructo
 CREATE TABLE IF NOT EXISTS chapters (
   id TEXT PRIMARY KEY,
   course_id TEXT NOT NULL,
-  subject_id TEXT NOT NULL,
+  subject_id TEXT,
   title TEXT NOT NULL,
   slug TEXT NOT NULL,
   description TEXT,
@@ -339,7 +339,7 @@ CREATE TABLE IF NOT EXISTS lessons (
   id TEXT PRIMARY KEY,
   chapter_id TEXT NOT NULL,
   course_id TEXT NOT NULL,
-  subject_id TEXT NOT NULL,
+  subject_id TEXT,
   title TEXT NOT NULL,
   slug TEXT NOT NULL,
   description TEXT,
@@ -347,6 +347,9 @@ CREATE TABLE IF NOT EXISTS lessons (
   sort_order INTEGER DEFAULT 0,
   is_preview INTEGER DEFAULT 0,
   duration INTEGER DEFAULT 0,
+  video_url TEXT,
+  thumbnail_url TEXT,
+  document_url TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );

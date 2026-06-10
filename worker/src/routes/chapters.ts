@@ -72,9 +72,8 @@ chapterRoutes.post('/', async (c) => {
     if (!data.course_id) {
       return c.json({ error: 'Course ID is required' }, 400);
     }
-    if (!data.subject_id) {
-      return c.json({ error: 'Subject ID is required' }, 400);
-    }
+
+    // subject_id is optional — can be set later or inherited by lessons
 
     await c.env.DB.prepare(`
       INSERT INTO chapters (id, course_id, subject_id, title, slug, description, sort_order)
@@ -82,7 +81,7 @@ chapterRoutes.post('/', async (c) => {
     `).bind(
       id,
       data.course_id,
-      data.subject_id,
+      data.subject_id || null,
       data.title,
       slug,
       data.description || null,
@@ -155,10 +154,10 @@ chapterRoutes.put('/', async (c) => {
   }
 });
 
-// DELETE / — Delete chapter (requires id query param)
+// DELETE / — Delete chapter (supports both id and chapterId query params)
 chapterRoutes.delete('/', async (c) => {
   try {
-    const id = c.req.query('id');
+    const id = c.req.query('id') || c.req.query('chapterId');
 
     if (!id) {
       return c.json({ error: 'Chapter ID required' }, 400);

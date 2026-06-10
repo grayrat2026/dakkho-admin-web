@@ -88,3 +88,34 @@ Stage Summary:
 - End-to-end pipeline verified: Video create → Pending → Download → 360p → 720p → Upload → HLS Ready
 - R2 credential refresh has fallback (existing creds still work; CF temp-access-credentials API has JSON format issues)
 - All systems deployed: Worker, Admin Panel, VPS transcoder
+
+---
+Task ID: lesson-enhancement
+Agent: Main Agent
+Task: Fix Course Page Chapters & Lessons — Add multiple lessons per chapter + Video+Thumbnail+Document per lesson
+
+Work Log:
+- Analyzed current course-curriculum.tsx — lessons had basic fields only (title, type, duration), no video/thumbnail/document support
+- Identified D1 schema gap — lessons table lacked video_url, thumbnail_url, document_url columns
+- Fixed subject_id NOT NULL constraint — made optional in both chapters and lessons tables (backend auto-inherits from chapter)
+- Fixed delete param mismatch — backend now accepts both id= and lessonId=/chapterId= query params
+- Added 3 new columns to D1 lessons table: video_url, thumbnail_url, document_url (via ALTER TABLE migration)
+- Updated worker/src/routes/lessons.ts — Added video_url, thumbnail_url, document_url to allowedFields, INSERT, UPDATE queries; auto-inherit subject_id from chapter on create
+- Updated worker/src/routes/chapters.ts — Made subject_id optional, added dual query param support for delete
+- Completely redesigned lesson dialog with 4 sections:
+  - Basic Info: title, chapter, lesson type, description, duration, sort order, preview toggle
+  - Video: Upload/Link/YouTube tabs with drag-drop, auto-duration extraction
+  - Thumbnail: Upload with preview, remove button, image display
+  - Document: Upload with file type indicator, remove button
+- Enhanced chapter accordion: Shows thumbnail/video/document indicators on lesson rows, "Add Lesson" button in empty chapters
+- Lesson type now includes description field for video details
+- Deployed Worker to Cloudflare (v917098e1)
+- Built Admin Panel with GitHub Pages config and deployed to dakkho-admin-web repo
+
+Stage Summary:
+- D1 lessons table now has video_url, thumbnail_url, document_url columns
+- Lesson dialog supports full content creation: Video + Thumbnail + Document + Description
+- subject_id auto-inherits from chapter (no more required field errors)
+- Delete operations fixed for both chapters and lessons
+- Worker deployed: https://dakkho-admin-api.dakkho-admin.workers.dev
+- Admin Panel deployed: https://grayrat2026.github.io/dakkho-admin/

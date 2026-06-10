@@ -21,6 +21,9 @@ import {
   Upload,
   CheckCircle2,
   Link,
+  Image,
+  Paperclip,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -76,10 +79,15 @@ interface Lesson {
   title: string;
   chapterId: string;
   courseId: string;
+  subjectId?: string;
+  description?: string;
   lessonType: string;
   sortOrder: number;
   isPreview: boolean;
   duration: number;
+  videoUrl?: string;
+  thumbnailUrl?: string;
+  documentUrl?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -169,7 +177,7 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
   const [chapterForm, setChapterForm] = useState({ title: '', subjectId: '', sortOrder: 0 });
   const [chapterSaving, setChapterSaving] = useState(false);
 
-  // Lesson dialog
+  // Lesson dialog — now with Video + Thumbnail + Document + Details
   const [lessonFormOpen, setLessonFormOpen] = useState(false);
   const [editLesson, setEditLesson] = useState<Lesson | null>(null);
   const [lessonForm, setLessonForm] = useState({
@@ -179,8 +187,21 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
     sortOrder: 0,
     isPreview: false,
     duration: 0,
+    description: '',
+    videoUrl: '',
+    videoType: 'upload' as 'upload' | 'link' | 'youtube',
+    thumbnailUrl: '',
+    documentUrl: '',
   });
   const [lessonSaving, setLessonSaving] = useState(false);
+  const [lessonVideoUploading, setLessonVideoUploading] = useState(false);
+  const [lessonVideoDragOver, setLessonVideoDragOver] = useState(false);
+  const [lessonThumbnailUploading, setLessonThumbnailUploading] = useState(false);
+  const [lessonDocumentUploading, setLessonDocumentUploading] = useState(false);
+  const [lessonExtractedDuration, setLessonExtractedDuration] = useState<number | null>(null);
+  const lessonVideoFileRef = useRef<HTMLInputElement>(null);
+  const lessonThumbnailFileRef = useRef<HTMLInputElement>(null);
+  const lessonDocumentFileRef = useRef<HTMLInputElement>(null);
 
   // Learning point dialog
   const [lpFormOpen, setLpFormOpen] = useState(false);
@@ -188,7 +209,7 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
   const [lpForm, setLpForm] = useState({ content: '', sortOrder: 0 });
   const [lpSaving, setLpSaving] = useState(false);
 
-  // Video dialog
+  // Video dialog (for standalone videos)
   const [videoFormOpen, setVideoFormOpen] = useState(false);
   const [editVideo, setEditVideo] = useState<VideoItem | null>(null);
   const [videoForm, setVideoForm] = useState({
@@ -261,10 +282,15 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
           title: String(d.title ?? ''),
           chapterId: String(d.chapterId ?? ''),
           courseId: String(d.courseId ?? courseId),
+          subjectId: d.subjectId ? String(d.subjectId) : undefined,
+          description: d.description ? String(d.description) : undefined,
           lessonType: String(d.lessonType ?? 'lecture'),
           sortOrder: Number(d.sortOrder ?? 0),
           isPreview: Boolean(d.isPreview),
           duration: Number(d.duration ?? 0),
+          videoUrl: d.videoUrl ? String(d.videoUrl) : undefined,
+          thumbnailUrl: d.thumbnailUrl ? String(d.thumbnailUrl) : undefined,
+          documentUrl: d.documentUrl ? String(d.documentUrl) : undefined,
         })),
       );
       setLearningPoints(
@@ -363,8 +389,37 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
   };
 
   // -------------------------------------------------------------------------
-  // Lesson CRUD
+  // Lesson CRUD — Enhanced with Video + Thumbnail + Document
   // -------------------------------------------------------------------------
+
+  // Helper: Extract duration from video file using HTML5 video element
+  const extractVideoDuration = (file: File): Promise<number> => {
+    return new Promise((resolve) => {
+      const videoEl = document.createElement('video');
+      videoEl.preload = 'metadata';
+      videoEl.onloadedmetadata = () => {
+        const durationSeconds = videoEl.duration;
+        URL.revokeObjectURL(videoEl.src);
+        const durationMinutes = Math.round(durationSeconds / 60 * 10) / 10;
+        resolve(durationMinutes);
+      };
+      videoEl.onerror = () => {
+        URL.revokeObjectURL(videoEl.src);
+        resolve(0);
+      };
+      videoEl.src = URL.createObjectURL(file);
+    });
+  };
+
+  // Helper: Check if URL is a YouTube link and extract embed URL
+  const getYouTubeEmbedUrl = (url: string): string | null => {
+    const ytRegex = /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+    const match = url.match(ytRegex);
+    if (match) {
+      return `https://www.youtube.com/embed/${match[1]}`;
+    }
+    return null;
+  };
 
   const openCreateLesson = (chapterId?: string) => {
     setEditLesson(null);
@@ -376,12 +431,27 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
       sortOrder: chapterLessons.length,
       isPreview: false,
       duration: 0,
+      description: '',
+      videoUrl: '',
+      videoType: 'upload',
+      thumbnailUrl: '',
+      documentUrl: '',
     });
+    setLessonExtractedDuration(null);
     setLessonFormOpen(true);
   };
 
   const openEditLesson = (lesson: Lesson) => {
     setEditLesson(lesson);
+    // Detect video type from URL
+    let vType: 'upload' | 'link' | 'youtube' = 'link';
+    if (lesson.videoUrl) {
+      if (getYouTubeEmbedUrl(lesson.videoUrl)) {
+        vType = 'youtube';
+      } else if (lesson.videoUrl.includes('r2.dev') || lesson.videoUrl.includes('pub-')) {
+        vType = 'upload';
+      }
+    }
     setLessonForm({
       title: lesson.title,
       chapterId: lesson.chapterId,
@@ -389,14 +459,94 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
       sortOrder: lesson.sortOrder,
       isPreview: lesson.isPreview,
       duration: lesson.duration,
+      description: lesson.description || '',
+      videoUrl: lesson.videoUrl || '',
+      videoType: vType,
+      thumbnailUrl: lesson.thumbnailUrl || '',
+      documentUrl: lesson.documentUrl || '',
     });
+    setLessonExtractedDuration(null);
     setLessonFormOpen(true);
+  };
+
+  // Handle video file upload for lesson
+  const handleLessonVideoUpload = async (file: File) => {
+    setLessonVideoUploading(true);
+    setLessonExtractedDuration(null);
+    try {
+      const duration = await extractVideoDuration(file);
+      if (duration > 0) {
+        setLessonExtractedDuration(duration);
+        setLessonForm((prev) => ({ ...prev, duration }));
+      }
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'videos');
+      const result = await apiUpload('/upload', formData) as Record<string, unknown>;
+      const url = result.url as string;
+      setLessonForm((prev) => ({ ...prev, videoUrl: url, videoType: 'upload' }));
+      toast({ title: 'Video uploaded', description: duration > 0 ? `Duration: ${duration} min (auto-detected)` : 'File uploaded successfully' });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Upload failed';
+      toast({ title: 'Upload Error', description: message, variant: 'destructive' });
+    } finally {
+      setLessonVideoUploading(false);
+    }
+  };
+
+  // Handle thumbnail file upload for lesson
+  const handleLessonThumbnailUpload = async (file: File) => {
+    setLessonThumbnailUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'thumbnails');
+      const result = await apiUpload('/upload', formData) as Record<string, unknown>;
+      const url = result.url as string;
+      setLessonForm((prev) => ({ ...prev, thumbnailUrl: url }));
+      toast({ title: 'Thumbnail uploaded', description: 'Thumbnail set successfully' });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Upload failed';
+      toast({ title: 'Upload Error', description: message, variant: 'destructive' });
+    } finally {
+      setLessonThumbnailUploading(false);
+    }
+  };
+
+  // Handle document file upload for lesson
+  const handleLessonDocumentUpload = async (file: File) => {
+    setLessonDocumentUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'documents');
+      const result = await apiUpload('/upload', formData) as Record<string, unknown>;
+      const url = result.url as string;
+      setLessonForm((prev) => ({ ...prev, documentUrl: url }));
+      toast({ title: 'Document uploaded', description: 'Document attached successfully' });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Upload failed';
+      toast({ title: 'Upload Error', description: message, variant: 'destructive' });
+    } finally {
+      setLessonDocumentUploading(false);
+    }
   };
 
   const handleSaveLesson = async () => {
     if (!lessonForm.title.trim()) return;
+    if (!lessonForm.chapterId) {
+      toast({ title: 'Error', description: 'Please select a chapter', variant: 'destructive' });
+      return;
+    }
     setLessonSaving(true);
     try {
+      // Convert YouTube URL to embed URL if applicable
+      let finalVideoUrl = lessonForm.videoUrl;
+      if (lessonForm.videoType === 'youtube' && finalVideoUrl) {
+        const embedUrl = getYouTubeEmbedUrl(finalVideoUrl);
+        if (embedUrl) finalVideoUrl = embedUrl;
+      }
+
       const payload: Record<string, unknown> = {
         course_id: courseId,
         chapter_id: lessonForm.chapterId,
@@ -405,6 +555,10 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
         sort_order: lessonForm.sortOrder,
         is_preview: lessonForm.isPreview,
         duration: lessonForm.duration,
+        description: lessonForm.description || undefined,
+        video_url: finalVideoUrl || undefined,
+        thumbnail_url: lessonForm.thumbnailUrl || undefined,
+        document_url: lessonForm.documentUrl || undefined,
       };
       if (editLesson) {
         await apiPut('/lessons', { lessonId: editLesson.id, ...payload });
@@ -466,52 +620,18 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
   };
 
   // -------------------------------------------------------------------------
-  // Video CRUD
+  // Standalone Video CRUD (for videos not attached to lessons)
   // -------------------------------------------------------------------------
 
-  // Helper: Extract duration from video file using HTML5 video element
-  const extractVideoDuration = (file: File): Promise<number> => {
-    return new Promise((resolve) => {
-      const video = document.createElement('video');
-      video.preload = 'metadata';
-      video.onloadedmetadata = () => {
-        const durationSeconds = video.duration;
-        URL.revokeObjectURL(video.src);
-        // Convert to minutes (rounded to 1 decimal)
-        const durationMinutes = Math.round(durationSeconds / 60 * 10) / 10;
-        resolve(durationMinutes);
-      };
-      video.onerror = () => {
-        URL.revokeObjectURL(video.src);
-        resolve(0);
-      };
-      video.src = URL.createObjectURL(file);
-    });
-  };
-
-  // Helper: Check if URL is a YouTube link and extract embed URL
-  const getYouTubeEmbedUrl = (url: string): string | null => {
-    const ytRegex = /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
-    const match = url.match(ytRegex);
-    if (match) {
-      return `https://www.youtube.com/embed/${match[1]}`;
-    }
-    return null;
-  };
-
-  // Handle video file upload + duration extraction
   const handleVideoFileUpload = async (file: File) => {
     setVideoUploading(true);
     setExtractedDuration(null);
     try {
-      // Extract duration from file first
       const duration = await extractVideoDuration(file);
       if (duration > 0) {
         setExtractedDuration(duration);
         setVideoForm((prev) => ({ ...prev, duration }));
       }
-
-      // Upload to R2
       const formData = new FormData();
       formData.append('file', file);
       formData.append('bucket', 'videos');
@@ -562,7 +682,6 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
 
   const openEditVideo = (video: VideoItem) => {
     setEditVideo(video);
-    // Detect video type from URL
     let vType: 'upload' | 'link' | 'youtube' = 'link';
     if (video.videoUrl) {
       if (getYouTubeEmbedUrl(video.videoUrl)) {
@@ -591,7 +710,6 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
     if (!videoForm.title.trim()) return;
     setVideoSaving(true);
     try {
-      // Convert YouTube URL to embed URL if applicable
       let finalVideoUrl = videoForm.videoUrl;
       if (videoForm.videoType === 'youtube' && finalVideoUrl) {
         const embedUrl = getYouTubeEmbedUrl(finalVideoUrl);
@@ -640,10 +758,11 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
         learningPoint: '/learning-points',
         video: '/videos',
       };
+      // Use both param formats for compatibility
       const idParams: Record<string, string> = {
-        chapter: `chapterId=${deleteTarget.id}`,
-        lesson: `lessonId=${deleteTarget.id}`,
-        learningPoint: `learningPointId=${deleteTarget.id}`,
+        chapter: `id=${deleteTarget.id}`,
+        lesson: `id=${deleteTarget.id}`,
+        learningPoint: `id=${deleteTarget.id}`,
         video: `id=${deleteTarget.id}`,
       };
       const endpoint = endpoints[deleteTarget.type];
@@ -863,6 +982,7 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 hover:bg-white/[0.06]"
+                              title="Add Lesson"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openCreateLesson(chapter.id);
@@ -874,6 +994,7 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 hover:bg-white/[0.06]"
+                              title="Add Video"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openCreateVideo(undefined, chapter.id);
@@ -885,6 +1006,7 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 hover:bg-white/[0.06]"
+                              title="Edit Chapter"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openEditChapter(chapter);
@@ -896,6 +1018,7 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive"
+                              title="Delete Chapter"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openDeleteDialog('chapter', chapter.id, chapter.title);
@@ -921,101 +1044,107 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
                               {chapterLessons.map((lesson) => {
                                 const lessonVideos = getVideosForLesson(lesson.id);
                                 return (
-                                                  <div key={lesson.id} className="space-y-0.5">
-                                  {/* Lesson Row */}
-                                  <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/[0.04] transition-colors group">
-                                    <FileText className="h-3.5 w-3.5 text-muted-foreground/50 flex-shrink-0" />
-                                    <span className="text-sm text-foreground/90 flex-1 min-w-0 truncate">
-                                      {lesson.title}
-                                    </span>
-                                    <Badge
-                                      variant="secondary"
-                                      className={`text-[10px] px-1.5 py-0 ${lessonTypeBadgeStyles[lesson.lessonType] || lessonTypeBadgeStyles.other}`}
-                                    >
-                                      {lesson.lessonType.replace('_', ' ')}
-                                    </Badge>
-                                    {lesson.isPreview && (
+                                  <div key={lesson.id} className="space-y-0.5">
+                                    {/* Lesson Row */}
+                                    <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/[0.04] transition-colors group">
+                                      <FileText className="h-3.5 w-3.5 text-muted-foreground/50 flex-shrink-0" />
+                                      <span className="text-sm text-foreground/90 flex-1 min-w-0 truncate">
+                                        {lesson.title}
+                                      </span>
+                                      {/* Thumbnail indicator */}
+                                      {lesson.thumbnailUrl && (
+                                        <div className="w-6 h-4 rounded-sm overflow-hidden flex-shrink-0 border border-white/[0.08]">
+                                          <img src={lesson.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                                        </div>
+                                      )}
+                                      {/* Video indicator */}
+                                      {lesson.videoUrl && (
+                                        <Video className="h-3 w-3 text-dakkho-blue/70 flex-shrink-0" />
+                                      )}
+                                      {/* Document indicator */}
+                                      {lesson.documentUrl && (
+                                        <Paperclip className="h-3 w-3 text-dakkho-orange/70 flex-shrink-0" />
+                                      )}
                                       <Badge
                                         variant="secondary"
-                                        className="bg-dakkho-success/15 text-dakkho-success text-[10px] px-1.5 py-0"
+                                        className={`text-[10px] px-1.5 py-0 ${lessonTypeBadgeStyles[lesson.lessonType] || lessonTypeBadgeStyles.other}`}
                                       >
-                                        <Eye className="h-2.5 w-2.5 mr-0.5" /> Preview
+                                        {lesson.lessonType.replace('_', ' ')}
                                       </Badge>
-                                    )}
-                                    {lesson.duration > 0 && (
-                                      <span className="text-[10px] text-muted-foreground/50 flex items-center gap-0.5">
-                                        <Clock className="h-2.5 w-2.5" />
-                                        {lesson.duration}m
-                                      </span>
-                                    )}
-                                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6 hover:bg-white/[0.06]"
-                                        onClick={() => openCreateVideo(lesson.id, chapter.id)}
-                                      >
-                                        <Video className="h-3 w-3" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6 hover:bg-white/[0.06]"
-                                        onClick={() => openEditLesson(lesson)}
-                                      >
-                                        <Pencil className="h-3 w-3" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive"
-                                        onClick={() =>
-                                          openDeleteDialog('lesson', lesson.id, lesson.title)
-                                        }
-                                      >
-                                        <Trash2 className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  {/* Videos under lesson */}
-                                  {lessonVideos.map((vid) => (
-                                    <div
-                                      key={vid.id}
-                                      className="flex items-center gap-2 px-2 py-1 ml-6 rounded-md hover:bg-white/[0.04] transition-colors group"
-                                    >
-                                      <Video className="h-3 w-3 text-dakkho-blue/60 flex-shrink-0" />
-                                      <span className="text-xs text-foreground/70 flex-1 min-w-0 truncate">
-                                        {vid.title}
-                                      </span>
-                                      {vid.duration > 0 && (
-                                        <span className="text-[10px] text-muted-foreground/40">
-                                          {vid.duration}m
+                                      {lesson.isPreview && (
+                                        <Badge
+                                          variant="secondary"
+                                          className="bg-dakkho-success/15 text-dakkho-success text-[10px] px-1.5 py-0"
+                                        >
+                                          <Eye className="h-2.5 w-2.5 mr-0.5" /> Preview
+                                        </Badge>
+                                      )}
+                                      {lesson.duration > 0 && (
+                                        <span className="text-[10px] text-muted-foreground/50 flex items-center gap-0.5">
+                                          <Clock className="h-2.5 w-2.5" />
+                                          {lesson.duration}m
                                         </span>
                                       )}
                                       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <Button
                                           variant="ghost"
                                           size="icon"
-                                          className="h-5 w-5 hover:bg-white/[0.06]"
-                                          onClick={() => openEditVideo(vid)}
+                                          className="h-6 w-6 hover:bg-white/[0.06]"
+                                          onClick={() => openEditLesson(lesson)}
                                         >
-                                          <Pencil className="h-2.5 w-2.5" />
+                                          <Pencil className="h-3 w-3" />
                                         </Button>
                                         <Button
                                           variant="ghost"
                                           size="icon"
-                                          className="h-5 w-5 hover:bg-destructive/10 hover:text-destructive"
+                                          className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive"
                                           onClick={() =>
-                                            openDeleteDialog('video', vid.id, vid.title)
+                                            openDeleteDialog('lesson', lesson.id, lesson.title)
                                           }
                                         >
-                                          <Trash2 className="h-2.5 w-2.5" />
+                                          <Trash2 className="h-3 w-3" />
                                         </Button>
                                       </div>
                                     </div>
-                                  ))}
-                                </div>
-                              );
+                                    {/* Videos under lesson (from videos table) */}
+                                    {lessonVideos.map((vid) => (
+                                      <div
+                                        key={vid.id}
+                                        className="flex items-center gap-2 px-2 py-1 ml-6 rounded-md hover:bg-white/[0.04] transition-colors group"
+                                      >
+                                        <Video className="h-3 w-3 text-dakkho-blue/60 flex-shrink-0" />
+                                        <span className="text-xs text-foreground/70 flex-1 min-w-0 truncate">
+                                          {vid.title}
+                                        </span>
+                                        {vid.duration > 0 && (
+                                          <span className="text-[10px] text-muted-foreground/40">
+                                            {vid.duration}m
+                                          </span>
+                                        )}
+                                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-5 w-5 hover:bg-white/[0.06]"
+                                            onClick={() => openEditVideo(vid)}
+                                          >
+                                            <Pencil className="h-2.5 w-2.5" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-5 w-5 hover:bg-destructive/10 hover:text-destructive"
+                                            onClick={() =>
+                                              openDeleteDialog('video', vid.id, vid.title)
+                                            }
+                                          >
+                                            <Trash2 className="h-2.5 w-2.5" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
                               })}
 
                               {/* Videos directly under chapter (no lesson) */}
@@ -1058,9 +1187,19 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
                               ))}
 
                               {chapterLessons.length === 0 && chapterVideos.length === 0 && (
-                                <p className="text-xs text-muted-foreground/40 px-2 py-2">
-                                  No lessons or videos in this chapter yet.
-                                </p>
+                                <div className="flex items-center justify-center gap-2 px-2 py-3">
+                                  <p className="text-xs text-muted-foreground/40">
+                                    No lessons yet.
+                                  </p>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 text-xs text-dakkho-blue hover:text-dakkho-blue/80 gap-1 px-2"
+                                    onClick={() => openCreateLesson(chapter.id)}
+                                  >
+                                    <Plus className="h-3 w-3" /> Add Lesson
+                                  </Button>
+                                </div>
                               )}
                             </div>
                           </motion.div>
@@ -1222,99 +1361,347 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
         </DialogContent>
       </Dialog>
 
-      {/* ---- Lesson Dialog ---- */}
+      {/* ---- Lesson Dialog — Enhanced with Video + Thumbnail + Document ---- */}
       <Dialog open={lessonFormOpen} onOpenChange={setLessonFormOpen}>
-        <DialogContent className="bg-[#1A1A2E] border-white/[0.08] max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-[#1A1A2E] border-white/[0.08] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-foreground">
+            <DialogTitle className="text-foreground flex items-center gap-2">
               {editLesson ? 'Edit Lesson' : 'Add Lesson'}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              {editLesson ? 'Update lesson details' : 'Create a new lesson'}
+              {editLesson ? 'Update lesson details, video, thumbnail and documents' : 'Create a new lesson with video, thumbnail and documents'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 mt-2">
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">Title</Label>
-              <Input
-                value={lessonForm.title}
-                onChange={(e) => setLessonForm({ ...lessonForm, title: e.target.value })}
-                className="bg-white/[0.04] border-white/[0.08]"
-                placeholder="Enter lesson title"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-5 mt-2">
+            {/* ---- Section 1: Basic Info ---- */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-dakkho-blue flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5" /> Basic Info
+              </h3>
               <div className="space-y-2">
-                <Label className="text-muted-foreground">Chapter</Label>
-                <Select
-                  value={lessonForm.chapterId || '_none'}
-                  onValueChange={(v) =>
-                    setLessonForm({ ...lessonForm, chapterId: v === '_none' ? '' : v })
-                  }
-                >
-                  <SelectTrigger className="bg-white/[0.04] border-white/[0.08]">
-                    <SelectValue placeholder="Select chapter" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">No chapter</SelectItem>
-                    {chapters.map((ch) => (
-                      <SelectItem key={ch.id} value={ch.id}>
-                        {ch.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-muted-foreground">Lesson Type</Label>
-                <Select
-                  value={lessonForm.lessonType}
-                  onValueChange={(v) => setLessonForm({ ...lessonForm, lessonType: v })}
-                >
-                  <SelectTrigger className="bg-white/[0.04] border-white/[0.08]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LESSON_TYPES.map((lt) => (
-                      <SelectItem key={lt.value} value={lt.value}>
-                        {lt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-muted-foreground">Duration (minutes)</Label>
+                <Label className="text-muted-foreground text-xs">Title *</Label>
                 <Input
-                  type="number"
-                  min={0}
-                  value={lessonForm.duration}
-                  onChange={(e) => setLessonForm({ ...lessonForm, duration: Number(e.target.value) })}
+                  value={lessonForm.title}
+                  onChange={(e) => setLessonForm({ ...lessonForm, title: e.target.value })}
                   className="bg-white/[0.04] border-white/[0.08]"
+                  placeholder="Enter lesson title"
                 />
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-xs">Chapter *</Label>
+                  <Select
+                    value={lessonForm.chapterId || '_none'}
+                    onValueChange={(v) =>
+                      setLessonForm({ ...lessonForm, chapterId: v === '_none' ? '' : v })
+                    }
+                  >
+                    <SelectTrigger className="bg-white/[0.04] border-white/[0.08]">
+                      <SelectValue placeholder="Select chapter" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">No chapter</SelectItem>
+                      {chapters.map((ch) => (
+                        <SelectItem key={ch.id} value={ch.id}>
+                          {ch.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-xs">Lesson Type</Label>
+                  <Select
+                    value={lessonForm.lessonType}
+                    onValueChange={(v) => setLessonForm({ ...lessonForm, lessonType: v })}
+                  >
+                    <SelectTrigger className="bg-white/[0.04] border-white/[0.08]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LESSON_TYPES.map((lt) => (
+                        <SelectItem key={lt.value} value={lt.value}>
+                          {lt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="space-y-2">
-                <Label className="text-muted-foreground">Sort Order</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={lessonForm.sortOrder}
-                  onChange={(e) => setLessonForm({ ...lessonForm, sortOrder: Number(e.target.value) })}
-                  className="bg-white/[0.04] border-white/[0.08]"
+                <Label className="text-muted-foreground text-xs">Description</Label>
+                <Textarea
+                  value={lessonForm.description}
+                  onChange={(e) => setLessonForm({ ...lessonForm, description: e.target.value })}
+                  className="bg-white/[0.04] border-white/[0.08] min-h-[60px]"
+                  placeholder="Lesson description (optional)"
+                  rows={2}
                 />
               </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-muted-foreground">Preview</Label>
-                <p className="text-xs text-muted-foreground/50">Allow free preview of this lesson</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-xs">
+                    Duration (min)
+                    {lessonExtractedDuration !== null && lessonExtractedDuration > 0 && (
+                      <span className="text-emerald-400 ml-1 text-[9px]">auto</span>
+                    )}
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={lessonForm.duration}
+                    onChange={(e) => {
+                      setLessonForm({ ...lessonForm, duration: Number(e.target.value) });
+                      setLessonExtractedDuration(null);
+                    }}
+                    className="bg-white/[0.04] border-white/[0.08]"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-xs">Sort Order</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={lessonForm.sortOrder}
+                    onChange={(e) => setLessonForm({ ...lessonForm, sortOrder: Number(e.target.value) })}
+                    className="bg-white/[0.04] border-white/[0.08]"
+                  />
+                </div>
+                <div className="space-y-2 flex items-end pb-1">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={lessonForm.isPreview}
+                      onCheckedChange={(v) => setLessonForm({ ...lessonForm, isPreview: v })}
+                    />
+                    <Label className="text-muted-foreground text-xs">Free Preview</Label>
+                  </div>
+                </div>
               </div>
-              <Switch
-                checked={lessonForm.isPreview}
-                onCheckedChange={(v) => setLessonForm({ ...lessonForm, isPreview: v })}
-              />
+            </div>
+
+            {/* ---- Section 2: Video ---- */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-dakkho-purple flex items-center gap-1.5">
+                <Video className="h-3.5 w-3.5" /> Video
+              </h3>
+              <Tabs
+                value={lessonForm.videoType}
+                onValueChange={(v) => setLessonForm({ ...lessonForm, videoType: v as 'upload' | 'link' | 'youtube', videoUrl: '', duration: 0 })}
+                className="w-full"
+              >
+                <TabsList className="bg-white/[0.04] border border-white/[0.08] w-full">
+                  <TabsTrigger value="upload" className="flex-1 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400">
+                    <Upload className="h-3.5 w-3.5 mr-1.5" /> Upload
+                  </TabsTrigger>
+                  <TabsTrigger value="link" className="flex-1 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400">
+                    <Link className="h-3.5 w-3.5 mr-1.5" /> Link
+                  </TabsTrigger>
+                  <TabsTrigger value="youtube" className="flex-1 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400">
+                    <Video className="h-3.5 w-3.5 mr-1.5" /> YouTube
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="upload" className="mt-3">
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setLessonVideoDragOver(true); }}
+                    onDragLeave={() => setLessonVideoDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setLessonVideoDragOver(false);
+                      const file = e.dataTransfer.files[0];
+                      if (file && file.type.startsWith('video/')) handleLessonVideoUpload(file);
+                    }}
+                    onClick={() => lessonVideoFileRef.current?.click()}
+                    className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
+                      lessonVideoDragOver
+                        ? 'border-emerald-500/50 bg-emerald-500/5'
+                        : 'border-white/10 hover:border-white/20 hover:bg-white/[0.02]'
+                    } ${lessonVideoUploading ? 'opacity-60 pointer-events-none' : ''}`}
+                  >
+                    <input
+                      ref={lessonVideoFileRef}
+                      type="file"
+                      accept="video/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleLessonVideoUpload(file);
+                      }}
+                      className="hidden"
+                    />
+                    {lessonVideoUploading ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-xs text-muted-foreground">Uploading & extracting duration...</p>
+                      </div>
+                    ) : lessonForm.videoUrl && lessonForm.videoType === 'upload' ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <CheckCircle2 className="h-7 w-7 text-emerald-400" />
+                        <p className="text-xs text-muted-foreground truncate max-w-full">Video uploaded</p>
+                        {lessonExtractedDuration !== null && lessonExtractedDuration > 0 && (
+                          <p className="text-xs text-emerald-400 flex items-center gap-1">
+                            <Clock className="h-3 w-3" /> {lessonExtractedDuration} min (auto-detected)
+                          </p>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-emerald-400 h-6"
+                          onClick={(e) => { e.stopPropagation(); lessonVideoFileRef.current?.click(); }}
+                        >
+                          Replace file
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2">
+                        <Upload className="h-7 w-7 text-muted-foreground/40" />
+                        <p className="text-xs text-muted-foreground">Drag & drop or click to upload</p>
+                        <p className="text-[10px] text-muted-foreground/50">MP4, WebM, MOV — Duration auto-detected</p>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+                <TabsContent value="link" className="mt-3">
+                  <Input
+                    value={lessonForm.videoType === 'link' ? lessonForm.videoUrl : ''}
+                    onChange={(e) => setLessonForm({ ...lessonForm, videoUrl: e.target.value, videoType: 'link' })}
+                    className="bg-white/[0.04] border-white/[0.08]"
+                    placeholder="https://example.com/video.mp4"
+                  />
+                  <p className="text-[10px] text-muted-foreground/50 mt-1.5">Direct video file URL (MP4, WebM, etc.)</p>
+                </TabsContent>
+                <TabsContent value="youtube" className="mt-3">
+                  <Input
+                    value={lessonForm.videoType === 'youtube' ? lessonForm.videoUrl : ''}
+                    onChange={(e) => setLessonForm({ ...lessonForm, videoUrl: e.target.value, videoType: 'youtube' })}
+                    className="bg-white/[0.04] border-white/[0.08]"
+                    placeholder="https://youtube.com/watch?v=... or https://youtu.be/..."
+                  />
+                  <p className="text-[10px] text-muted-foreground/50 mt-1.5">YouTube link will be auto-converted to embed</p>
+                  {lessonForm.videoType === 'youtube' && lessonForm.videoUrl && getYouTubeEmbedUrl(lessonForm.videoUrl) && (
+                    <div className="mt-2 rounded-lg overflow-hidden border border-white/[0.08] aspect-video">
+                      <iframe
+                        src={getYouTubeEmbedUrl(lessonForm.videoUrl)!}
+                        className="w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        title="YouTube preview"
+                      />
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            {/* ---- Section 3: Thumbnail ---- */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-dakkho-orange flex items-center gap-1.5">
+                <Image className="h-3.5 w-3.5" /> Thumbnail
+              </h3>
+              <div className="flex items-start gap-3">
+                {/* Thumbnail Preview */}
+                {lessonForm.thumbnailUrl ? (
+                  <div className="relative group/thumb w-24 h-16 rounded-lg overflow-hidden border border-white/[0.08] flex-shrink-0">
+                    <img
+                      src={lessonForm.thumbnailUrl}
+                      alt="Thumbnail"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setLessonForm({ ...lessonForm, thumbnailUrl: '' })}
+                      className="absolute top-0.5 right-0.5 h-4 w-4 rounded-full bg-destructive/80 text-white flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                ) : null}
+                <div className="flex-1">
+                  <div
+                    onClick={() => lessonThumbnailFileRef.current?.click()}
+                    className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-all border-white/10 hover:border-white/20 hover:bg-white/[0.02] ${lessonThumbnailUploading ? 'opacity-60 pointer-events-none' : ''}`}
+                  >
+                    <input
+                      ref={lessonThumbnailFileRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleLessonThumbnailUpload(file);
+                      }}
+                      className="hidden"
+                    />
+                    {lessonThumbnailUploading ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="w-5 h-5 border-2 border-dakkho-orange border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs text-muted-foreground">Uploading...</span>
+                      </div>
+                    ) : lessonForm.thumbnailUrl ? (
+                      <div className="flex items-center justify-center gap-1.5">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        <span className="text-xs text-muted-foreground">Change thumbnail</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        <Image className="h-5 w-5 text-muted-foreground/40" />
+                        <p className="text-[10px] text-muted-foreground/50">Click to upload thumbnail (16:9 recommended)</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ---- Section 4: Document ---- */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-cyan-400 flex items-center gap-1.5">
+                <Paperclip className="h-3.5 w-3.5" /> Document / Attachment
+              </h3>
+              <div
+                onClick={() => lessonDocumentFileRef.current?.click()}
+                className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-all border-white/10 hover:border-white/20 hover:bg-white/[0.02] ${lessonDocumentUploading ? 'opacity-60 pointer-events-none' : ''}`}
+              >
+                <input
+                  ref={lessonDocumentFileRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip,.rar"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleLessonDocumentUpload(file);
+                  }}
+                  className="hidden"
+                />
+                {lessonDocumentUploading ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs text-muted-foreground">Uploading...</span>
+                  </div>
+                ) : lessonForm.documentUrl ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                    <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                      {lessonForm.documentUrl.split('/').pop()?.split('?')[0] || 'Document attached'}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-destructive h-6 hover:bg-destructive/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLessonForm({ ...lessonForm, documentUrl: '' });
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-1">
+                    <Paperclip className="h-5 w-5 text-muted-foreground/40" />
+                    <p className="text-[10px] text-muted-foreground/50">Click to upload PDF, DOC, PPT, XLS, ZIP, etc.</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter className="mt-4 gap-2">
@@ -1327,7 +1714,7 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
             </Button>
             <Button
               onClick={handleSaveLesson}
-              disabled={lessonSaving || !lessonForm.title.trim()}
+              disabled={lessonSaving || !lessonForm.title.trim() || !lessonForm.chapterId}
               className="gradient-purple text-white gap-2"
             >
               {lessonSaving && <RefreshCw className="h-4 w-4 animate-spin" />}
@@ -1390,7 +1777,7 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
         </DialogContent>
       </Dialog>
 
-      {/* ---- Video Dialog ---- */}
+      {/* ---- Video Dialog (standalone) ---- */}
       <Dialog open={videoFormOpen} onOpenChange={setVideoFormOpen}>
         <DialogContent className="bg-[#1A1A2E] border-white/[0.08] max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -1613,7 +2000,7 @@ export default function CourseCurriculum({ courseId }: CourseCurriculumProps) {
               </div>
             </div>
 
-            {/* Duration — auto-filled from video file, or manually editable for link/youtube */}
+            {/* Duration */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-muted-foreground">

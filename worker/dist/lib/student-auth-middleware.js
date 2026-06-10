@@ -1,0 +1,45 @@
+/**
+ * Hono middleware for Student API authentication
+ * Replaces the per-route getStudentAuth() boilerplate
+ */
+import { validateStudentSession } from './student-auth';
+/**
+ * Middleware that validates student session from Authorization header
+ * Sets c.set('studentId'), c.set('studentEmail'), c.set('studentName')
+ * Also enforces email verification — unverified users get 403
+ */
+export async function studentAuthMiddleware(c, next) {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return c.json({ error: 'Unauthorized — login required' }, 401);
+    }
+    const token = authHeader.substring(7);
+    const result = await validateStudentSession(c.env, token);
+    if (!result.authorized) {
+        return c.json({ error: 'Session expired — please login again' }, 401);
+    }
+    // Enforce email verification for all authenticated routes
+    if (!result.emailVerified) {
+        return c.json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' }, 403);
+    }
+    c.set('studentId', result.userId);
+    c.set('studentEmail', result.email || '');
+    c.set('studentName', result.name || '');
+    await next();
+}
+/**
+ * Optional auth — doesn't fail if no token, but sets vars if present
+ */
+export async function optionalStudentAuthMiddleware(c, next) {
+    const authHeader = c.req.header('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const result = await validateStudentSession(c.env, token);
+        if (result.authorized) {
+            c.set('studentId', result.userId);
+            c.set('studentEmail', result.email || '');
+            c.set('studentName', result.name || '');
+        }
+    }
+    await next();
+}

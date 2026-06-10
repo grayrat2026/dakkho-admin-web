@@ -1,6 +1,7 @@
 /**
  * Lessons routes — GET, POST, PUT, DELETE
  * D1-only: CRUD for lessons (Chapter → Lesson curriculum structure)
+ * Supports: video_url, thumbnail_url, document_url per lesson
  */
 
 import { Hono } from 'hono';
@@ -66,7 +67,11 @@ lessonRoutes.get('/', async (c) => {
 lessonRoutes.post('/', async (c) => {
   try {
     const rawData = await c.req.json<Record<string, unknown>>();
-    const allowedFields = ['chapter_id', 'course_id', 'subject_id', 'title', 'slug', 'description', 'lesson_type', 'sort_order', 'is_preview', 'duration'];
+    const allowedFields = [
+      'chapter_id', 'course_id', 'subject_id', 'title', 'slug',
+      'description', 'lesson_type', 'sort_order', 'is_preview', 'duration',
+      'video_url', 'thumbnail_url', 'document_url',
+    ];
     const data = normalizeKeys(rawData, allowedFields);
     const id = crypto.randomUUID();
     const slug = (data.slug as string) || slugify(data.title as string || '');
@@ -80,25 +85,35 @@ lessonRoutes.post('/', async (c) => {
     if (!data.course_id) {
       return c.json({ error: 'Course ID is required' }, 400);
     }
+
+    // Auto-inherit subject_id from chapter if not provided
     if (!data.subject_id) {
-      return c.json({ error: 'Subject ID is required' }, 400);
+      const chapter = await c.env.DB.prepare(
+        'SELECT subject_id FROM chapters WHERE id = ?'
+      ).bind(String(data.chapter_id)).first();
+      if (chapter && (chapter as any).subject_id) {
+        data.subject_id = (chapter as any).subject_id;
+      }
     }
 
     await c.env.DB.prepare(`
-      INSERT INTO lessons (id, chapter_id, course_id, subject_id, title, slug, description, lesson_type, sort_order, is_preview, duration)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO lessons (id, chapter_id, course_id, subject_id, title, slug, description, lesson_type, sort_order, is_preview, duration, video_url, thumbnail_url, document_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       id,
       data.chapter_id,
       data.course_id,
-      data.subject_id,
+      data.subject_id || null,
       data.title,
       slug,
       data.description || null,
       data.lesson_type || 'video',
       data.sort_order || 0,
       data.is_preview ? 1 : 0,
-      data.duration || 0
+      data.duration || 0,
+      data.video_url || null,
+      data.thumbnail_url || null,
+      data.document_url || null
     ).run();
 
     const created = await c.env.DB.prepare('SELECT * FROM lessons WHERE id = ?').bind(id).first();
@@ -131,7 +146,11 @@ lessonRoutes.put('/', async (c) => {
       return c.json({ error: 'Lesson not found' }, 404);
     }
 
-    const allowedFields = ['chapter_id', 'course_id', 'subject_id', 'title', 'slug', 'description', 'lesson_type', 'sort_order', 'is_preview', 'duration'];
+    const allowedFields = [
+      'chapter_id', 'course_id', 'subject_id', 'title', 'slug',
+      'description', 'lesson_type', 'sort_order', 'is_preview', 'duration',
+      'video_url', 'thumbnail_url', 'document_url',
+    ];
     // Normalize camelCase keys from admin panel to snake_case for D1
     const updates = normalizeKeys(rawUpdates, allowedFields);
     const setClauses: string[] = [];
@@ -172,10 +191,10 @@ lessonRoutes.put('/', async (c) => {
   }
 });
 
-// DELETE / — Delete lesson (requires id query param)
+// DELETE / — Delete lesson (supports both id and lessonId query params)
 lessonRoutes.delete('/', async (c) => {
   try {
-    const id = c.req.query('id');
+    const id = c.req.query('id') || c.req.query('lessonId');
 
     if (!id) {
       return c.json({ error: 'Lesson ID required' }, 400);
