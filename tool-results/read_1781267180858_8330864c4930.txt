@@ -1,0 +1,700 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useState, useRef, type FormEvent, type ChangeEvent } from 'react';
+     4→     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→     5→import {
+     6→     6→  User, Mail, Phone, Camera, Briefcase, GraduationCap,
+     7→     7→  BookOpen, FileText, Upload, X, Check, ChevronLeft, ChevronRight,
+     8→     8→  ShieldCheck, FileCheck, Info
+     9→     9→} from 'lucide-react';
+    10→    10→import { GlassCard } from '@/components/shared/GlassCard';
+    11→    11→import { GradientButton } from '@/components/shared/GradientButton';
+    12→    12→import { useNavigationStore } from '@/lib/store';
+    13→    13→import { TECHNOLOGY_OPTIONS, EXPERIENCE_OPTIONS } from '@/lib/constants';
+    14→    14→import { cn, generateId } from '@/lib/utils';
+    15→    15→
+    16→    16→interface FormData {
+    17→    17→  fullName: string;
+    18→    18→  email: string;
+    19→    19→  phone: string;
+    20→    20→  profilePhoto: File | null;
+    21→    21→  profilePhotoPreview: string;
+    22→    22→  department: string;
+    23→    23→  specialization: string;
+    24→    24→  teachingExperience: string;
+    25→    25→  highestQualification: string;
+    26→    26→  shortBio: string;
+    27→    27→  nidNumber: string;
+    28→    28→  nidPhoto: File | null;
+    29→    29→  nidPhotoPreview: string;
+    30→    30→  academicCertPhoto: File | null;
+    31→    31→  academicCertPhotoPreview: string;
+    32→    32→  termsAccepted: boolean;
+    33→    33→}
+    34→    34→
+    35→    35→const STEPS = [
+    36→    36→  { label: 'Personal', icon: User },
+    37→    37→  { label: 'Professional', icon: Briefcase },
+    38→    38→  { label: 'Verification', icon: ShieldCheck },
+    39→    39→  { label: 'Review', icon: FileCheck },
+    40→    40→];
+    41→    41→
+    42→    42→const slideVariants = {
+    43→    43→  enter: (direction: number) => ({
+    44→    44→    x: direction > 0 ? 300 : -300,
+    45→    45→    opacity: 0,
+    46→    46→  }),
+    47→    47→  center: {
+    48→    48→    x: 0,
+    49→    49→    opacity: 1,
+    50→    50→  },
+    51→    51→  exit: (direction: number) => ({
+    52→    52→    x: direction > 0 ? -300 : 300,
+    53→    53→    opacity: 0,
+    54→    54→  }),
+    55→    55→};
+    56→    56→
+    57→    57→export function ApplyInstructor() {
+    58→    58→  const navigate = useNavigationStore((s) => s.navigate);
+    59→    59→  const [currentStep, setCurrentStep] = useState(0);
+    60→    60→  const [direction, setDirection] = useState(0);
+    61→    61→  const [submitted, setSubmitted] = useState(false);
+    62→    62→  const [isDragging, setIsDragging] = useState<string | null>(null);
+    63→    63→
+    64→    64→  const [form, setForm] = useState<FormData>({
+    65→    65→    fullName: '',
+    66→    66→    email: '',
+    67→    67→    phone: '',
+    68→    68→    profilePhoto: null,
+    69→    69→    profilePhotoPreview: '',
+    70→    70→    department: '',
+    71→    71→    specialization: '',
+    72→    72→    teachingExperience: '',
+    73→    73→    highestQualification: '',
+    74→    74→    shortBio: '',
+    75→    75→    nidNumber: '',
+    76→    76→    nidPhoto: null,
+    77→    77→    nidPhotoPreview: '',
+    78→    78→    academicCertPhoto: null,
+    79→    79→    academicCertPhotoPreview: '',
+    80→    80→    termsAccepted: false,
+    81→    81→  });
+    82→    82→
+    83→    83→  const updateField = (field: keyof FormData, value: string | boolean | File | null) => {
+    84→    84→    setForm((prev) => ({ ...prev, [field]: value }));
+    85→    85→  };
+    86→    86→
+    87→    87→  const handleFileUpload = (
+    88→    88→    field: 'profilePhoto' | 'nidPhoto' | 'academicCertPhoto',
+    89→    89→    previewField: 'profilePhotoPreview' | 'nidPhotoPreview' | 'academicCertPhotoPreview',
+    90→    90→    file: File | null
+    91→    91→  ) => {
+    92→    92→    if (file) {
+    93→    93→      const reader = new FileReader();
+    94→    94→      reader.onload = (e) => {
+    95→    95→        setForm((prev) => ({
+    96→    96→          ...prev,
+    97→    97→          [field]: file,
+    98→    98→          [previewField]: e.target?.result as string,
+    99→    99→        }));
+   100→   100→      };
+   101→   101→      reader.readAsDataURL(file);
+   102→   102→    } else {
+   103→   103→      setForm((prev) => ({
+   104→   104→        ...prev,
+   105→   105→        [field]: null,
+   106→   106→        [previewField]: '',
+   107→   107→      }));
+   108→   108→    }
+   109→   109→  };
+   110→   110→
+   111→   111→  const handleDragOver = (e: React.DragEvent, zoneId: string) => {
+   112→   112→    e.preventDefault();
+   113→   113→    setIsDragging(zoneId);
+   114→   114→  };
+   115→   115→
+   116→   116→  const handleDragLeave = () => {
+   117→   117→    setIsDragging(null);
+   118→   118→  };
+   119→   119→
+   120→   120→  const handleDrop = (
+   121→   121→    e: React.DragEvent,
+   122→   122→    field: 'profilePhoto' | 'nidPhoto' | 'academicCertPhoto',
+   123→   123→    previewField: 'profilePhotoPreview' | 'nidPhotoPreview' | 'academicCertPhotoPreview',
+   124→   124→    zoneId: string
+   125→   125→  ) => {
+   126→   126→    e.preventDefault();
+   127→   127→    setIsDragging(null);
+   128→   128→    const file = e.dataTransfer.files[0];
+   129→   129→    if (file && file.type.startsWith('image/')) {
+   130→   130→      handleFileUpload(field, previewField, file);
+   131→   131→    }
+   132→   132→  };
+   133→   133→
+   134→   134→  const fileInputRef = useRef<HTMLInputElement>(null);
+   135→   135→  const nidInputRef = useRef<HTMLInputElement>(null);
+   136→   136→  const certInputRef = useRef<HTMLInputElement>(null);
+   137→   137→
+   138→   138→  const goNext = () => {
+   139→   139→    if (currentStep < 3) {
+   140→   140→      setDirection(1);
+   141→   141→      setCurrentStep((s) => s + 1);
+   142→   142→    }
+   143→   143→  };
+   144→   144→
+   145→   145→  const goPrev = () => {
+   146→   146→    if (currentStep > 0) {
+   147→   147→      setDirection(-1);
+   148→   148→      setCurrentStep((s) => s - 1);
+   149→   149→    }
+   150→   150→  };
+   151→   151→
+   152→   152→  const goToStep = (step: number) => {
+   153→   153→    setDirection(step > currentStep ? 1 : -1);
+   154→   154→    setCurrentStep(step);
+   155→   155→  };
+   156→   156→
+   157→   157→  const handleSubmit = () => {
+   158→   158→    if (!form.termsAccepted) return;
+   159→   159→    // Instructors are invited by admin - no application endpoint exists.
+   160→   160→    // Show a message directing the user to contact admin.
+   161→   161→    setSubmitted(true);
+   162→   162→  };
+   163→   163→
+   164→   164→  const inputClass = cn(
+   165→   165→    'w-full px-4 py-3 rounded-xl text-sm',
+   166→   166→    'premium-input',
+   167→   167→    'placeholder:text-muted-foreground/60',
+   168→   168→    'text-foreground'
+   169→   169→  );
+   170→   170→
+   171→   171→  const selectClass = cn(
+   172→   172→    'w-full px-4 py-3 rounded-xl text-sm appearance-none',
+   173→   173→    'premium-input',
+   174→   174→    'text-foreground'
+   175→   175→  );
+   176→   176→
+   177→   177→  const uploadZone = (
+   178→   178→    field: 'profilePhoto' | 'nidPhoto' | 'academicCertPhoto',
+   179→   179→    previewField: 'profilePhotoPreview' | 'nidPhotoPreview' | 'academicCertPhotoPreview',
+   180→   180→    zoneId: string,
+   181→   181→    label: string,
+   182→   182→    inputRef: React.RefObject<HTMLInputElement | null>,
+   183→   183→    optional = false
+   184→   184→  ) => (
+   185→   185→    <div
+   186→   186→      className={cn(
+   187→   187→        'relative rounded-xl border-2 border-dashed p-6 text-center transition-all duration-300 cursor-pointer',
+   188→   188→        isDragging === zoneId
+   189→   189→          ? 'border-neutral-400 bg-black/[0.02] dark:bg-white/[0.02] shimmer'
+   190→   190→          : 'border-white/30 dark:border-white/[0.04] bg-white/30 dark:bg-white/[0.03] backdrop-blur-sm hover:border-neutral-300',
+   191→   191→        form[previewField] && 'border-neutral-400/50'
+   192→   192→      )}
+   193→   193→      onDragOver={(e) => handleDragOver(e, zoneId)}
+   194→   194→      onDragLeave={handleDragLeave}
+   195→   195→      onDrop={(e) => handleDrop(e, field, previewField, zoneId)}
+   196→   196→      onClick={() => inputRef.current?.click()}
+   197→   197→    >
+   198→   198→      <input
+   199→   199→        ref={inputRef}
+   200→   200→        type="file"
+   201→   201→        accept="image/*"
+   202→   202→        className="hidden"
+   203→   203→        onChange={(e: ChangeEvent<HTMLInputElement>) => {
+   204→   204→          const file = e.target.files?.[0] || null;
+   205→   205→          handleFileUpload(field, previewField, file);
+   206→   206→        }}
+   207→   207→      />
+   208→   208→      {form[previewField] ? (
+   209→   209→        <div className="flex items-center gap-3">
+   210→   210→          <img
+   211→   211→            src={form[previewField]}
+   212→   212→            alt="Preview"
+   213→   213→            className="w-16 h-16 rounded-lg object-cover border border-white/30"
+   214→   214→          />
+   215→   215→          <div className="flex-1 text-left">
+   216→   216→            <p className="text-sm font-medium text-foreground">Image uploaded</p>
+   217→   217→            <p className="text-xs text-muted-foreground">Click to change</p>
+   218→   218→          </div>
+   219→   219→          <button
+   220→   220→            type="button"
+   221→   221→            onClick={(e) => {
+   222→   222→              e.stopPropagation();
+   223→   223→              handleFileUpload(field, previewField, null);
+   224→   224→            }}
+   225→   225→            className="p-1.5 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-500 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+   226→   226→          >
+   227→   227→            <X className="w-3.5 h-3.5" />
+   228→   228→          </button>
+   229→   229→        </div>
+   230→   230→      ) : (
+   231→   231→        <div>
+   232→   232→          <Upload className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
+   233→   233→          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+   234→   234→          {optional && <p className="text-xs text-muted-foreground/60 mt-1">(optional)</p>}
+   235→   235→        </div>
+   236→   236→      )}
+   237→   237→    </div>
+   238→   238→  );
+   239→   239→
+   240→   240→  // Success screen - shows message about admin invitation
+   241→   241→  if (submitted) {
+   242→   242→    return (
+   243→   243→      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-neutral-50 via-white to-neutral-100 dark:from-slate-950 dark:via-slate-900 dark:to-neutral-950">
+   244→   244→        <motion.div
+   245→   245→          initial={{ opacity: 0, scale: 0.9 }}
+   246→   246→          animate={{ opacity: 1, scale: 1 }}
+   247→   247→          transition={{ duration: 0.5 }}
+   248→   248→          className="w-full max-w-md"
+   249→   249→        >
+   250→   250→          <GlassCard className="p-8 text-center">
+   251→   251→            {/* Animated info icon */}
+   252→   252→            <motion.div
+   253→   253→              initial={{ scale: 0 }}
+   254→   254→              animate={{ scale: 1 }}
+   255→   255→              transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.2 }}
+   256→   256→              className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-amber-500 via-amber-400 to-amber-500 flex items-center justify-center shadow-[0_4px_15px_rgba(245,158,11,0.3)]"
+   257→   257→            >
+   258→   258→              <motion.div
+   259→   259→                initial={{ scale: 0, rotate: -90 }}
+   260→   260→                animate={{ scale: 1, rotate: 0 }}
+   261→   261→                transition={{ type: 'spring', stiffness: 400, damping: 15, delay: 0.5 }}
+   262→   262→              >
+   263→   263→                <Info className="w-10 h-10 text-white" strokeWidth={2.5} />
+   264→   264→              </motion.div>
+   265→   265→            </motion.div>
+   266→   266→
+   267→   267→            <h2 className="text-2xl font-extrabold text-foreground mb-2">Invitation Required</h2>
+   268→   268→            <p className="text-muted-foreground text-sm mb-6">
+   269→   269→              Instructor accounts on Dakkho are created by invitation from the admin team. 
+   270→   270→              If you&apos;ve been invited, you should have received login credentials from the administrator.
+   271→   271→            </p>
+   272→   272→
+   273→   273→            <div className="bg-black/[0.02] dark:bg-white/[0.02] rounded-xl p-4 mb-6 text-left space-y-3">
+   274→   274→              <div className="flex items-start gap-3">
+   275→   275→                <Check className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
+   276→   276→                <div>
+   277→   277→                  <p className="text-sm font-semibold text-foreground">Already invited?</p>
+   278→   278→                  <p className="text-xs text-muted-foreground mt-0.5">Sign in using the credentials provided by admin.</p>
+   279→   279→                </div>
+   280→   280→              </div>
+   281→   281→              <div className="flex items-start gap-3">
+   282→   282→                <Mail className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+   283→   283→                <div>
+   284→   284→                  <p className="text-sm font-semibold text-foreground">Not yet invited?</p>
+   285→   285→                  <p className="text-xs text-muted-foreground mt-0.5">Contact the Dakkho admin team to request instructor access.</p>
+   286→   286→                </div>
+   287→   287→              </div>
+   288→   288→              <div className="flex items-start gap-3">
+   289→   289→                <ShieldCheck className="w-5 h-5 text-foreground/50 mt-0.5 flex-shrink-0" />
+   290→   290→                <div>
+   291→   291→                  <p className="text-sm font-semibold text-foreground">Need to change your password?</p>
+   292→   292→                  <p className="text-xs text-muted-foreground mt-0.5">After signing in, go to Settings to change your password.</p>
+   293→   293→                </div>
+   294→   294→              </div>
+   295→   295→            </div>
+   296→   296→
+   297→   297→            <div className="space-y-3">
+   298→   298→              <GradientButton
+   299→   299→                variant="primary"
+   300→   300→                size="lg"
+   301→   301→                className="w-full"
+   302→   302→                onClick={() => navigate('login')}
+   303→   303→                icon={<Check className="w-4 h-4" />}
+   304→   304→              >
+   305→   305→                Go to Sign In
+   306→   306→              </GradientButton>
+   307→   307→            </div>
+   308→   308→          </GlassCard>
+   309→   309→        </motion.div>
+   310→   310→      </div>
+   311→   311→    );
+   312→   312→  }
+   313→   313→
+   314→   314→  return (
+   315→   315→    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-neutral-50 via-white to-neutral-100 dark:from-slate-950 dark:via-slate-900 dark:to-neutral-950">
+   316→   316→      {/* Background decorative elements */}
+   317→   317→      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+   318→   318→        <motion.div
+   319→   319→          className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-neutral-200/30 dark:bg-neutral-800/10 blur-3xl"
+   320→   320→          animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
+   321→   321→          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+   322→   322→        />
+   323→   323→        <motion.div
+   324→   324→          className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-neutral-300/30 dark:bg-neutral-700/10 blur-3xl"
+   325→   325→          animate={{ scale: [1.2, 1, 1.2], opacity: [0.3, 0.5, 0.3] }}
+   326→   326→          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+   327→   327→        />
+   328→   328→      </div>
+   329→   329→
+   330→   330→      <motion.div
+   331→   331→        initial={{ opacity: 0, y: 30, scale: 0.95 }}
+   332→   332→        animate={{ opacity: 1, y: 0, scale: 1 }}
+   333→   333→        transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
+   334→   334→        className="w-full max-w-lg relative z-10"
+   335→   335→      >
+   336→   336→        <GlassCard className="p-6 md:p-8">
+   337→   337→          {/* Back to login */}
+   338→   338→          <button
+   339→   339→            type="button"
+   340→   340→            onClick={() => navigate('login')}
+   341→   341→            className="text-sm text-muted-foreground hover:text-foreground transition-colors mb-4 flex items-center gap-1"
+   342→   342→          >
+   343→   343→            <ChevronLeft className="w-4 h-4" />
+   344→   344→            Back to Sign In
+   345→   345→          </button>
+   346→   346→
+   347→   347→          {/* Title */}
+   348→   348→          <div className="text-center mb-6">
+   349→   349→            <h1 className="text-2xl font-extrabold bg-gradient-to-r from-neutral-900 to-black dark:from-neutral-100 dark:to-white bg-clip-text text-transparent">
+   350→   350→              Instructor Application
+   351→   351→            </h1>
+   352→   352→            <p className="text-muted-foreground mt-1 text-sm">Join Dakkho as an instructor</p>
+   353→   353→            {/* Info banner */}
+   354→   354→            <div className="mt-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-800/20 rounded-xl p-3 text-left">
+   355→   355→              <div className="flex items-start gap-2">
+   356→   356→                <Info className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+   357→   357→                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+   358→   358→                  Instructor accounts require admin approval. If you&apos;ve been invited, you can sign in directly with the credentials provided.
+   359→   359→                </p>
+   360→   360→              </div>
+   361→   361→            </div>
+   362→   362→          </div>
+   363→   363→
+   364→   364→          {/* Step indicator */}
+   365→   365→          <div className="mb-8">
+   366→   366→            <div className="flex items-center justify-between relative">
+   367→   367→              {/* Progress line background */}
+   368→   368→              <div className="absolute top-4 left-0 right-0 h-0.5 bg-white/20 dark:bg-white/10" />
+   369→   369→              {/* Animated progress line */}
+   370→   370→              <motion.div
+   371→   371→                className="absolute top-4 left-0 h-0.5 bg-gradient-to-r from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white"
+   372→   372→                initial={false}
+   373→   373→                animate={{ width: `${(currentStep / (STEPS.length - 1)) * 100}%` }}
+   374→   374→                transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+   375→   375→              />
+   376→   376→
+   377→   377→              {STEPS.map((step, i) => (
+   378→   378→                <div key={i} className="relative z-10 flex flex-col items-center">
+   379→   379→                  <motion.div
+   380→   380→                    className={cn(
+   381→   381→                      'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300',
+   382→   382→                      i < currentStep
+   383→   383→                        ? 'bg-gradient-to-br from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white text-white dark:text-black shadow-[0_4px_15px_rgba(0,0,0,0.1)]'
+   384→   384→                        : i === currentStep
+   385→   385→                        ? 'bg-gradient-to-br from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white text-white dark:text-black shadow-[0_4px_15px_rgba(0,0,0,0.1)] ring-4 ring-black/5'
+   386→   386→                        : 'bg-white/30 dark:bg-white/[0.03] backdrop-blur-sm text-muted-foreground border border-white/30 dark:border-white/[0.04]'
+   387→   387→                    )}
+   388→   388→                    animate={{ scale: i === currentStep ? 1.1 : 1 }}
+   389→   389→                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+   390→   390→                  >
+   391→   391→                    {i < currentStep ? <Check className="w-4 h-4" /> : <step.icon className="w-3.5 h-3.5" />}
+   392→   392→                  </motion.div>
+   393→   393→                  <span className={cn(
+   394→   394→                    'text-[10px] mt-1.5 font-medium',
+   395→   395→                    i <= currentStep ? 'text-foreground/70' : 'text-muted-foreground/50'
+   396→   396→                  )}>
+   397→   397→                    {step.label}
+   398→   398→                  </span>
+   399→   399→                </div>
+   400→   400→              ))}
+   401→   401→            </div>
+   402→   402→          </div>
+   403→   403→
+   404→   404→          {/* Step content */}
+   405→   405→          <div className="relative overflow-hidden min-h-[340px]">
+   406→   406→            <AnimatePresence initial={false} custom={direction} mode="wait">
+   407→   407→              <motion.div
+   408→   408→                key={currentStep}
+   409→   409→                custom={direction}
+   410→   410→                variants={slideVariants}
+   411→   411→                initial="enter"
+   412→   412→                animate="center"
+   413→   413→                exit="exit"
+   414→   414→                transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+   415→   415→              >
+   416→   416→                {/* Step 1: Personal Info */}
+   417→   417→                {currentStep === 0 && (
+   418→   418→                  <div className="space-y-4">
+   419→   419→                    <div>
+   420→   420→                      <label className="text-sm font-medium text-foreground mb-1.5 block">Full Name *</label>
+   421→   421→                      <div className="relative">
+   422→   422→                        <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   423→   423→                        <input
+   424→   424→                          type="text"
+   425→   425→                          value={form.fullName}
+   426→   426→                          onChange={(e) => updateField('fullName', e.target.value)}
+   427→   427→                          placeholder="Your full name"
+   428→   428→                          className={cn(inputClass, 'pl-11')}
+   429→   429→                        />
+   430→   430→                      </div>
+   431→   431→                    </div>
+   432→   432→
+   433→   433→                    <div>
+   434→   434→                      <label className="text-sm font-medium text-foreground mb-1.5 block">Email *</label>
+   435→   435→                      <div className="relative">
+   436→   436→                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   437→   437→                        <input
+   438→   438→                          type="email"
+   439→   439→                          value={form.email}
+   440→   440→                          onChange={(e) => updateField('email', e.target.value)}
+   441→   441→                          placeholder="Email address"
+   442→   442→                          className={cn(inputClass, 'pl-11')}
+   443→   443→                        />
+   444→   444→                      </div>
+   445→   445→                    </div>
+   446→   446→
+   447→   447→                    <div>
+   448→   448→                      <label className="text-sm font-medium text-foreground mb-1.5 block">Phone Number *</label>
+   449→   449→                      <div className="relative">
+   450→   450→                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   451→   451→                        <input
+   452→   452→                          type="tel"
+   453→   453→                          value={form.phone}
+   454→   454→                          onChange={(e) => updateField('phone', e.target.value)}
+   455→   455→                          placeholder="01XXXXXXXXX"
+   456→   456→                          className={cn(inputClass, 'pl-11')}
+   457→   457→                        />
+   458→   458→                      </div>
+   459→   459→                    </div>
+   460→   460→
+   461→   461→                    <div>
+   462→   462→                      <label className="text-sm font-medium text-foreground mb-1.5 block">Profile Photo</label>
+   463→   463→                      {uploadZone('profilePhoto', 'profilePhotoPreview', 'profile', 'Click or drag to upload photo', fileInputRef)}
+   464→   464→                    </div>
+   465→   465→                  </div>
+   466→   466→                )}
+   467→   467→
+   468→   468→                {/* Step 2: Professional Info */}
+   469→   469→                {currentStep === 1 && (
+   470→   470→                  <div className="space-y-4">
+   471→   471→                    <div>
+   472→   472→                      <label className="text-sm font-medium text-foreground mb-1.5 block">Department *</label>
+   473→   473→                      <div className="relative">
+   474→   474→                        <BookOpen className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
+   475→   475→                        <select
+   476→   476→                          value={form.department}
+   477→   477→                          onChange={(e) => updateField('department', e.target.value)}
+   478→   478→                          className={cn(selectClass, 'pl-11')}
+   479→   479→                        >
+   480→   480→                          <option value="">Select department</option>
+   481→   481→                          {TECHNOLOGY_OPTIONS.map((opt) => (
+   482→   482→                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+   483→   483→                          ))}
+   484→   484→                        </select>
+   485→   485→                      </div>
+   486→   486→                    </div>
+   487→   487→
+   488→   488→                    <div>
+   489→   489→                      <label className="text-sm font-medium text-foreground mb-1.5 block">Specialization *</label>
+   490→   490→                      <input
+   491→   491→                        type="text"
+   492→   492→                        value={form.specialization}
+   493→   493→                        onChange={(e) => updateField('specialization', e.target.value)}
+   494→   494→                        placeholder="e.g. Web Development, Machine Learning"
+   495→   495→                        className={inputClass}
+   496→   496→                      />
+   497→   497→                    </div>
+   498→   498→
+   499→   499→                    <div>
+   500→   500→                      <label className="text-sm font-medium text-foreground mb-1.5 block">Teaching Experience *</label>
+   501→   501→                      <div className="relative">
+   502→   502→                        <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
+   503→   503→                        <select
+   504→   504→                          value={form.teachingExperience}
+   505→   505→                          onChange={(e) => updateField('teachingExperience', e.target.value)}
+   506→   506→                          className={cn(selectClass, 'pl-11')}
+   507→   507→                        >
+   508→   508→                          <option value="">Select experience</option>
+   509→   509→                          {EXPERIENCE_OPTIONS.map((opt) => (
+   510→   510→                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+   511→   511→                          ))}
+   512→   512→                        </select>
+   513→   513→                      </div>
+   514→   514→                    </div>
+   515→   515→
+   516→   516→                    <div>
+   517→   517→                      <label className="text-sm font-medium text-foreground mb-1.5 block">Highest Qualification *</label>
+   518→   518→                      <input
+   519→   519→                        type="text"
+   520→   520→                        value={form.highestQualification}
+   521→   521→                        onChange={(e) => updateField('highestQualification', e.target.value)}
+   522→   522→                        placeholder="e.g. BSc in CSE"
+   523→   523→                        className={inputClass}
+   524→   524→                      />
+   525→   525→                    </div>
+   526→   526→
+   527→   527→                    <div>
+   528→   528→                      <label className="text-sm font-medium text-foreground mb-1.5 block">Short Bio</label>
+   529→   529→                      <div className="relative">
+   530→   530→                        <textarea
+   531→   531→                          value={form.shortBio}
+   532→   532→                          onChange={(e) => updateField('shortBio', e.target.value.slice(0, 500))}
+   533→   533→                          placeholder="Write briefly about yourself..."
+   534→   534→                          rows={3}
+   535→   535→                          className={cn(inputClass, 'resize-none')}
+   536→   536→                        />
+   537→   537→                        <span className={cn(
+   538→   538→                          'absolute bottom-2 right-3 text-xs',
+   539→   539→                          form.shortBio.length >= 450 ? 'text-amber-500' : 'text-muted-foreground/40'
+   540→   540→                        )}>
+   541→   541→                          {form.shortBio.length}/500
+   542→   542→                        </span>
+   543→   543→                      </div>
+   544→   544→                    </div>
+   545→   545→                  </div>
+   546→   546→                )}
+   547→   547→
+   548→   548→                {/* Step 3: Document Verification */}
+   549→   549→                {currentStep === 2 && (
+   550→   550→                  <div className="space-y-4">
+   551→   551→                    <div>
+   552→   552→                      <label className="text-sm font-medium text-foreground mb-1.5 block">NID/Birth Certificate Number *</label>
+   553→   553→                      <div className="relative">
+   554→   554→                        <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   555→   555→                        <input
+   556→   556→                          type="text"
+   557→   557→                          value={form.nidNumber}
+   558→   558→                          onChange={(e) => updateField('nidNumber', e.target.value)}
+   559→   559→                          placeholder="NID or birth certificate number"
+   560→   560→                          className={cn(inputClass, 'pl-11')}
+   561→   561→                        />
+   562→   562→                      </div>
+   563→   563→                    </div>
+   564→   564→
+   565→   565→                    <div>
+   566→   566→                      <label className="text-sm font-medium text-foreground mb-1.5 block">NID/Birth Certificate Photo *</label>
+   567→   567→                      {uploadZone('nidPhoto', 'nidPhotoPreview', 'nid', 'Upload NID photo', nidInputRef)}
+   568→   568→                    </div>
+   569→   569→
+   570→   570→                    <div>
+   571→   571→                      <label className="text-sm font-medium text-foreground mb-1.5 block">Academic Certificate Photo</label>
+   572→   572→                      {uploadZone('academicCertPhoto', 'academicCertPhotoPreview', 'cert', 'Upload certificate photo', certInputRef, true)}
+   573→   573→                    </div>
+   574→   574→                  </div>
+   575→   575→                )}
+   576→   576→
+   577→   577→                {/* Step 4: Review & Submit */}
+   578→   578→                {currentStep === 3 && (
+   579→   579→                  <div className="space-y-4">
+   580→   580→                    {/* Personal Info Summary */}
+   581→   581→                    <div className="bg-white/30 dark:bg-white/[0.03] backdrop-blur-sm border border-white/30 dark:border-white/[0.04] rounded-xl p-4">
+   582→   582→                      <div className="flex items-center justify-between mb-2">
+   583→   583→                        <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+   584→   584→                          <User className="w-4 h-4 text-foreground/70" /> Personal Info
+   585→   585→                        </h3>
+   586→   586→                        <button
+   587→   587→                          type="button"
+   588→   588→                          onClick={() => goToStep(0)}
+   589→   589→                          className="text-xs text-foreground/70 hover:text-foreground font-medium"
+   590→   590→                        >
+   591→   591→                          Edit
+   592→   592→                        </button>
+   593→   593→                      </div>
+   594→   594→                      <div className="grid grid-cols-2 gap-2 text-xs">
+   595→   595→                        <div><span className="text-muted-foreground">Name:</span> <span className="text-foreground font-medium">{form.fullName || '—'}</span></div>
+   596→   596→                        <div><span className="text-muted-foreground">Email:</span> <span className="text-foreground font-medium break-all">{form.email || '—'}</span></div>
+   597→   597→                        <div><span className="text-muted-foreground">Phone:</span> <span className="text-foreground font-medium">{form.phone || '—'}</span></div>
+   598→   598→                        <div>
+   599→   599→                          <span className="text-muted-foreground">Photo:</span>{' '}
+   600→   600→                          <span className="text-foreground font-medium">{form.profilePhotoPreview ? '✓' : '—'}</span>
+   601→   601→                        </div>
+   602→   602→                      </div>
+   603→   603→                    </div>
+   604→   604→
+   605→   605→                    {/* Professional Info Summary */}
+   606→   606→                    <div className="bg-white/30 dark:bg-white/[0.03] backdrop-blur-sm border border-white/30 dark:border-white/[0.04] rounded-xl p-4">
+   607→   607→                      <div className="flex items-center justify-between mb-2">
+   608→   608→                        <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+   609→   609→                          <Briefcase className="w-4 h-4 text-foreground/70" /> Professional Info
+   610→   610→                        </h3>
+   611→   611→                        <button
+   612→   612→                          type="button"
+   613→   613→                          onClick={() => goToStep(1)}
+   614→   614→                          className="text-xs text-foreground/70 hover:text-foreground font-medium"
+   615→   615→                        >
+   616→   616→                          Edit
+   617→   617→                        </button>
+   618→   618→                      </div>
+   619→   619→                      <div className="grid grid-cols-2 gap-2 text-xs">
+   620→   620→                        <div><span className="text-muted-foreground">Department:</span> <span className="text-foreground font-medium">{TECHNOLOGY_OPTIONS.find(o => o.value === form.department)?.label || '—'}</span></div>
+   621→   621→                        <div><span className="text-muted-foreground">Specialization:</span> <span className="text-foreground font-medium">{form.specialization || '—'}</span></div>
+   622→   622→                        <div><span className="text-muted-foreground">Experience:</span> <span className="text-foreground font-medium">{EXPERIENCE_OPTIONS.find(o => o.value === form.teachingExperience)?.label || '—'}</span></div>
+   623→   623→                        <div><span className="text-muted-foreground">Qualification:</span> <span className="text-foreground font-medium">{form.highestQualification || '—'}</span></div>
+   624→   624→                        {form.shortBio && (
+   625→   625→                          <div className="col-span-2"><span className="text-muted-foreground">Bio:</span> <span className="text-foreground font-medium">{form.shortBio}</span></div>
+   626→   626→                        )}
+   627→   627→                      </div>
+   628→   628→                    </div>
+   629→   629→
+   630→   630→                    {/* Document Summary */}
+   631→   631→                    <div className="bg-white/30 dark:bg-white/[0.03] backdrop-blur-sm border border-white/30 dark:border-white/[0.04] rounded-xl p-4">
+   632→   632→                      <div className="flex items-center justify-between mb-2">
+   633→   633→                        <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+   634→   634→                          <ShieldCheck className="w-4 h-4 text-emerald-500" /> Verification
+   635→   635→                        </h3>
+   636→   636→                        <button
+   637→   637→                          type="button"
+   638→   638→                          onClick={() => goToStep(2)}
+   639→   639→                          className="text-xs text-foreground/70 hover:text-foreground font-medium"
+   640→   640→                        >
+   641→   641→                          Edit
+   642→   642→                        </button>
+   643→   643→                      </div>
+   644→   644→                      <div className="grid grid-cols-2 gap-2 text-xs">
+   645→   645→                        <div><span className="text-muted-foreground">NID Number:</span> <span className="text-foreground font-medium">{form.nidNumber || '—'}</span></div>
+   646→   646→                        <div><span className="text-muted-foreground">NID Photo:</span> <span className="text-foreground font-medium">{form.nidPhotoPreview ? '✓' : '—'}</span></div>
+   647→   647→                        <div><span className="text-muted-foreground">Certificate Photo:</span> <span className="text-foreground font-medium">{form.academicCertPhotoPreview ? '✓' : '—'}</span></div>
+   648→   648→                      </div>
+   649→   649→                    </div>
+   650→   650→
+   651→   651→                    {/* Terms */}
+   652→   652→                    <label className="flex items-start gap-3 cursor-pointer p-3 rounded-xl bg-white/30 dark:bg-white/[0.03] backdrop-blur-sm border border-white/30 dark:border-white/[0.04] hover:bg-white/40 dark:hover:bg-white/[0.06] transition-colors">
+   653→   653→                      <input
+   654→   654→                        type="checkbox"
+   655→   655→                        checked={form.termsAccepted}
+   656→   656→                        onChange={(e) => updateField('termsAccepted', e.target.checked)}
+   657→   657→                        className="mt-0.5 w-4 h-4 rounded border-neutral-300 text-foreground focus:ring-black/5 accent-foreground"
+   658→   658→                      />
+   659→   659→                      <span className="text-xs text-muted-foreground leading-relaxed">
+   660→   660→                        I understand that instructor accounts on Dakkho are created by admin invitation only. I have read and agree to the <span className="text-foreground/70 font-medium">Terms & Privacy Policy</span>.
+   661→   661→                      </span>
+   662→   662→                    </label>
+   663→   663→                  </div>
+   664→   664→                )}
+   665→   665→              </motion.div>
+   666→   666→            </AnimatePresence>
+   667→   667→          </div>
+   668→   668→
+   669→   669→          {/* Navigation buttons */}
+   670→   670→          <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/20 dark:border-white/10">
+   671→   671→            {currentStep > 0 ? (
+   672→   672→              <GradientButton variant="ghost" size="sm" onClick={goPrev} icon={<ChevronLeft className="w-4 h-4" />}>
+   673→   673→                Previous
+   674→   674→              </GradientButton>
+   675→   675→            ) : (
+   676→   676→              <div />
+   677→   677→            )}
+   678→   678→
+   679→   679→            {currentStep < 3 ? (
+   680→   680→              <GradientButton variant="primary" size="sm" onClick={goNext} icon={<ChevronRight className="w-4 h-4" />}>
+   681→   681→                Next
+   682→   682→              </GradientButton>
+   683→   683→            ) : (
+   684→   684→              <GradientButton
+   685→   685→                variant="primary"
+   686→   686→                size="lg"
+   687→   687→                onClick={handleSubmit}
+   688→   688→                disabled={!form.termsAccepted}
+   689→   689→                icon={<Check className="w-4 h-4" />}
+   690→   690→              >
+   691→   691→                Submit Application
+   692→   692→              </GradientButton>
+   693→   693→            )}
+   694→   694→          </div>
+   695→   695→        </GlassCard>
+   696→   696→      </motion.div>
+   697→   697→    </div>
+   698→   698→  );
+   699→   699→}
+   700→   700→

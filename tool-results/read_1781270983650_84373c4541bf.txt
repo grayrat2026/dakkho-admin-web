@@ -1,0 +1,623 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useState, useEffect } from 'react';
+     4→     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→     5→import {
+     6→     6→  Star, Camera, Edit3, Save, X, ExternalLink, Plus, Trash2,
+     7→     7→  Facebook, Youtube, Linkedin, Github, Globe, Eye, Check,
+     8→     8→} from 'lucide-react';
+     9→     9→import { toast } from 'sonner';
+    10→    10→import { GlassCard } from '@/components/shared/GlassCard';
+    11→    11→import { GradientButton } from '@/components/shared/GradientButton';
+    12→    12→import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
+    13→    13→import { useProfile } from '@/lib/api-hooks';
+    14→    14→import { useAuthStore } from '@/lib/store';
+    15→    15→import { apiPut, apiUpload } from '@/lib/api-client';
+    16→    16→import { cn } from '@/lib/utils';
+    17→    17→import { springEntrance } from '@/lib/animations';
+    18→    18→import type { InstructorProfile } from '@/lib/types';
+    19→    19→
+    20→    20→const socialIconMap: Record<string, typeof Facebook> = {
+    21→    21→  facebook: Facebook,
+    22→    22→  youtube: Youtube,
+    23→    23→  linkedin: Linkedin,
+    24→    24→  github: Github,
+    25→    25→  website: Globe,
+    26→    26→  twitter: Globe,
+    27→    27→  instagram: Globe,
+    28→    28→};
+    29→    29→
+    30→    30→const socialLabelMap: Record<string, string> = {
+    31→    31→  facebook: 'Facebook',
+    32→    32→  youtube: 'YouTube',
+    33→    33→  linkedin: 'LinkedIn',
+    34→    34→  github: 'GitHub',
+    35→    35→  website: 'Website',
+    36→    36→  twitter: 'Twitter / X',
+    37→    37→  instagram: 'Instagram',
+    38→    38→};
+    39→    39→
+    40→    40→const socialPlaceholderMap: Record<string, string> = {
+    41→    41→  facebook: 'https://facebook.com/username',
+    42→    42→  youtube: 'https://youtube.com/@channel',
+    43→    43→  linkedin: 'https://linkedin.com/in/username',
+    44→    44→  github: 'https://github.com/username',
+    45→    45→  website: 'https://yourwebsite.com',
+    46→    46→  twitter: 'https://x.com/username',
+    47→    47→  instagram: 'https://instagram.com/username',
+    48→    48→};
+    49→    49→
+    50→    50→// Safely parse socialLinks — D1 stores it as JSON string
+    51→    51→function parseSocialLinks(raw: unknown): Record<string, string> {
+    52→    52→  if (!raw) return {};
+    53→    53→  if (typeof raw === 'string') {
+    54→    54→    try {
+    55→    55→      const parsed = JSON.parse(raw);
+    56→    56→      return typeof parsed === 'object' && parsed !== null ? parsed : {};
+    57→    57→    } catch {
+    58→    58→      return {};
+    59→    59→    }
+    60→    60→  }
+    61→    61→  if (typeof raw === 'object' && raw !== null) return raw as Record<string, string>;
+    62→    62→  return {};
+    63→    63→}
+    64→    64→
+    65→    65→function RatingStars({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'md' }) {
+    66→    66→  const starSize = size === 'sm' ? 'w-3.5 h-3.5' : 'w-5 h-5';
+    67→    67→  return (
+    68→    68→    <div className="flex items-center gap-0.5">
+    69→    69→      {[1, 2, 3, 4, 5].map((s) => (
+    70→    70→        <Star
+    71→    71→          key={s}
+    72→    72→          className={cn(
+    73→    73→            starSize,
+    74→    74→            s <= Math.round(rating)
+    75→    75→              ? 'text-amber-400 fill-amber-400'
+    76→    76→              : 'text-gray-300 dark:text-gray-600'
+    77→    77→          )}
+    78→    78→        />
+    79→    79→      ))}
+    80→    80→    </div>
+    81→    81→  );
+    82→    82→}
+    83→    83→
+    84→    84→export function Profile() {
+    85→    85→  const { data: profileData, loading, refetch } = useProfile();
+    86→    86→  const user = useAuthStore((s) => s.user);
+    87→    87→  const setUser = useAuthStore((s) => s.setUser);
+    88→    88→
+    89→    89→  const [isEditing, setIsEditing] = useState(false);
+    90→    90→  const [profile, setProfile] = useState<InstructorProfile | null>(null);
+    91→    91→  const [editData, setEditData] = useState<Partial<InstructorProfile>>({});
+    92→    92→  const [saving, setSaving] = useState(false);
+    93→    93→
+    94→    94→  // Social links state
+    95→    95→  const [socialLinks, setSocialLinks] = useState<Record<string, string>>({});
+    96→    96→  const [showAddSocial, setShowAddSocial] = useState(false);
+    97→    97→  const [newSocialKey, setNewSocialKey] = useState('');
+    98→    98→  const [newSocialUrl, setNewSocialUrl] = useState('');
+    99→    99→  const [editingSocialKey, setEditingSocialKey] = useState<string | null>(null);
+   100→   100→  const [editSocialUrl, setEditSocialUrl] = useState('');
+   101→   101→  const [savingSocial, setSavingSocial] = useState(false);
+   102→   102→
+   103→   103→  useEffect(() => {
+   104→   104→    const apiProfile = profileData?.profile;
+   105→   105→    if (apiProfile) {
+   106→   106→      const parsedLinks = parseSocialLinks(apiProfile.socialLinks);
+   107→   107→      const p = {
+   108→   108→        id: apiProfile.id || user?.id || '',
+   109→   109→        name: apiProfile.name || user?.name || '',
+   110→   110→        email: apiProfile.email || user?.email || '',
+   111→   111→        avatarUrl: apiProfile.avatarUrl || apiProfile.avatar_url || apiProfile.avatar || '',
+   112→   112→        coverUrl: apiProfile.coverUrl || '',
+   113→   113→        specialization: apiProfile.specialization || '',
+   114→   114→        department: apiProfile.department || '',
+   115→   115→        bio: apiProfile.bio || '',
+   116→   116→        rating: apiProfile.rating || 0,
+   117→   117→        totalStudents: apiProfile.totalStudents || 0,
+   118→   118→        totalCourses: apiProfile.totalCourses || 0,
+   119→   119→        socialLinks: parsedLinks,
+   120→   120→        createdAt: apiProfile.createdAt || new Date().toISOString(),
+   121→   121→      };
+   122→   122→      setProfile(p);
+   123→   123→      setSocialLinks(parsedLinks);
+   124→   124→    } else if (user) {
+   125→   125→      const parsedLinks = parseSocialLinks(user.socialLinks);
+   126→   126→      setProfile({
+   127→   127→        id: user.id || '',
+   128→   128→        name: user.name || '',
+   129→   129→        email: user.email || '',
+   130→   130→        avatarUrl: user.avatarUrl || '',
+   131→   131→        coverUrl: '',
+   132→   132→        specialization: user.specialization || '',
+   133→   133→        department: user.department || '',
+   134→   134→        bio: user.bio || '',
+   135→   135→        rating: user.rating || 0,
+   136→   136→        totalStudents: user.totalStudents || 0,
+   137→   137→        totalCourses: user.totalCourses || 0,
+   138→   138→        socialLinks: parsedLinks,
+   139→   139→        createdAt: user.createdAt || new Date().toISOString(),
+   140→   140→      });
+   141→   141→      setSocialLinks(parsedLinks);
+   142→   142→    }
+   143→   143→  }, [profileData, user]);
+   144→   144→
+   145→   145→  const handleEditStart = () => {
+   146→   146→    if (!profile) return;
+   147→   147→    setEditData({
+   148→   148→      name: profile.name,
+   149→   149→      specialization: profile.specialization,
+   150→   150→      department: profile.department,
+   151→   151→      bio: profile.bio,
+   152→   152→    });
+   153→   153→    setIsEditing(true);
+   154→   154→  };
+   155→   155→
+   156→   156→  const handleSave = async () => {
+   157→   157→    setSaving(true);
+   158→   158→    try {
+   159→   159→      await apiPut('/profile', editData);
+   160→   160→      setProfile((prev) => prev ? { ...prev, ...editData } : prev);
+   161→   161→      if (editData.name && user) {
+   162→   162→        setUser({ ...user, name: editData.name });
+   163→   163→      }
+   164→   164→      setIsEditing(false);
+   165→   165→      toast.success('Profile updated');
+   166→   166→      refetch();
+   167→   167→    } catch (err) {
+   168→   168→      setProfile((prev) => prev ? { ...prev, ...editData } : prev);
+   169→   169→      setIsEditing(false);
+   170→   170→      toast.error('Failed to update profile');
+   171→   171→    }
+   172→   172→    setSaving(false);
+   173→   173→  };
+   174→   174→
+   175→   175→  const handleCancel = () => {
+   176→   176→    setIsEditing(false);
+   177→   177→    setEditData({});
+   178→   178→  };
+   179→   179→
+   180→   180→  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   181→   181→    const file = e.target.files?.[0];
+   182→   182→    if (!file) return;
+   183→   183→    try {
+   184→   184→      const formData = new FormData();
+   185→   185→      formData.append('avatar', file);
+   186→   186→      await apiUpload('/profile/avatar', formData);
+   187→   187→      toast.success('Avatar updated');
+   188→   188→      refetch();
+   189→   189→    } catch {
+   190→   190→      toast.error('Failed to upload avatar');
+   191→   191→    }
+   192→   192→  };
+   193→   193→
+   194→   194→  // Save social links to API
+   195→   195→  const saveSocialLinks = async (updatedLinks: Record<string, string>) => {
+   196→   196→    setSavingSocial(true);
+   197→   197→    try {
+   198→   198→      const result = await apiPut('/profile', { social_links: JSON.stringify(updatedLinks) });
+   199→   199→      setSocialLinks(updatedLinks);
+   200→   200→      setProfile((prev) => prev ? { ...prev, socialLinks: updatedLinks } : prev);
+   201→   201→      toast.success('Social links updated');
+   202→   202→      // Refetch after a short delay to ensure backend has persisted
+   203→   203→      setTimeout(() => refetch(), 500);
+   204→   204→    } catch (err: any) {
+   205→   205→      console.error('Failed to update social links:', err);
+   206→   206→      toast.error(err?.message || 'Failed to update social links');
+   207→   207→      // Don't revert — keep local state so user doesn't lose work
+   208→   208→    }
+   209→   209→    setSavingSocial(false);
+   210→   210→  };
+   211→   211→
+   212→   212→  const handleAddSocial = () => {
+   213→   213→    if (!newSocialKey.trim() || !newSocialUrl.trim()) {
+   214→   214→      toast.error('Please select platform and enter URL');
+   215→   215→      return;
+   216→   216→    }
+   217→   217→    const key = newSocialKey.trim().toLowerCase();
+   218→   218→    if (socialLinks[key]) {
+   219→   219→      toast.error('This platform already exists. Use edit instead.');
+   220→   220→      return;
+   221→   221→    }
+   222→   222→    const updated = { ...socialLinks, [key]: newSocialUrl.trim() };
+   223→   223→    saveSocialLinks(updated);
+   224→   224→    setNewSocialKey('');
+   225→   225→    setNewSocialUrl('');
+   226→   226→    setShowAddSocial(false);
+   227→   227→  };
+   228→   228→
+   229→   229→  const handleRemoveSocial = (key: string) => {
+   230→   230→    const updated = { ...socialLinks };
+   231→   231→    delete updated[key];
+   232→   232→    saveSocialLinks(updated);
+   233→   233→  };
+   234→   234→
+   235→   235→  const handleStartEditSocial = (key: string) => {
+   236→   236→    setEditingSocialKey(key);
+   237→   237→    setEditSocialUrl(socialLinks[key] || '');
+   238→   238→  };
+   239→   239→
+   240→   240→  const handleSaveEditSocial = () => {
+   241→   241→    if (!editingSocialKey || !editSocialUrl.trim()) return;
+   242→   242→    const updated = { ...socialLinks, [editingSocialKey]: editSocialUrl.trim() };
+   243→   243→    saveSocialLinks(updated);
+   244→   244→    setEditingSocialKey(null);
+   245→   245→    setEditSocialUrl('');
+   246→   246→  };
+   247→   247→
+   248→   248→  const handleCancelEditSocial = () => {
+   249→   249→    setEditingSocialKey(null);
+   250→   250→    setEditSocialUrl('');
+   251→   251→  };
+   252→   252→
+   253→   253→  if (loading) {
+   254→   254→    return (
+   255→   255→      <div className="space-y-6">
+   256→   256→        <LoadingSkeleton type="card" count={3} />
+   257→   257→      </div>
+   258→   258→    );
+   259→   259→  }
+   260→   260→
+   261→   261→  if (!profile) {
+   262→   262→    return (
+   263→   263→      <GlassCard className="p-12 text-center">
+   264→   264→        <p className="text-muted-foreground">Unable to load profile</p>
+   265→   265→      </GlassCard>
+   266→   266→    );
+   267→   267→  }
+   268→   268→
+   269→   269→  return (
+   270→   270→    <div className="space-y-6">
+   271→   271→      {/* Cover Image */}
+   272→   272→      <motion.div
+   273→   273→        initial={{ opacity: 0, y: 12 }}
+   274→   274→        animate={{ opacity: 1, y: 0 }}
+   275→   275→        transition={{ duration: 0.4 }}
+   276→   276→        className="relative"
+   277→   277→      >
+   278→   278→        <div className="bg-gradient-to-r from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white h-32 md:h-48 rounded-2xl relative overflow-hidden">
+   279→   279→          <div className="absolute inset-0 bg-black/10" />
+   280→   280→          <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/30 to-transparent" />
+   281→   281→        </div>
+   282→   282→
+   283→   283→        {/* Avatar - overlapping cover */}
+   284→   284→        <div className="absolute -bottom-12 left-6 md:left-8">
+   285→   285→          <motion.div
+   286→   286→            initial={{ scale: 0.8, opacity: 0 }}
+   287→   287→            animate={{ scale: 1, opacity: 1 }}
+   288→   288→            transition={{ delay: 0.2, type: 'spring', stiffness: 300, damping: 25 }}
+   289→   289→            className="relative group"
+   290→   290→          >
+   291→   291→            <div className="w-24 h-24 md:w-28 md:h-28 rounded-full border-4 border-foreground/20 bg-gradient-to-br from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white flex items-center justify-center overflow-hidden shadow-[0_4px_15px_rgba(0,0,0,0.1)]">
+   292→   292→              {profile.avatarUrl ? (
+   293→   293→                <img src={profile.avatarUrl} alt={profile.name} className="w-full h-full object-cover" />
+   294→   294→              ) : (
+   295→   295→                <span className="text-3xl md:text-4xl font-extrabold text-white dark:text-black">
+   296→   296→                  {profile.name.charAt(0)}
+   297→   297→                </span>
+   298→   298→              )}
+   299→   299→            </div>
+   300→   300→            <button
+   301→   301→              className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-gradient-to-br from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white flex items-center justify-center shadow-[0_4px_15px_rgba(0,0,0,0.1)] opacity-0 group-hover:opacity-100 transition-opacity"
+   302→   302→              title="Change photo"
+   303→   303→              onClick={() => document.getElementById('avatar-upload')?.click()}
+   304→   304→            >
+   305→   305→              <Camera className="w-4 h-4 text-white dark:text-black" />
+   306→   306→              <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+   307→   307→            </button>
+   308→   308→          </motion.div>
+   309→   309→        </div>
+   310→   310→      </motion.div>
+   311→   311→
+   312→   312→      {/* Profile Info */}
+   313→   313→      <motion.div
+   314→   314→        initial={{ opacity: 0, y: 12 }}
+   315→   315→        animate={{ opacity: 1, y: 0 }}
+   316→   316→        transition={{ delay: 0.15, duration: 0.4 }}
+   317→   317→        className="pt-14 md:pt-12"
+   318→   318→      >
+   319→   319→        <GlassCard className="p-6">
+   320→   320→          <div className="flex items-start justify-between gap-4">
+   321→   321→            <div className="flex-1 min-w-0">
+   322→   322→              <AnimatePresence mode="wait">
+   323→   323→                {isEditing ? (
+   324→   324→                  <motion.div
+   325→   325→                    key="editing"
+   326→   326→                    initial={{ opacity: 0, y: 8 }}
+   327→   327→                    animate={{ opacity: 1, y: 0 }}
+   328→   328→                    exit={{ opacity: 0, y: -8 }}
+   329→   329→                    transition={springEntrance}
+   330→   330→                    className="space-y-3"
+   331→   331→                  >
+   332→   332→                    <input
+   333→   333→                      value={editData.name || ''}
+   334→   334→                      onChange={(e) => setEditData((d) => ({ ...d, name: e.target.value }))}
+   335→   335→                      className="text-xl md:text-2xl font-extrabold premium-input"
+   336→   336→                    />
+   337→   337→                    <input
+   338→   338→                      value={editData.specialization || ''}
+   339→   339→                      onChange={(e) => setEditData((d) => ({ ...d, specialization: e.target.value }))}
+   340→   340→                      className="text-sm premium-input"
+   341→   341→                    />
+   342→   342→                    <input
+   343→   343→                      value={editData.department || ''}
+   344→   344→                      onChange={(e) => setEditData((d) => ({ ...d, department: e.target.value }))}
+   345→   345→                      className="text-sm premium-input"
+   346→   346→                    />
+   347→   347→                    <textarea
+   348→   348→                      value={editData.bio || ''}
+   349→   349→                      onChange={(e) => setEditData((d) => ({ ...d, bio: e.target.value }))}
+   350→   350→                      className="text-sm premium-input rounded-xl px-4 py-2 w-full min-h-[100px] resize-none leading-relaxed"
+   351→   351→                    />
+   352→   352→                  </motion.div>
+   353→   353→                ) : (
+   354→   354→                  <motion.div
+   355→   355→                    key="viewing"
+   356→   356→                    initial={{ opacity: 0, y: 8 }}
+   357→   357→                    animate={{ opacity: 1, y: 0 }}
+   358→   358→                    exit={{ opacity: 0, y: -8 }}
+   359→   359→                    transition={springEntrance}
+   360→   360→                  >
+   361→   361→                    <h1 className="text-xl md:text-2xl font-extrabold text-foreground">{profile.name}</h1>
+   362→   362→                    <p className="text-sm text-foreground/70 font-medium mt-1">
+   363→   363→                      {profile.specialization}
+   364→   364→                    </p>
+   365→   365→                    <p className="text-sm text-muted-foreground mt-0.5">{profile.department}</p>
+   366→   366→                    <div className="flex items-center gap-2 mt-2">
+   367→   367→                      <RatingStars rating={profile.rating} size="sm" />
+   368→   368→                      <span className="text-sm font-bold text-foreground">{profile.rating}</span>
+   369→   369→                    </div>
+   370→   370→                    <p className="text-sm text-muted-foreground mt-3 leading-relaxed">{profile.bio}</p>
+   371→   371→                  </motion.div>
+   372→   372→                )}
+   373→   373→              </AnimatePresence>
+   374→   374→            </div>
+   375→   375→
+   376→   376→            <div className="flex flex-col gap-2 flex-shrink-0">
+   377→   377→              {isEditing ? (
+   378→   378→                <>
+   379→   379→                  <GradientButton size="sm" icon={<Save className="w-3.5 h-3.5" />} onClick={handleSave} loading={saving}>
+   380→   380→                    Save
+   381→   381→                  </GradientButton>
+   382→   382→                  <button
+   383→   383→                    onClick={handleCancel}
+   384→   384→                    className="px-4 py-2 text-sm font-semibold rounded-xl bg-muted/50 text-muted-foreground hover:bg-red-100 dark:hover:bg-red-900/20 hover:text-red-500 transition-colors flex items-center gap-1.5"
+   385→   385→                  >
+   386→   386→                    <X className="w-3.5 h-3.5" />
+   387→   387→                    Cancel
+   388→   388→                  </button>
+   389→   389→                </>
+   390→   390→              ) : (
+   391→   391→                <GradientButton size="sm" icon={<Edit3 className="w-3.5 h-3.5" />} onClick={handleEditStart}>
+   392→   392→                  Edit
+   393→   393→                </GradientButton>
+   394→   394→              )}
+   395→   395→            </div>
+   396→   396→          </div>
+   397→   397→
+   398→   398→          {/* Stats */}
+   399→   399→          {!isEditing && (
+   400→   400→            <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-white/30 dark:border-white/10">
+   401→   401→              <div className="text-center">
+   402→   402→                <p className="text-lg font-extrabold gradient-text">{profile.totalStudents.toLocaleString()}</p>
+   403→   403→                <p className="text-xs text-muted-foreground">Students</p>
+   404→   404→              </div>
+   405→   405→              <div className="text-center">
+   406→   406→                <p className="text-lg font-extrabold gradient-text">{profile.totalCourses}</p>
+   407→   407→                <p className="text-xs text-muted-foreground">Courses</p>
+   408→   408→              </div>
+   409→   409→              <div className="text-center">
+   410→   410→                <p className="text-lg font-extrabold gradient-text">{profile.rating}</p>
+   411→   411→                <p className="text-xs text-muted-foreground">Rating</p>
+   412→   412→              </div>
+   413→   413→            </div>
+   414→   414→          )}
+   415→   415→        </GlassCard>
+   416→   416→      </motion.div>
+   417→   417→
+   418→   418→      {/* Social Links */}
+   419→   419→      <motion.div
+   420→   420→        initial={{ opacity: 0, y: 12 }}
+   421→   421→        animate={{ opacity: 1, y: 0 }}
+   422→   422→        transition={{ delay: 0.3, duration: 0.4 }}
+   423→   423→      >
+   424→   424→        <GlassCard glow className="p-6">
+   425→   425→          <div className="flex items-center justify-between mb-4">
+   426→   426→            <h3 className="text-lg font-bold gradient-text">Social Links</h3>
+   427→   427→            <GradientButton
+   428→   428→              size="sm"
+   429→   429→              variant="ghost"
+   430→   430→              icon={<Plus className="w-3.5 h-3.5" />}
+   431→   431→              onClick={() => { setShowAddSocial(true); setNewSocialKey(''); setNewSocialUrl(''); }}
+   432→   432→            >
+   433→   433→              Add
+   434→   434→            </GradientButton>
+   435→   435→          </div>
+   436→   436→
+   437→   437→          {/* Saving indicator */}
+   438→   438→          {savingSocial && (
+   439→   439→            <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+   440→   440→              <div className="w-3 h-3 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+   441→   441→              Saving...
+   442→   442→            </div>
+   443→   443→          )}
+   444→   444→
+   445→   445→          <div className="space-y-3">
+   446→   446→            {Object.entries(socialLinks).map(([key, url], i) => {
+   447→   447→              const IconComp = socialIconMap[key] || Globe;
+   448→   448→              const label = socialLabelMap[key] || key;
+   449→   449→              const isEditingThis = editingSocialKey === key;
+   450→   450→
+   451→   451→              return (
+   452→   452→                <motion.div
+   453→   453→                  key={key}
+   454→   454→                  initial={{ opacity: 0, x: -10 }}
+   455→   455→                  animate={{ opacity: 1, x: 0 }}
+   456→   456→                  transition={{ delay: i * 0.05 }}
+   457→   457→                  className="flex items-center gap-3 p-3 rounded-xl bg-white/30 dark:bg-white/[0.03] backdrop-blur-sm border border-white/30 dark:border-white/[0.04] hover:shadow-md transition-all"
+   458→   458→                >
+   459→   459→                  <div className="w-9 h-9 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] flex items-center justify-center flex-shrink-0">
+   460→   460→                    <IconComp className="w-4 h-4 text-foreground/70" />
+   461→   461→                  </div>
+   462→   462→
+   463→   463→                  {isEditingThis ? (
+   464→   464→                    <div className="flex-1 flex items-center gap-2">
+   465→   465→                      <input
+   466→   466→                        type="url"
+   467→   467→                        value={editSocialUrl}
+   468→   468→                        onChange={(e) => setEditSocialUrl(e.target.value)}
+   469→   469→                        placeholder={socialPlaceholderMap[key] || 'https://...'}
+   470→   470→                        className="flex-1 px-3 py-1.5 rounded-lg text-sm premium-input placeholder:text-muted-foreground/50"
+   471→   471→                        autoFocus
+   472→   472→                      />
+   473→   473→                      <button
+   474→   474→                        onClick={handleSaveEditSocial}
+   475→   475→                        className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 flex items-center justify-center hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
+   476→   476→                        title="Save"
+   477→   477→                      >
+   478→   478→                        <Check className="w-3.5 h-3.5" />
+   479→   479→                      </button>
+   480→   480→                      <button
+   481→   481→                        onClick={handleCancelEditSocial}
+   482→   482→                        className="w-7 h-7 rounded-lg bg-muted/50 text-muted-foreground flex items-center justify-center hover:bg-red-100 dark:hover:bg-red-900/20 hover:text-red-500 transition-colors"
+   483→   483→                        title="Cancel"
+   484→   484→                      >
+   485→   485→                        <X className="w-3.5 h-3.5" />
+   486→   486→                      </button>
+   487→   487→                    </div>
+   488→   488→                  ) : (
+   489→   489→                    <>
+   490→   490→                      <div className="flex-1 min-w-0">
+   491→   491→                        <p className="text-xs font-semibold text-foreground">{label}</p>
+   492→   492→                        <p className="text-xs text-muted-foreground truncate">{url}</p>
+   493→   493→                      </div>
+   494→   494→                      <div className="flex items-center gap-1 flex-shrink-0">
+   495→   495→                        <a
+   496→   496→                          href={url}
+   497→   497→                          target="_blank"
+   498→   498→                          rel="noopener noreferrer"
+   499→   499→                          className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors"
+   500→   500→                          title="Open link"
+   501→   501→                        >
+   502→   502→                          <ExternalLink className="w-3.5 h-3.5" />
+   503→   503→                        </a>
+   504→   504→                        <button
+   505→   505→                          onClick={() => handleStartEditSocial(key)}
+   506→   506→                          className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors"
+   507→   507→                          title="Edit"
+   508→   508→                        >
+   509→   509→                          <Edit3 className="w-3 h-3" />
+   510→   510→                        </button>
+   511→   511→                        <button
+   512→   512→                          onClick={() => handleRemoveSocial(key)}
+   513→   513→                          className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors"
+   514→   514→                          title="Remove"
+   515→   515→                        >
+   516→   516→                          <Trash2 className="w-3.5 h-3.5" />
+   517→   517→                        </button>
+   518→   518→                      </div>
+   519→   519→                    </>
+   520→   520→                  )}
+   521→   521→                </motion.div>
+   522→   522→              );
+   523→   523→            })}
+   524→   524→            {Object.keys(socialLinks).length === 0 && !showAddSocial && (
+   525→   525→              <p className="text-sm text-muted-foreground text-center py-4">No social links added</p>
+   526→   526→            )}
+   527→   527→          </div>
+   528→   528→
+   529→   529→          {/* Add Social Link Form */}
+   530→   530→          <AnimatePresence>
+   531→   531→            {showAddSocial && (
+   532→   532→              <motion.div
+   533→   533→                initial={{ opacity: 0, height: 0 }}
+   534→   534→                animate={{ opacity: 1, height: 'auto' }}
+   535→   535→                exit={{ opacity: 0, height: 0 }}
+   536→   536→                transition={{ duration: 0.2 }}
+   537→   537→                className="overflow-hidden"
+   538→   538→              >
+   539→   539→                <div className="mt-4 p-4 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.03] dark:border-white/[0.03] space-y-3">
+   540→   540→                  <p className="text-sm font-semibold text-foreground">Add Social Link</p>
+   541→   541→
+   542→   542→                  {/* Platform selector */}
+   543→   543→                  <div>
+   544→   544→                    <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Platform</label>
+   545→   545→                    <div className="flex flex-wrap gap-2">
+   546→   546→                      {Object.keys(socialLabelMap)
+   547→   547→                        .filter((key) => !socialLinks[key])
+   548→   548→                        .map((key) => {
+   549→   549→                          const IconComp = socialIconMap[key] || Globe;
+   550→   550→                          return (
+   551→   551→                            <button
+   552→   552→                              key={key}
+   553→   553→                              onClick={() => setNewSocialKey(key)}
+   554→   554→                              className={cn(
+   555→   555→                                'flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border transition-all',
+   556→   556→                                newSocialKey === key
+   557→   557→                                  ? 'bg-black/[0.06] dark:bg-white/[0.06] border-black/10 dark:border-white/10 text-foreground'
+   558→   558→                                  : 'bg-transparent border-black/[0.04] dark:border-white/[0.04] text-muted-foreground hover:text-foreground hover:border-black/10 dark:hover:border-white/10'
+   559→   559→                              )}
+   560→   560→                            >
+   561→   561→                              <IconComp className="w-3.5 h-3.5" />
+   562→   562→                              {socialLabelMap[key]}
+   563→   563→                            </button>
+   564→   564→                          );
+   565→   565→                        })}
+   566→   566→                    </div>
+   567→   567→                  </div>
+   568→   568→
+   569→   569→                  {/* URL input */}
+   570→   570→                  {newSocialKey && (
+   571→   571→                    <div>
+   572→   572→                      <label className="text-xs font-semibold text-muted-foreground block mb-1.5">URL</label>
+   573→   573→                      <input
+   574→   574→                        type="url"
+   575→   575→                        value={newSocialUrl}
+   576→   576→                        onChange={(e) => setNewSocialUrl(e.target.value)}
+   577→   577→                        placeholder={socialPlaceholderMap[newSocialKey] || 'https://...'}
+   578→   578→                        className="w-full px-3 py-2 rounded-lg text-sm premium-input placeholder:text-muted-foreground/50"
+   579→   579→                        autoFocus
+   580→   580→                      />
+   581→   581→                    </div>
+   582→   582→                  )}
+   583→   583→
+   584→   584→                  <div className="flex items-center gap-2">
+   585→   585→                    <GradientButton
+   586→   586→                      size="sm"
+   587→   587→                      icon={<Plus className="w-3.5 h-3.5" />}
+   588→   588→                      onClick={handleAddSocial}
+   589→   589→                      loading={savingSocial}
+   590→   590→                      disabled={!newSocialKey || !newSocialUrl.trim()}
+   591→   591→                    >
+   592→   592→                      Add Link
+   593→   593→                    </GradientButton>
+   594→   594→                    <GradientButton size="sm" variant="ghost" onClick={() => setShowAddSocial(false)}>
+   595→   595→                      Cancel
+   596→   596→                    </GradientButton>
+   597→   597→                  </div>
+   598→   598→                </div>
+   599→   599→              </motion.div>
+   600→   600→            )}
+   601→   601→          </AnimatePresence>
+   602→   602→        </GlassCard>
+   603→   603→      </motion.div>
+   604→   604→
+   605→   605→      {/* Public Preview Button */}
+   606→   606→      <motion.div
+   607→   607→        initial={{ opacity: 0, y: 12 }}
+   608→   608→        animate={{ opacity: 1, y: 0 }}
+   609→   609→        transition={{ delay: 0.4, duration: 0.4 }}
+   610→   610→        className="flex justify-center"
+   611→   611→      >
+   612→   612→        <GradientButton
+   613→   613→          size="lg"
+   614→   614→          icon={<Eye className="w-5 h-5" />}
+   615→   615→          onClick={() => toast.info('Public preview coming soon')}
+   616→   616→        >
+   617→   617→          View Public Preview
+   618→   618→        </GradientButton>
+   619→   619→      </motion.div>
+   620→   620→    </div>
+   621→   621→  );
+   622→   622→}
+   623→   623→

@@ -1,0 +1,1018 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useState, useMemo, useCallback } from 'react';
+     4→     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→     5→import {
+     6→     6→  Plus, ChevronDown, ChevronRight, Trash2, Edit3, GripVertical,
+     7→     7→  FolderOpen, FileText, Video, Link as LinkIcon, X, Upload, Save,
+     8→     8→  BookOpen, Play, Eye, MoreVertical, Check, Search, AlertTriangle,
+     9→     9→} from 'lucide-react';
+    10→    10→import { toast } from 'sonner';
+    11→    11→import { GlassCard } from '@/components/shared/GlassCard';
+    12→    12→import { GradientButton } from '@/components/shared/GradientButton';
+    13→    13→import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
+    14→    14→import { EmptyState } from '@/components/shared/EmptyState';
+    15→    15→import {
+    16→    16→  useCurriculum, useCourseSubjects, useSubjects, useTechnologies,
+    17→    17→  useCreateChapter, useUpdateChapter, useDeleteChapter,
+    18→    18→  useCreateLesson, useUpdateLesson, useDeleteLesson,
+    19→    19→  useAddSubjectToCourse, useRemoveSubjectFromCourse,
+    20→    20→  useUploadResource, useResources,
+    21→    21→  useUploadVideo, useCourse,
+    22→    22→} from '@/lib/api-hooks';
+    23→    23→import { useNavigationStore } from '@/lib/store';
+    24→    24→import { cn, formatDurationShort } from '@/lib/utils';
+    25→    25→import { staggerChildren } from '@/lib/animations';
+    26→    26→import { apiUpload } from '@/lib/api-client';
+    27→    27→
+    28→    28→// Video duration detector
+    29→    29→function getVideoDuration(file: File): Promise<number> {
+    30→    30→  return new Promise((resolve) => {
+    31→    31→    const video = document.createElement('video');
+    32→    32→    video.preload = 'metadata';
+    33→    33→    video.onloadedmetadata = () => {
+    34→    34→      resolve(Math.round(video.duration));
+    35→    35→      URL.revokeObjectURL(video.src);
+    36→    36→    };
+    37→    37→    video.onerror = () => resolve(0);
+    38→    38→    video.src = URL.createObjectURL(file);
+    39→    39→  });
+    40→    40→}
+    41→    41→
+    42→    42→export function CourseCurriculum() {
+    43→    43→  const params = useNavigationStore((s) => s.params);
+    44→    44→  const courseId = params.courseId || '';
+    45→    45→
+    46→    46→  const { data: courseData, loading: courseLoading } = useCourse(courseId);
+    47→    47→  const { data: curriculumData, loading: curriculumLoading, refetch: refetchCurriculum } = useCurriculum(courseId);
+    48→    48→  const { data: courseSubjectsData, refetch: refetchCourseSubjects } = useCourseSubjects(courseId);
+    49→    49→  const { data: resourcesData, refetch: refetchResources } = useResources(courseId);
+    50→    50→  const { data: techData } = useTechnologies();
+    51→    51→
+    52→    52→  const course = courseData?.course || courseData;
+    53→    53→  const technologies = techData?.technologies || [];
+    54→    54→
+    55→    55→  const curriculum = useMemo(() => curriculumData?.curriculum || curriculumData || { subjects: [], chapters: [], lessons: [], resources: [] }, [curriculumData]);
+    56→    56→  const courseSubjects = useMemo(() => courseSubjectsData?.subjects || [], [courseSubjectsData]);
+    57→    57→  const resources = useMemo(() => resourcesData?.resources || [], [resourcesData]);
+    58→    58→
+    59→    59→  const { mutate: createChapter, loading: creatingChapter } = useCreateChapter(courseId);
+    60→    60→  const { mutate: updateChapter } = useUpdateChapter(courseId);
+    61→    61→  const { mutate: deleteChapter } = useDeleteChapter(courseId);
+    62→    62→  const { mutate: createLesson, loading: creatingLesson } = useCreateLesson(courseId);
+    63→    63→  const { mutate: updateLesson } = useUpdateLesson(courseId);
+    64→    64→  const { mutate: deleteLesson } = useDeleteLesson(courseId);
+    65→    65→  const { mutate: addSubject } = useAddSubjectToCourse(courseId);
+    66→    66→  const { mutate: removeSubject } = useRemoveSubjectFromCourse(courseId);
+    67→    67→  const { upload: uploadResource, uploadProgress: resourceUploadProgress, loading: uploadingResource } = useUploadResource(courseId);
+    68→    68→  const { upload: uploadVideo, uploadProgress: videoUploadProgress, loading: uploadingVideo } = useUploadVideo(courseId);
+    69→    69→
+    70→    70→  // State for new chapter
+    71→    71→  const [showNewChapter, setShowNewChapter] = useState<string | null>(null); // subjectId
+    72→    72→  const [newChapterTitle, setNewChapterTitle] = useState('');
+    73→    73→  const [newChapterDesc, setNewChapterDesc] = useState('');
+    74→    74→
+    75→    75→  // State for new lesson
+    76→    76→  const [showNewLesson, setShowNewLesson] = useState<string | null>(null); // chapterId
+    77→    77→  const [newLessonTitle, setNewLessonTitle] = useState('');
+    78→    78→  const [newLessonType, setNewLessonType] = useState<'video' | 'link' | 'youtube' | 'document'>('video');
+    79→    79→  const [newLessonDuration, setNewLessonDuration] = useState('');
+    80→    80→  const [newLessonIsPreview, setNewLessonIsPreview] = useState(false);
+    81→    81→  const [videoFile, setVideoFile] = useState<File | null>(null);
+    82→    82→  const [videoThumbnail, setVideoThumbnail] = useState<File | null>(null);
+    83→    83→  const [ccFile, setCcFile] = useState<File | null>(null);
+    84→    84→
+    85→    85→  // State for adding subject
+    86→    86→  const [showAddSubject, setShowAddSubject] = useState(false);
+    87→    87→  const [selectedTechs, setSelectedTechs] = useState<Set<number>>(new Set());
+    88→    88→  const [selectedSemesters, setSelectedSemesters] = useState<Set<string>>(new Set());
+    89→    89→  const [subjectSearchQuery, setSubjectSearchQuery] = useState('');
+    90→    90→  const { data: availableSubjectsData } = useSubjects();
+    91→    91→  const allAvailableSubjects = availableSubjectsData?.subjects || [];
+    92→    92→
+    93→    93→  // State for editing
+    94→    94→  const [editingChapter, setEditingChapter] = useState<string | null>(null);
+    95→    95→  const [editChapterTitle, setEditChapterTitle] = useState('');
+    96→    96→  const [editChapterDesc, setEditChapterDesc] = useState('');
+    97→    97→
+    98→    98→  const [editingLesson, setEditingLesson] = useState<string | null>(null);
+    99→    99→  const [editLessonTitle, setEditLessonTitle] = useState('');
+   100→   100→
+   101→   101→  // Group chapters by subject
+   102→   102→  const chaptersBySubject = useMemo(() => {
+   103→   103→    const chapters = curriculum.chapters || [];
+   104→   104→    const map = new Map<number, any[]>();
+   105→   105→    chapters.forEach((ch: any) => {
+   106→   106→      const sid = ch.subjectId || ch.subject_id || 0;
+   107→   107→      if (!map.has(sid)) map.set(sid, []);
+   108→   108→      map.get(sid)!.push(ch);
+   109→   109→    });
+   110→   110→    // Sort within each subject
+   111→   111→    map.forEach((chs) => chs.sort((a: any, b: any) => (a.sortOrder || a.sort_order || 0) - (b.sortOrder || b.sort_order || 0)));
+   112→   112→    return map;
+   113→   113→  }, [curriculum]);
+   114→   114→
+   115→   115→  // Get lessons for a chapter
+   116→   116→  const getLessonsForChapter = useCallback((chapterId: string) => {
+   117→   117→    const lessons = curriculum.lessons || [];
+   118→   118→    return lessons
+   119→   119→      .filter((l: any) => (l.chapterId || l.chapter_id) === chapterId)
+   120→   120→      .sort((a: any, b: any) => (a.sortOrder || a.sort_order || 0) - (b.sortOrder || b.sort_order || 0));
+   121→   121→  }, [curriculum]);
+   122→   122→
+   123→   123→  // Helper: get subject name from either camelCase or snake_case source
+   124→   124→  const getSubjectName = (subject: any) => subject.name || subject.subjectName || subject.subject_name || 'Unnamed';
+   125→   125→  const getSubjectId = (subject: any) => subject.id || subject.subjectId || subject.subject_id;
+   126→   126→  const getSubjectSemester = (subject: any) => subject.semester || subject.semesterName || '';
+   127→   127→  const getSubjectTechId = (subject: any) => subject.technologyId || subject.technology_id;
+   128→   128→
+   129→   129→  // Available semesters from subjects matching selected technologies
+   130→   130→  const availableSemesters = useMemo(() => {
+   131→   131→    const semSet = new Set<string>();
+   132→   132→    allAvailableSubjects.forEach((s: any) => {
+   133→   133→      const techId = getSubjectTechId(s);
+   134→   134→      if (selectedTechs.size === 0 || selectedTechs.has(techId)) {
+   135→   135→        const sem = getSubjectSemester(s);
+   136→   136→        if (sem) semSet.add(sem);
+   137→   137→      }
+   138→   138→    });
+   139→   139→    return Array.from(semSet).sort();
+   140→   140→  }, [allAvailableSubjects, selectedTechs]);
+   141→   141→
+   142→   142→  // Filtered subjects based on selected technologies + semesters + search
+   143→   143→  const filteredAvailableSubjects = useMemo(() => {
+   144→   144→    // Subjects already added to this course (by ID)
+   145→   145→    const addedIds = new Set(subjects.map((s: any) => getSubjectId(s)));
+   146→   146→
+   147→   147→    return allAvailableSubjects.filter((s: any) => {
+   148→   148→      const techId = getSubjectTechId(s);
+   149→   149→      const sem = getSubjectSemester(s);
+   150→   150→      const id = getSubjectId(s);
+   151→   151→
+   152→   152→      // Filter by technology
+   153→   153→      if (selectedTechs.size > 0 && !selectedTechs.has(techId)) return false;
+   154→   154→      // Filter by semester
+   155→   155→      if (selectedSemesters.size > 0 && sem && !selectedSemesters.has(sem)) return false;
+   156→   156→      // Search query
+   157→   157→      if (subjectSearchQuery) {
+   158→   158→        const name = getSubjectName(s).toLowerCase();
+   159→   159→        if (!name.includes(subjectSearchQuery.toLowerCase())) return false;
+   160→   160→      }
+   161→   161→      // Exclude already added
+   162→   162→      if (addedIds.has(id)) return false;
+   163→   163→
+   164→   164→      return true;
+   165→   165→    });
+   166→   166→  }, [allAvailableSubjects, selectedTechs, selectedSemesters, subjectSearchQuery, subjects]);
+   167→   167→
+   168→   168→  const handleVideoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   169→   169→    const file = e.target.files?.[0];
+   170→   170→    if (file) {
+   171→   171→      setVideoFile(file);
+   172→   172→      // Auto-detect duration
+   173→   173→      const duration = await getVideoDuration(file);
+   174→   174→      if (duration > 0) {
+   175→   175→        const minutes = Math.floor(duration / 60);
+   176→   176→        const seconds = duration % 60;
+   177→   177→        setNewLessonDuration(`${minutes}:${seconds.toString().padStart(2, '0')}`);
+   178→   178→      }
+   179→   179→    }
+   180→   180→  };
+   181→   181→
+   182→   182→  const handleAddSubject = async (subjectId: number) => {
+   183→   183→    const result = await addSubject({ subjectId });
+   184→   184→    if (result) {
+   185→   185→      toast.success('Subject added to course');
+   186→   186→      refetchCourseSubjects();
+   187→   187→      refetchCurriculum();
+   188→   188→    } else {
+   189→   189→      toast.error('Failed to add subject');
+   190→   190→    }
+   191→   191→  };
+   192→   192→
+   193→   193→  const handleRemoveSubject = async (subjectId: number) => {
+   194→   194→    const result = await removeSubject({ subjectId });
+   195→   195→    if (result !== null) {
+   196→   196→      toast.success('Subject removed');
+   197→   197→      refetchCourseSubjects();
+   198→   198→      refetchCurriculum();
+   199→   199→    }
+   200→   200→  };
+   201→   201→
+   202→   202→  const handleCreateChapter = async (subjectId: number) => {
+   203→   203→    if (!newChapterTitle.trim()) {
+   204→   204→      toast.error('Please enter a chapter title');
+   205→   205→      return;
+   206→   206→    }
+   207→   207→    const chapters = chaptersBySubject.get(subjectId) || [];
+   208→   208→    const result = await createChapter({
+   209→   209→      title: newChapterTitle.trim(),
+   210→   210→      subjectId,
+   211→   211→      description: newChapterDesc.trim() || undefined,
+   212→   212→      sortOrder: chapters.length + 1,
+   213→   213→    });
+   214→   214→    if (result) {
+   215→   215→      toast.success('Chapter created');
+   216→   216→      setNewChapterTitle('');
+   217→   217→      setNewChapterDesc('');
+   218→   218→      setShowNewChapter(null);
+   219→   219→      refetchCurriculum();
+   220→   220→    } else {
+   221→   221→      toast.error('Failed to create chapter');
+   222→   222→    }
+   223→   223→  };
+   224→   224→
+   225→   225→  const handleDeleteChapter = async (chapterId: string) => {
+   226→   226→    const result = await deleteChapter({ chapterId });
+   227→   227→    if (result !== null) {
+   228→   228→      toast.success('Chapter deleted');
+   229→   229→      refetchCurriculum();
+   230→   230→    }
+   231→   231→  };
+   232→   232→
+   233→   233→  const handleUpdateChapter = async (chapterId: string) => {
+   234→   234→    if (!editChapterTitle.trim()) return;
+   235→   235→    const result = await updateChapter({ chapterId, title: editChapterTitle.trim(), description: editChapterDesc.trim() || undefined });
+   236→   236→    if (result) {
+   237→   237→      toast.success('Chapter updated');
+   238→   238→      setEditingChapter(null);
+   239→   239→      setEditChapterDesc('');
+   240→   240→      refetchCurriculum();
+   241→   241→    }
+   242→   242→  };
+   243→   243→
+   244→   244→  const handleCreateLesson = async (chapterId: string, subjectId: number) => {
+   245→   245→    if (!newLessonTitle.trim()) {
+   246→   246→      toast.error('Please enter a lesson title');
+   247→   247→      return;
+   248→   248→    }
+   249→   249→
+   250→   250→    // If video file selected, upload first
+   251→   251→    if (videoFile) {
+   252→   252→      const fd = new FormData();
+   253→   253→      fd.append('video', videoFile);
+   254→   254→      fd.append('title', newLessonTitle.trim());
+   255→   255→      fd.append('lesson_type', newLessonType);
+   256→   256→      if (videoThumbnail) fd.append('thumbnail', videoThumbnail);
+   257→   257→      if (ccFile) fd.append('cc_file', ccFile);
+   258→   258→
+   259→   259→      const durationParts = newLessonDuration.split(':');
+   260→   260→      let durationSec = 0;
+   261→   261→      if (durationParts.length === 2) {
+   262→   262→        durationSec = parseInt(durationParts[0]) * 60 + parseInt(durationParts[1]);
+   263→   263→      } else {
+   264→   264→        durationSec = parseInt(newLessonDuration) || 0;
+   265→   265→      }
+   266→   266→      fd.append('duration', String(durationSec));
+   267→   267→      fd.append('is_preview', String(newLessonIsPreview));
+   268→   268→
+   269→   269→      const result = await uploadVideo(fd);
+   270→   270→      if (result) {
+   271→   271→        toast.success('Video uploaded & lesson created');
+   272→   272→        resetLessonForm();
+   273→   273→        refetchCurriculum();
+   274→   274→      } else {
+   275→   275→        toast.error('Video upload failed');
+   276→   276→      }
+   277→   277→      return;
+   278→   278→    }
+   279→   279→
+   280→   280→    const durationParts = newLessonDuration.split(':');
+   281→   281→    let durationSec = 0;
+   282→   282→    if (durationParts.length === 2) {
+   283→   283→      durationSec = parseInt(durationParts[0]) * 60 + parseInt(durationParts[1]);
+   284→   284→    } else {
+   285→   285→      durationSec = parseInt(newLessonDuration) || 0;
+   286→   286→    }
+   287→   287→
+   288→   288→    const result = await createLesson({
+   289→   289→      title: newLessonTitle.trim(),
+   290→   290→      chapterId,
+   291→   291→      subjectId,
+   292→   292→      lessonType: newLessonType,
+   293→   293→      duration: durationSec || undefined,
+   294→   294→      isPreview: newLessonIsPreview,
+   295→   295→    });
+   296→   296→    if (result) {
+   297→   297→      toast.success('Lesson created');
+   298→   298→      resetLessonForm();
+   299→   299→      refetchCurriculum();
+   300→   300→    } else {
+   301→   301→      toast.error('Failed to create lesson');
+   302→   302→    }
+   303→   303→  };
+   304→   304→
+   305→   305→  const handleDeleteLesson = async (lessonId: string) => {
+   306→   306→    const result = await deleteLesson({ lessonId });
+   307→   307→    if (result !== null) {
+   308→   308→      toast.success('Lesson deleted');
+   309→   309→      refetchCurriculum();
+   310→   310→    }
+   311→   311→  };
+   312→   312→
+   313→   313→  const handleUploadResource = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   314→   314→    const file = e.target.files?.[0];
+   315→   315→    if (!file) return;
+   316→   316→    const fd = new FormData();
+   317→   317→    fd.append('file', file);
+   318→   318→    fd.append('title', file.name);
+   319→   319→    const result = await uploadResource(fd);
+   320→   320→    if (result) {
+   321→   321→      toast.success('Resource uploaded');
+   322→   322→      refetchResources();
+   323→   323→    } else {
+   324→   324→      toast.error('Upload failed');
+   325→   325→    }
+   326→   326→  };
+   327→   327→
+   328→   328→  const handleDeleteResource = async (resourceId: string) => {
+   329→   329→    const { apiDelete } = await import('@/lib/api-client');
+   330→   330→    try {
+   331→   331→      await apiDelete(`/courses/${courseId}/resources/${resourceId}`);
+   332→   332→      toast.success('Resource deleted');
+   333→   333→      refetchResources();
+   334→   334→    } catch {
+   335→   335→      toast.error('Failed to delete resource');
+   336→   336→    }
+   337→   337→  };
+   338→   338→
+   339→   339→  const resetLessonForm = () => {
+   340→   340→    setNewLessonTitle('');
+   341→   341→    setNewLessonType('video');
+   342→   342→    setNewLessonDuration('');
+   343→   343→    setNewLessonIsPreview(false);
+   344→   344→    setVideoFile(null);
+   345→   345→    setVideoThumbnail(null);
+   346→   346→    setCcFile(null);
+   347→   347→    setShowNewLesson(null);
+   348→   348→  };
+   349→   349→
+   350→   350→  if (curriculumLoading || courseLoading) {
+   351→   351→    return <LoadingSkeleton type="card" count={3} />;
+   352→   352→  }
+   353→   353→
+   354→   354→  const subjects = courseSubjects.length > 0 ? courseSubjects : (curriculum.subjects || []);
+   355→   355→
+   356→   356→  return (
+   357→   357→    <div className="space-y-6">
+   358→   358→      {/* Header */}
+   359→   359→      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+   360→   360→        <div className="flex items-center justify-between gap-4">
+   361→   361→          <div>
+   362→   362→            <h1 className="text-2xl md:text-3xl font-extrabold text-foreground">
+   363→   363→              Course <span className="gradient-text">Curriculum</span>
+   364→   364→            </h1>
+   365→   365→            <p className="text-muted-foreground mt-1 text-sm">
+   366→   366→              {course?.title || 'Manage curriculum structure'}
+   367→   367→            </p>
+   368→   368→          </div>
+   369→   369→          <GradientButton size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => setShowAddSubject(true)}>
+   370→   370→            Add Subject
+   371→   371→          </GradientButton>
+   372→   372→        </div>
+   373→   373→      </motion.div>
+   374→   374→
+   375→   375→      {/* Course Subjects & Chapters */}
+   376→   376→      {subjects.length === 0 ? (
+   377→   377→        <EmptyState
+   378→   378→          icon={FolderOpen}
+   379→   379→          title="No subjects yet"
+   380→   380→          description="Add subjects to organize your course content by topics"
+   381→   381→          actionLabel="Add Subject"
+   382→   382→          onAction={() => setShowAddSubject(true)}
+   383→   383→        />
+   384→   384→      ) : (
+   385→   385→        <div className="space-y-4">
+   386→   386→          {subjects.map((subject: any, si: number) => {
+   387→   387→            const subjectChapters = chaptersBySubject.get(getSubjectId(subject)) || [];
+   388→   388→            return (
+   389→   389→              <motion.div key={getSubjectId(subject) || si} {...staggerChildren(si, 0.04)}>
+   390→   390→                <GlassCard className="overflow-hidden" glow>
+   391→   391→                  {/* Subject Header */}
+   392→   392→                  <div className="p-4 md:p-5 border-b border-black/[0.03] dark:border-white/[0.03] flex items-center justify-between">
+   393→   393→                    <div className="flex items-center gap-3">
+   394→   394→                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white flex items-center justify-center flex-shrink-0 shadow-[0_2px_8px_rgba(0,0,0,0.1)]">
+   395→   395→                        <BookOpen className="w-5 h-5 text-white dark:text-neutral-900" />
+   396→   396→                      </div>
+   397→   397→                      <div>
+   398→   398→                        <h3 className="font-bold text-foreground">{getSubjectName(subject)}</h3>
+   399→   399→                        <p className="text-xs text-muted-foreground">{subjectChapters.length} chapters</p>
+   400→   400→                      </div>
+   401→   401→                    </div>
+   402→   402→                    <div className="flex items-center gap-2">
+   403→   403→                      <GradientButton size="sm" variant="ghost" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => { setShowNewChapter(String(getSubjectId(subject))); setNewChapterTitle(''); setNewChapterDesc(''); }}>
+   404→   404→                        Chapter
+   405→   405→                      </GradientButton>
+   406→   406→                      <button
+   407→   407→                        onClick={() => handleRemoveSubject(getSubjectId(subject))}
+   408→   408→                        className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+   409→   409→                      >
+   410→   410→                        <Trash2 className="w-3.5 h-3.5" />
+   411→   411→                      </button>
+   412→   412→                    </div>
+   413→   413→                  </div>
+   414→   414→
+   415→   415→                  {/* New Chapter Form */}
+   416→   416→                  <AnimatePresence>
+   417→   417→                    {showNewChapter === String(getSubjectId(subject)) && (
+   418→   418→                      <motion.div
+   419→   419→                        initial={{ height: 0, opacity: 0 }}
+   420→   420→                        animate={{ height: 'auto', opacity: 1 }}
+   421→   421→                        exit={{ height: 0, opacity: 0 }}
+   422→   422→                        className="overflow-hidden border-b border-black/[0.03] dark:border-white/[0.03]"
+   423→   423→                      >
+   424→   424→                        <div className="p-4 space-y-3 bg-black/[0.01] dark:bg-white/[0.01]">
+   425→   425→                          <input
+   426→   426→                            type="text"
+   427→   427→                            value={newChapterTitle}
+   428→   428→                            onChange={(e) => setNewChapterTitle(e.target.value)}
+   429→   429→                            placeholder="Chapter title"
+   430→   430→                            className="w-full px-3 py-2 rounded-lg text-sm premium-input placeholder:text-muted-foreground/60"
+   431→   431→                            autoFocus
+   432→   432→                          />
+   433→   433→                          <input
+   434→   434→                            type="text"
+   435→   435→                            value={newChapterDesc}
+   436→   436→                            onChange={(e) => setNewChapterDesc(e.target.value)}
+   437→   437→                            placeholder="Chapter description (optional)"
+   438→   438→                            className="w-full px-3 py-2 rounded-lg text-sm premium-input placeholder:text-muted-foreground/60"
+   439→   439→                          />
+   440→   440→                          <div className="flex gap-2">
+   441→   441→                            <GradientButton size="sm" loading={creatingChapter} onClick={() => handleCreateChapter(getSubjectId(subject))} icon={<Plus className="w-3.5 h-3.5" />}>
+   442→   442→                              Add
+   443→   443→                            </GradientButton>
+   444→   444→                            <GradientButton size="sm" variant="ghost" onClick={() => setShowNewChapter(null)}>Cancel</GradientButton>
+   445→   445→                          </div>
+   446→   446→                        </div>
+   447→   447→                      </motion.div>
+   448→   448→                    )}
+   449→   449→                  </AnimatePresence>
+   450→   450→
+   451→   451→                  {/* Chapters */}
+   452→   452→                  <div className="divide-y divide-black/[0.03] dark:divide-white/[0.03]">
+   453→   453→                    {subjectChapters.map((chapter: any, ci: number) => {
+   454→   454→                      const chapterLessons = getLessonsForChapter(chapter.id);
+   455→   455→                      return (
+   456→   456→                        <ChapterSection
+   457→   457→                          key={chapter.id}
+   458→   458→                          chapter={chapter}
+   459→   459→                          lessons={chapterLessons}
+   460→   460→                          courseId={courseId}
+   461→   461→                          onDeleteChapter={handleDeleteChapter}
+   462→   462→                          onUpdateChapter={handleUpdateChapter}
+   463→   463→                          onDeleteLesson={handleDeleteLesson}
+   464→   464→                          onCreateLesson={handleCreateLesson}
+   465→   465→                          editingChapter={editingChapter}
+   466→   466→                          setEditingChapter={setEditingChapter}
+   467→   467→                          editChapterTitle={editChapterTitle}
+   468→   468→                          setEditChapterTitle={setEditChapterTitle}
+   469→   469→                          showNewLesson={showNewLesson}
+   470→   470→                          setShowNewLesson={setShowNewLesson}
+   471→   471→                          newLessonTitle={newLessonTitle}
+   472→   472→                          setNewLessonTitle={setNewLessonTitle}
+   473→   473→                          newLessonType={newLessonType}
+   474→   474→                          setNewLessonType={setNewLessonType}
+   475→   475→                          newLessonDuration={newLessonDuration}
+   476→   476→                          setNewLessonDuration={setNewLessonDuration}
+   477→   477→                          newLessonIsPreview={newLessonIsPreview}
+   478→   478→                          setNewLessonIsPreview={setNewLessonIsPreview}
+   479→   479→                          videoFile={videoFile}
+   480→   480→                          handleVideoFileChange={handleVideoFileChange}
+   481→   481→                          videoThumbnail={videoThumbnail}
+   482→   482→                          setVideoThumbnail={setVideoThumbnail}
+   483→   483→                          ccFile={ccFile}
+   484→   484→                          setCcFile={setCcFile}
+   485→   485→                          creatingLesson={creatingLesson}
+   486→   486→                          uploadingVideo={uploadingVideo}
+   487→   487→                          videoUploadProgress={videoUploadProgress}
+   488→   488→                          resetLessonForm={resetLessonForm}
+   489→   489→                          subjectId={getSubjectId(subject)}
+   490→   490→                          editChapterDesc={editChapterDesc}
+   491→   491→                          setEditChapterDesc={setEditChapterDesc}
+   492→   492→                        />
+   493→   493→                      );
+   494→   494→                    })}
+   495→   495→                  </div>
+   496→   496→                </GlassCard>
+   497→   497→              </motion.div>
+   498→   498→            );
+   499→   499→          })}
+   500→   500→        </div>
+   501→   501→      )}
+   502→   502→
+   503→   503→      {/* Resources Section */}
+   504→   504→      <motion.div {...staggerChildren(subjects.length, 0.04)}>
+   505→   505→        <GlassCard className="p-5" glow>
+   506→   506→          <div className="flex items-center justify-between mb-4">
+   507→   507→            <div className="flex items-center gap-3">
+   508→   508→              <div className="w-1 h-6 rounded-full bg-gradient-to-b from-neutral-900 to-neutral-600 dark:from-white dark:to-neutral-400" />
+   509→   509→              <h2 className="text-lg font-bold gradient-text">Resources</h2>
+   510→   510→            </div>
+   511→   511→            <label className="cursor-pointer">
+   512→   512→              <GradientButton size="sm" icon={<Upload className="w-3.5 h-3.5" />} loading={uploadingResource}>
+   513→   513→                Upload
+   514→   514→              </GradientButton>
+   515→   515→              <input type="file" className="hidden" accept=".pdf,.zip,.doc,.docx,.ppt,.pptx" onChange={handleUploadResource} />
+   516→   516→            </label>
+   517→   517→          </div>
+   518→   518→
+   519→   519→          {/* Upload Progress */}
+   520→   520→          {uploadingResource && (
+   521→   521→            <div className="mb-4">
+   522→   522→              <div className="h-2 rounded-full bg-black/[0.04] dark:bg-white/[0.04] overflow-hidden">
+   523→   523→                <motion.div
+   524→   524→                  className="h-full bg-gradient-to-r from-neutral-900 to-neutral-700 dark:from-white dark:to-neutral-400 rounded-full"
+   525→   525→                  initial={{ width: 0 }}
+   526→   526→                  animate={{ width: `${resourceUploadProgress}%` }}
+   527→   527→                  transition={{ duration: 0.3 }}
+   528→   528→                />
+   529→   529→              </div>
+   530→   530→              <p className="text-xs text-muted-foreground mt-1">Uploading... {resourceUploadProgress}%</p>
+   531→   531→            </div>
+   532→   532→          )}
+   533→   533→
+   534→   534→          {resources.length === 0 ? (
+   535→   535→            <p className="text-sm text-muted-foreground text-center py-6">No resources uploaded yet</p>
+   536→   536→          ) : (
+   537→   537→            <div className="space-y-2">
+   538→   538→              {resources.map((resource: any, i: number) => (
+   539→   539→                <motion.div
+   540→   540→                  key={resource.id || i}
+   541→   541→                  initial={{ opacity: 0, x: -10 }}
+   542→   542→                  animate={{ opacity: 1, x: 0 }}
+   543→   543→                  transition={{ delay: i * 0.03 }}
+   544→   544→                  className="flex items-center gap-3 p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.03] dark:border-white/[0.03]"
+   545→   545→                >
+   546→   546→                  <FileText className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+   547→   547→                  <div className="flex-1 min-w-0">
+   548→   548→                    <p className="text-sm font-semibold text-foreground truncate">{resource.title || resource.name}</p>
+   549→   549→                    <p className="text-xs text-muted-foreground">{resource.type || 'File'} {resource.size ? `• ${(resource.size / 1024).toFixed(1)}KB` : ''}</p>
+   550→   550→                  </div>
+   551→   551→                  <button
+   552→   552→                    onClick={() => handleDeleteResource(resource.id)}
+   553→   553→                    className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors"
+   554→   554→                  >
+   555→   555→                    <Trash2 className="w-3.5 h-3.5" />
+   556→   556→                  </button>
+   557→   557→                </motion.div>
+   558→   558→              ))}
+   559→   559→            </div>
+   560→   560→          )}
+   561→   561→        </GlassCard>
+   562→   562→      </motion.div>
+   563→   563→
+   564→   564→      {/* Add Subject Dialog */}
+   565→   565→      <AnimatePresence>
+   566→   566→        {showAddSubject && (
+   567→   567→          <motion.div
+   568→   568→            initial={{ opacity: 0 }}
+   569→   569→            animate={{ opacity: 1 }}
+   570→   570→            exit={{ opacity: 0 }}
+   571→   571→            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+   572→   572→            onClick={() => { setShowAddSubject(false); setSelectedTechs(new Set()); setSelectedSemesters(new Set()); setSubjectSearchQuery(''); }}
+   573→   573→          >
+   574→   574→            <motion.div
+   575→   575→              initial={{ scale: 0.95, y: 20 }}
+   576→   576→              animate={{ scale: 1, y: 0 }}
+   577→   577→              exit={{ scale: 0.95, y: 20 }}
+   578→   578→              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+   579→   579→              onClick={(e) => e.stopPropagation()}
+   580→   580→              className="w-full max-w-lg max-h-[85vh] flex flex-col"
+   581→   581→            >
+   582→   582→              <GlassCard className="p-6 overflow-hidden flex flex-col">
+   583→   583→                <div className="flex items-center justify-between mb-5">
+   584→   584→                  <h3 className="text-lg font-bold gradient-text">Add Subject</h3>
+   585→   585→                  <button onClick={() => { setShowAddSubject(false); setSelectedTechs(new Set()); setSelectedSemesters(new Set()); setSubjectSearchQuery(''); }} className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center"><X className="w-4 h-4" /></button>
+   586→   586→                </div>
+   587→   587→
+   588→   588→                <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-1 custom-scrollbar">
+   589→   589→                  {/* Search */}
+   590→   590→                  <div className="relative">
+   591→   591→                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+   592→   592→                    <input
+   593→   593→                      type="text"
+   594→   594→                      value={subjectSearchQuery}
+   595→   595→                      onChange={(e) => setSubjectSearchQuery(e.target.value)}
+   596→   596→                      placeholder="Search subjects..."
+   597→   597→                      className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm premium-input placeholder:text-muted-foreground/60"
+   598→   598→                    />
+   599→   599→                  </div>
+   600→   600→
+   601→   601→                  {/* Technology Checkboxes */}
+   602→   602→                  <div>
+   603→   603→                    <label className="text-sm font-semibold text-foreground block mb-2">Technologies</label>
+   604→   604→                    <div className="flex flex-wrap gap-2">
+   605→   605→                      {technologies.map((tech: any) => {
+   606→   606→                        const isSelected = selectedTechs.has(tech.id);
+   607→   607→                        return (
+   608→   608→                          <button
+   609→   609→                            key={tech.id}
+   610→   610→                            onClick={() => {
+   611→   611→                              const next = new Set(selectedTechs);
+   612→   612→                              if (isSelected) next.delete(tech.id); else next.add(tech.id);
+   613→   613→                              setSelectedTechs(next);
+   614→   614→                              // Clear semesters that no longer apply
+   615→   615→                              const validSems = new Set<string>();
+   616→   616→                              allAvailableSubjects.forEach((s: any) => {
+   617→   617→                                const tid = getSubjectTechId(s);
+   618→   618→                                if (next.has(tid) || next.size === 0) {
+   619→   619→                                  const sem = getSubjectSemester(s);
+   620→   620→                                  if (sem) validSems.add(sem);
+   621→   621→                                }
+   622→   622→                              });
+   623→   623→                              const kept = new Set([...selectedSemesters].filter(s => validSems.has(s)));
+   624→   624→                              setSelectedSemesters(kept);
+   625→   625→                            }}
+   626→   626→                            className={cn(
+   627→   627→                              'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+   628→   628→                              isSelected
+   629→   629→                                ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900 dark:border-white'
+   630→   630→                                : 'bg-transparent text-muted-foreground border-black/[0.08] dark:border-white/[0.08] hover:border-black/20 dark:hover:border-white/20'
+   631→   631→                            )}
+   632→   632→                          >
+   633→   633→                            {tech.name || tech.shortCode}
+   634→   634→                          </button>
+   635→   635→                        );
+   636→   636→                      })}
+   637→   637→                      {technologies.length === 0 && (
+   638→   638→                        <p className="text-xs text-muted-foreground">No technologies available</p>
+   639→   639→                      )}
+   640→   640→                    </div>
+   641→   641→                  </div>
+   642→   642→
+   643→   643→                  {/* Semester Checkboxes */}
+   644→   644→                  {availableSemesters.length > 0 && (
+   645→   645→                    <div>
+   646→   646→                      <label className="text-sm font-semibold text-foreground block mb-2">Semesters</label>
+   647→   647→                      <div className="flex flex-wrap gap-2">
+   648→   648→                        {availableSemesters.map((sem) => {
+   649→   649→                          const isSelected = selectedSemesters.has(sem);
+   650→   650→                          return (
+   651→   651→                            <button
+   652→   652→                              key={sem}
+   653→   653→                              onClick={() => {
+   654→   654→                                const next = new Set(selectedSemesters);
+   655→   655→                                if (isSelected) next.delete(sem); else next.add(sem);
+   656→   656→                                setSelectedSemesters(next);
+   657→   657→                              }}
+   658→   658→                              className={cn(
+   659→   659→                                'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+   660→   660→                                isSelected
+   661→   661→                                  ? 'bg-neutral-800 text-white border-neutral-800 dark:bg-neutral-200 dark:text-neutral-900 dark:border-neutral-200'
+   662→   662→                                  : 'bg-transparent text-muted-foreground border-black/[0.08] dark:border-white/[0.08] hover:border-black/20 dark:hover:border-white/20'
+   663→   663→                              )}
+   664→   664→                            >
+   665→   665→                              Sem {sem}
+   666→   666→                            </button>
+   667→   667→                          );
+   668→   668→                        })}
+   669→   669→                      </div>
+   670→   670→                    </div>
+   671→   671→                  )}
+   672→   672→
+   673→   673→                  {/* Subject List */}
+   674→   674→                  <div>
+   675→   675→                    <label className="text-sm font-semibold text-foreground block mb-2">
+   676→   676→                      Available Subjects
+   677→   677→                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+   678→   678→                        {filteredAvailableSubjects.length} found
+   679→   679→                      </span>
+   680→   680→                    </label>
+   681→   681→                    <div className="max-h-52 overflow-y-auto space-y-1 custom-scrollbar">
+   682→   682→                      {filteredAvailableSubjects.map((subject: any) => {
+   683→   683→                        const techId = getSubjectTechId(subject);
+   684→   684→                        const tech = technologies.find((t: any) => t.id === techId);
+   685→   685→                        const sem = getSubjectSemester(subject);
+   686→   686→                        return (
+   687→   687→                          <button
+   688→   688→                            key={getSubjectId(subject)}
+   689→   689→                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-left text-foreground hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors group"
+   690→   690→                            onClick={() => handleAddSubject(getSubjectId(subject))}
+   691→   691→                          >
+   692→   692→                            <Plus className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+   693→   693→                            <span className="flex-1 truncate">{getSubjectName(subject)}</span>
+   694→   694→                            <div className="flex items-center gap-1.5 shrink-0">
+   695→   695→                              {tech && (
+   696→   696→                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.06] text-muted-foreground font-semibold">
+   697→   697→                                  {tech.shortCode || tech.name}
+   698→   698→                                </span>
+   699→   699→                              )}
+   700→   700→                              {sem && (
+   701→   701→                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.06] text-muted-foreground font-semibold">
+   702→   702→                                  Sem {sem}
+   703→   703→                                </span>
+   704→   704→                              )}
+   705→   705→                            </div>
+   706→   706→                          </button>
+   707→   707→                        );
+   708→   708→                      })}
+   709→   709→                      {filteredAvailableSubjects.length === 0 && (
+   710→   710→                        <p className="text-sm text-muted-foreground text-center py-4">
+   711→   711→                          {selectedTechs.size === 0 && selectedSemesters.size === 0 && !subjectSearchQuery
+   712→   712→                            ? 'Select technologies or search to see subjects'
+   713→   713→                            : 'No matching subjects found'}
+   714→   714→                        </p>
+   715→   715→                      )}
+   716→   716→                    </div>
+   717→   717→                  </div>
+   718→   718→                </div>
+   719→   719→              </GlassCard>
+   720→   720→            </motion.div>
+   721→   721→          </motion.div>
+   722→   722→        )}
+   723→   723→      </AnimatePresence>
+   724→   724→    </div>
+   725→   725→  );
+   726→   726→}
+   727→   727→
+   728→   728→// Chapter Section Component
+   729→   729→function ChapterSection({
+   730→   730→  chapter,
+   731→   731→  lessons,
+   732→   732→  courseId,
+   733→   733→  onDeleteChapter,
+   734→   734→  onUpdateChapter,
+   735→   735→  onDeleteLesson,
+   736→   736→  onCreateLesson,
+   737→   737→  editingChapter,
+   738→   738→  setEditingChapter,
+   739→   739→  editChapterTitle,
+   740→   740→  setEditChapterTitle,
+   741→   741→  editChapterDesc,
+   742→   742→  setEditChapterDesc,
+   743→   743→  showNewLesson,
+   744→   744→  setShowNewLesson,
+   745→   745→  newLessonTitle,
+   746→   746→  setNewLessonTitle,
+   747→   747→  newLessonType,
+   748→   748→  setNewLessonType,
+   749→   749→  newLessonDuration,
+   750→   750→  setNewLessonDuration,
+   751→   751→  newLessonIsPreview,
+   752→   752→  setNewLessonIsPreview,
+   753→   753→  videoFile,
+   754→   754→  handleVideoFileChange,
+   755→   755→  videoThumbnail,
+   756→   756→  setVideoThumbnail,
+   757→   757→  ccFile,
+   758→   758→  setCcFile,
+   759→   759→  creatingLesson,
+   760→   760→  uploadingVideo,
+   761→   761→  videoUploadProgress,
+   762→   762→  resetLessonForm,
+   763→   763→  subjectId,
+   764→   764→}: any) {
+   765→   765→  const [expanded, setExpanded] = useState(true);
+   766→   766→  const [confirmDelete, setConfirmDelete] = useState(false);
+   767→   767→
+   768→   768→  const chapterDesc = chapter.description || chapter.desc || '';
+   769→   769→
+   770→   770→  return (
+   771→   771→    <div>
+   772→   772→      {/* Chapter Header */}
+   773→   773→      <div
+   774→   774→        className="flex items-center gap-3 px-4 md:px-5 py-3 cursor-pointer hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors"
+   775→   775→        onClick={() => setExpanded(!expanded)}
+   776→   776→      >
+   777→   777→        <motion.div animate={{ rotate: expanded ? 0 : -90 }} transition={{ duration: 0.2 }}>
+   778→   778→          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+   779→   779→        </motion.div>
+   780→   780→        <GripVertical className="w-4 h-4 text-muted-foreground/30" />
+   781→   781→        <div className="flex-1 min-w-0">
+   782→   782→          {editingChapter === chapter.id ? (
+   783→   783→            <div className="space-y-2" onClick={(e: any) => e.stopPropagation()}>
+   784→   784→              <div className="flex items-center gap-2">
+   785→   785→                <input
+   786→   786→                  type="text"
+   787→   787→                  value={editChapterTitle}
+   788→   788→                  onChange={(e) => setEditChapterTitle(e.target.value)}
+   789→   789→                  className="flex-1 px-2 py-1 rounded-lg text-sm premium-input"
+   790→   790→                  placeholder="Chapter title"
+   791→   791→                  autoFocus
+   792→   792→                />
+   793→   793→                <button onClick={() => onUpdateChapter(chapter.id)} className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center"><Check className="w-3.5 h-3.5" /></button>
+   794→   794→                <button onClick={() => setEditingChapter(null)} className="w-7 h-7 rounded-lg bg-muted/50 flex items-center justify-center"><X className="w-3.5 h-3.5" /></button>
+   795→   795→              </div>
+   796→   796→              <input
+   797→   797→                type="text"
+   798→   798→                value={editChapterDesc}
+   799→   799→                onChange={(e) => setEditChapterDesc(e.target.value)}
+   800→   800→                className="w-full px-2 py-1 rounded-lg text-sm premium-input"
+   801→   801→                placeholder="Chapter description (optional)"
+   802→   802→              />
+   803→   803→            </div>
+   804→   804→          ) : (
+   805→   805→            <>
+   806→   806→              <p className="text-sm font-semibold text-foreground truncate">{chapter.title}</p>
+   807→   807→              <p className="text-xs text-muted-foreground">
+   808→   808→                {lessons.length} lessons
+   809→   809→                {chapterDesc ? ` · ${chapterDesc}` : ''}
+   810→   810→              </p>
+   811→   811→            </>
+   812→   812→          )}
+   813→   813→        </div>
+   814→   814→        {!editingChapter && (
+   815→   815→          <div className="flex items-center gap-1" onClick={(e: any) => e.stopPropagation()}>
+   816→   816→            <button
+   817→   817→              onClick={() => { setEditingChapter(chapter.id); setEditChapterTitle(chapter.title); setEditChapterDesc(chapterDesc); }}
+   818→   818→              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+   819→   819→            >
+   820→   820→              <Edit3 className="w-3.5 h-3.5" />
+   821→   821→            </button>
+   822→   822→            {confirmDelete ? (
+   823→   823→              <div className="flex items-center gap-1">
+   824→   824→                <button
+   825→   825→                  onClick={() => { onDeleteChapter(chapter.id); setConfirmDelete(false); }}
+   826→   826→                  className="h-7 px-2 rounded-lg bg-red-100 text-red-700 text-[10px] font-bold flex items-center gap-1 dark:bg-red-900/30 dark:text-red-400"
+   827→   827→                >
+   828→   828→                  <AlertTriangle className="w-3 h-3" />Delete
+   829→   829→                </button>
+   830→   830→                <button
+   831→   831→                  onClick={() => setConfirmDelete(false)}
+   832→   832→                  className="h-7 px-2 rounded-lg bg-muted/50 text-muted-foreground text-[10px] font-bold"
+   833→   833→                >
+   834→   834→                  Keep
+   835→   835→                </button>
+   836→   836→              </div>
+   837→   837→            ) : (
+   838→   838→              <button
+   839→   839→                onClick={() => setConfirmDelete(true)}
+   840→   840→                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors"
+   841→   841→              >
+   842→   842→                <Trash2 className="w-3.5 h-3.5" />
+   843→   843→              </button>
+   844→   844→            )}
+   845→   845→          </div>
+   846→   846→        )}
+   847→   847→      </div>
+   848→   848→
+   849→   849→      {/* Chapter Content */}
+   850→   850→      <AnimatePresence>
+   851→   851→        {expanded && (
+   852→   852→          <motion.div
+   853→   853→            initial={{ height: 0, opacity: 0 }}
+   854→   854→            animate={{ height: 'auto', opacity: 1 }}
+   855→   855→            exit={{ height: 0, opacity: 0 }}
+   856→   856→            transition={{ duration: 0.2 }}
+   857→   857→            className="overflow-hidden"
+   858→   858→          >
+   859→   859→            <div className="pl-8 md:pl-12 pr-4 md:pr-5 pb-3 space-y-1">
+   860→   860→              {/* Lessons */}
+   861→   861→              {lessons.map((lesson: any, li: number) => (
+   862→   862→                <div
+   863→   863→                  key={lesson.id || li}
+   864→   864→                  className="flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors group"
+   865→   865→                >
+   866→   866→                  <GripVertical className="w-3.5 h-3.5 text-muted-foreground/20" />
+   867→   867→                  {lesson.lessonType === 'video' || lesson.lessonType === 'video' ? (
+   868→   868→                    <Video className="w-4 h-4 text-muted-foreground/60" />
+   869→   869→                  ) : lesson.lessonType === 'link' ? (
+   870→   870→                    <LinkIcon className="w-4 h-4 text-muted-foreground/60" />
+   871→   871→                  ) : (
+   872→   872→                    <FileText className="w-4 h-4 text-muted-foreground/60" />
+   873→   873→                  )}
+   874→   874→                  <span className="flex-1 text-sm text-foreground truncate">{lesson.title}</span>
+   875→   875→                  {lesson.duration > 0 && (
+   876→   876→                    <span className="text-[10px] text-muted-foreground">{formatDurationShort(lesson.duration)}</span>
+   877→   877→                  )}
+   878→   878→                  {lesson.isPreview && (
+   879→   879→                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 flex items-center gap-0.5">
+   880→   880→                      <Eye className="w-3 h-3" />Preview
+   881→   881→                    </span>
+   882→   882→                  )}
+   883→   883→                  <button
+   884→   884→                    onClick={() => onDeleteLesson(lesson.id)}
+   885→   885→                    className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+   886→   886→                  >
+   887→   887→                    <Trash2 className="w-3 h-3" />
+   888→   888→                  </button>
+   889→   889→                </div>
+   890→   890→              ))}
+   891→   891→
+   892→   892→              {/* Add Lesson Button */}
+   893→   893→              <div className="pt-1">
+   894→   894→                {showNewLesson === chapter.id ? (
+   895→   895→                  <motion.div
+   896→   896→                    initial={{ opacity: 0, y: -5 }}
+   897→   897→                    animate={{ opacity: 1, y: 0 }}
+   898→   898→                    className="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.03] dark:border-white/[0.03] space-y-3"
+   899→   899→                  >
+   900→   900→                    <input
+   901→   901→                      type="text"
+   902→   902→                      value={newLessonTitle}
+   903→   903→                      onChange={(e) => setNewLessonTitle(e.target.value)}
+   904→   904→                      placeholder="Lesson title"
+   905→   905→                      className="w-full px-3 py-2 rounded-lg text-sm premium-input placeholder:text-muted-foreground/60"
+   906→   906→                      autoFocus
+   907→   907→                    />
+   908→   908→
+   909→   909→                    {/* Lesson Type + Duration */}
+   910→   910→                    <div className="grid grid-cols-2 gap-2">
+   911→   911→                      <select
+   912→   912→                        value={newLessonType}
+   913→   913→                        onChange={(e) => setNewLessonType(e.target.value)}
+   914→   914→                        className="px-3 py-2 rounded-lg text-sm premium-input"
+   915→   915→                      >
+   916→   916→                        <option value="video">Video</option>
+   917→   917→                        <option value="link">Link</option>
+   918→   918→                        <option value="youtube">YouTube</option>
+   919→   919→                        <option value="document">Document</option>
+   920→   920→                      </select>
+   921→   921→                      <input
+   922→   922→                        type="text"
+   923→   923→                        value={newLessonDuration}
+   924→   924→                        onChange={(e) => setNewLessonDuration(e.target.value)}
+   925→   925→                        placeholder="Duration (mm:ss)"
+   926→   926→                        className="px-3 py-2 rounded-lg text-sm premium-input placeholder:text-muted-foreground/60"
+   927→   927→                      />
+   928→   928→                    </div>
+   929→   929→
+   930→   930→                    {/* Video Upload */}
+   931→   931→                    {(newLessonType === 'video') && (
+   932→   932→                      <div className="space-y-2">
+   933→   933→                        <label className="block">
+   934→   934→                          <div className="border-2 border-dashed border-black/[0.06] dark:border-white/[0.04] rounded-xl p-4 text-center cursor-pointer hover:border-black/10 dark:hover:border-white/10 transition-colors">
+   935→   935→                            <Upload className="w-5 h-5 text-muted-foreground mx-auto mb-1" />
+   936→   936→                            <p className="text-xs text-muted-foreground">{videoFile ? videoFile.name : 'Click to upload video'}</p>
+   937→   937→                            <p className="text-[10px] text-muted-foreground/60 mt-0.5">Auto-detects duration</p>
+   938→   938→                          </div>
+   939→   939→                          <input type="file" accept="video/*" className="hidden" onChange={handleVideoFileChange} />
+   940→   940→                        </label>
+   941→   941→
+   942→   942→                        {/* Thumbnail + CC */}
+   943→   943→                        <div className="grid grid-cols-2 gap-2">
+   944→   944→                          <label className="block">
+   945→   945→                            <div className="border border-dashed border-black/[0.04] dark:border-white/[0.04] rounded-lg p-2 text-center cursor-pointer hover:border-black/10 transition-colors">
+   946→   946→                              <p className="text-[10px] text-muted-foreground">{videoThumbnail ? videoThumbnail.name : 'Thumbnail'}</p>
+   947→   947→                            </div>
+   948→   948→                            <input type="file" accept="image/*" className="hidden" onChange={(e) => setVideoThumbnail(e.target.files?.[0] || null)} />
+   949→   949→                          </label>
+   950→   950→                          <label className="block">
+   951→   951→                            <div className="border border-dashed border-black/[0.04] dark:border-white/[0.04] rounded-lg p-2 text-center cursor-pointer hover:border-black/10 transition-colors">
+   952→   952→                              <p className="text-[10px] text-muted-foreground">{ccFile ? ccFile.name : 'Subtitle (.vtt/.srt)'}</p>
+   953→   953→                            </div>
+   954→   954→                            <input type="file" accept=".vtt,.srt" className="hidden" onChange={(e) => setCcFile(e.target.files?.[0] || null)} />
+   955→   955→                          </label>
+   956→   956→                        </div>
+   957→   957→
+   958→   958→                        {/* Upload Progress */}
+   959→   959→                        {uploadingVideo && (
+   960→   960→                          <div>
+   961→   961→                            <div className="h-2 rounded-full bg-black/[0.04] dark:bg-white/[0.04] overflow-hidden">
+   962→   962→                              <motion.div
+   963→   963→                                className="h-full bg-gradient-to-r from-neutral-900 to-neutral-700 dark:from-white dark:to-neutral-400 rounded-full"
+   964→   964→                                initial={{ width: 0 }}
+   965→   965→                                animate={{ width: `${videoUploadProgress}%` }}
+   966→   966→                              />
+   967→   967→                            </div>
+   968→   968→                            <p className="text-xs text-muted-foreground mt-1">Uploading... {videoUploadProgress}%</p>
+   969→   969→                          </div>
+   970→   970→                        )}
+   971→   971→                      </div>
+   972→   972→                    )}
+   973→   973→
+   974→   974→                    {/* Preview toggle */}
+   975→   975→                    <div className="flex items-center justify-between">
+   976→   976→                      <span className="text-sm text-foreground">Free Preview</span>
+   977→   977→                      <button
+   978→   978→                        onClick={() => setNewLessonIsPreview(!newLessonIsPreview)}
+   979→   979→                        className={cn(
+   980→   980→                          'w-10 h-5 rounded-full transition-colors relative',
+   981→   981→                          newLessonIsPreview
+   982→   982→                            ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white'
+   983→   983→                            : 'bg-muted/60'
+   984→   984→                        )}
+   985→   985→                      >
+   986→   986→                        <motion.div
+   987→   987→                          className="w-4 h-4 bg-white dark:bg-black rounded-full shadow-sm absolute top-0.5"
+   988→   988→                          animate={{ left: newLessonIsPreview ? '20px' : '2px' }}
+   989→   989→                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+   990→   990→                        />
+   991→   991→                      </button>
+   992→   992→                    </div>
+   993→   993→
+   994→   994→                    <div className="flex gap-2">
+   995→   995→                      <GradientButton size="sm" loading={creatingLesson || uploadingVideo} onClick={() => onCreateLesson(chapter.id, subjectId)} icon={<Plus className="w-3.5 h-3.5" />}>
+   996→   996→                        Add Lesson
+   997→   997→                      </GradientButton>
+   998→   998→                      <GradientButton size="sm" variant="ghost" onClick={resetLessonForm}>Cancel</GradientButton>
+   999→   999→                    </div>
+  1000→  1000→                  </motion.div>
+  1001→  1001→                ) : (
+  1002→  1002→                  <button
+  1003→  1003→                    onClick={() => { setShowNewLesson(chapter.id); setNewLessonTitle(''); setNewLessonType('video'); setNewLessonDuration(''); setNewLessonIsPreview(false); setVideoFile(null); setVideoThumbnail(null); setCcFile(null); }}
+  1004→  1004→                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground font-medium py-1 px-2 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-all"
+  1005→  1005→                  >
+  1006→  1006→                    <Plus className="w-3.5 h-3.5" />
+  1007→  1007→                    Add Lesson
+  1008→  1008→                  </button>
+  1009→  1009→                )}
+  1010→  1010→              </div>
+  1011→  1011→            </div>
+  1012→  1012→          </motion.div>
+  1013→  1013→        )}
+  1014→  1014→      </AnimatePresence>
+  1015→  1015→    </div>
+  1016→  1016→  );
+  1017→  1017→}
+  1018→  1018→

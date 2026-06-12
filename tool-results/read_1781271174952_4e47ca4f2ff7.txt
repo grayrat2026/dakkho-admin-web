@@ -1,0 +1,519 @@
+   500→        </div>
+   501→      )}
+   502→
+   503→      {/* Resources Section */}
+   504→      <motion.div {...staggerChildren(subjects.length, 0.04)}>
+   505→        <GlassCard className="p-5" glow>
+   506→          <div className="flex items-center justify-between mb-4">
+   507→            <div className="flex items-center gap-3">
+   508→              <div className="w-1 h-6 rounded-full bg-gradient-to-b from-neutral-900 to-neutral-600 dark:from-white dark:to-neutral-400" />
+   509→              <h2 className="text-lg font-bold gradient-text">Resources</h2>
+   510→            </div>
+   511→            <label className="cursor-pointer">
+   512→              <GradientButton size="sm" icon={<Upload className="w-3.5 h-3.5" />} loading={uploadingResource}>
+   513→                Upload
+   514→              </GradientButton>
+   515→              <input type="file" className="hidden" accept=".pdf,.zip,.doc,.docx,.ppt,.pptx" onChange={handleUploadResource} />
+   516→            </label>
+   517→          </div>
+   518→
+   519→          {/* Upload Progress */}
+   520→          {uploadingResource && (
+   521→            <div className="mb-4">
+   522→              <div className="h-2 rounded-full bg-black/[0.04] dark:bg-white/[0.04] overflow-hidden">
+   523→                <motion.div
+   524→                  className="h-full bg-gradient-to-r from-neutral-900 to-neutral-700 dark:from-white dark:to-neutral-400 rounded-full"
+   525→                  initial={{ width: 0 }}
+   526→                  animate={{ width: `${resourceUploadProgress}%` }}
+   527→                  transition={{ duration: 0.3 }}
+   528→                />
+   529→              </div>
+   530→              <p className="text-xs text-muted-foreground mt-1">Uploading... {resourceUploadProgress}%</p>
+   531→            </div>
+   532→          )}
+   533→
+   534→          {resources.length === 0 ? (
+   535→            <p className="text-sm text-muted-foreground text-center py-6">No resources uploaded yet</p>
+   536→          ) : (
+   537→            <div className="space-y-2">
+   538→              {resources.map((resource: any, i: number) => (
+   539→                <motion.div
+   540→                  key={resource.id || i}
+   541→                  initial={{ opacity: 0, x: -10 }}
+   542→                  animate={{ opacity: 1, x: 0 }}
+   543→                  transition={{ delay: i * 0.03 }}
+   544→                  className="flex items-center gap-3 p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.03] dark:border-white/[0.03]"
+   545→                >
+   546→                  <FileText className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+   547→                  <div className="flex-1 min-w-0">
+   548→                    <p className="text-sm font-semibold text-foreground truncate">{resource.title || resource.name}</p>
+   549→                    <p className="text-xs text-muted-foreground">{resource.type || 'File'} {resource.size ? `• ${(resource.size / 1024).toFixed(1)}KB` : ''}</p>
+   550→                  </div>
+   551→                  <button
+   552→                    onClick={() => handleDeleteResource(resource.id)}
+   553→                    className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors"
+   554→                  >
+   555→                    <Trash2 className="w-3.5 h-3.5" />
+   556→                  </button>
+   557→                </motion.div>
+   558→              ))}
+   559→            </div>
+   560→          )}
+   561→        </GlassCard>
+   562→      </motion.div>
+   563→
+   564→      {/* Add Subject Dialog */}
+   565→      <AnimatePresence>
+   566→        {showAddSubject && (
+   567→          <motion.div
+   568→            initial={{ opacity: 0 }}
+   569→            animate={{ opacity: 1 }}
+   570→            exit={{ opacity: 0 }}
+   571→            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm overflow-y-auto"
+   572→            onClick={() => { setShowAddSubject(false); setSelectedTechs(new Set()); setSelectedSemesters(new Set()); setSubjectSearchQuery(''); }}
+   573→          >
+   574→            <motion.div
+   575→              initial={{ scale: 0.95, y: 20 }}
+   576→              animate={{ scale: 1, y: 0 }}
+   577→              exit={{ scale: 0.95, y: 20 }}
+   578→              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+   579→              onClick={(e) => e.stopPropagation()}
+   580→              className="w-full max-w-lg my-8"
+   581→            >
+   582→              <GlassCard className="p-6 max-h-[80vh] overflow-y-auto flex flex-col">
+   583→                <div className="flex items-center justify-between mb-5">
+   584→                  <h3 className="text-lg font-bold gradient-text">Add Subject</h3>
+   585→                  <button onClick={() => { setShowAddSubject(false); setSelectedTechs(new Set()); setSelectedSemesters(new Set()); setSubjectSearchQuery(''); }} className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center"><X className="w-4 h-4" /></button>
+   586→                </div>
+   587→
+   588→                <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-1 custom-scrollbar">
+   589→                  {/* Search */}
+   590→                  <div className="relative">
+   591→                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+   592→                    <input
+   593→                      type="text"
+   594→                      value={subjectSearchQuery}
+   595→                      onChange={(e) => setSubjectSearchQuery(e.target.value)}
+   596→                      placeholder="Search subjects..."
+   597→                      className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm premium-input placeholder:text-muted-foreground/60"
+   598→                    />
+   599→                  </div>
+   600→
+   601→                  {/* Technology Checkboxes */}
+   602→                  <div>
+   603→                    <label className="text-sm font-semibold text-foreground block mb-2">Technologies</label>
+   604→                    <div className="flex flex-wrap gap-2">
+   605→                      {technologies.map((tech: any) => {
+   606→                        const isSelected = selectedTechs.has(tech.id);
+   607→                        return (
+   608→                          <button
+   609→                            key={tech.id}
+   610→                            onClick={() => {
+   611→                              const next = new Set(selectedTechs);
+   612→                              if (isSelected) next.delete(tech.id); else next.add(tech.id);
+   613→                              setSelectedTechs(next);
+   614→                              // Clear semesters that no longer apply
+   615→                              const validSems = new Set<string>();
+   616→                              allAvailableSubjects.forEach((s: any) => {
+   617→                                const tid = getSubjectTechId(s);
+   618→                                if (next.has(tid) || next.size === 0) {
+   619→                                  const sem = getSubjectSemester(s);
+   620→                                  if (sem) validSems.add(sem);
+   621→                                }
+   622→                              });
+   623→                              const kept = new Set([...selectedSemesters].filter(s => validSems.has(s)));
+   624→                              setSelectedSemesters(kept);
+   625→                            }}
+   626→                            className={cn(
+   627→                              'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+   628→                              isSelected
+   629→                                ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900 dark:border-white'
+   630→                                : 'bg-transparent text-muted-foreground border-black/[0.08] dark:border-white/[0.08] hover:border-black/20 dark:hover:border-white/20'
+   631→                            )}
+   632→                          >
+   633→                            {tech.name || tech.shortCode}
+   634→                          </button>
+   635→                        );
+   636→                      })}
+   637→                      {technologies.length === 0 && (
+   638→                        <p className="text-xs text-muted-foreground">No technologies available</p>
+   639→                      )}
+   640→                    </div>
+   641→                  </div>
+   642→
+   643→                  {/* Semester Checkboxes */}
+   644→                  {availableSemesters.length > 0 && (
+   645→                    <div>
+   646→                      <label className="text-sm font-semibold text-foreground block mb-2">Semesters</label>
+   647→                      <div className="flex flex-wrap gap-2">
+   648→                        {availableSemesters.map((sem) => {
+   649→                          const isSelected = selectedSemesters.has(sem);
+   650→                          return (
+   651→                            <button
+   652→                              key={sem}
+   653→                              onClick={() => {
+   654→                                const next = new Set(selectedSemesters);
+   655→                                if (isSelected) next.delete(sem); else next.add(sem);
+   656→                                setSelectedSemesters(next);
+   657→                              }}
+   658→                              className={cn(
+   659→                                'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+   660→                                isSelected
+   661→                                  ? 'bg-neutral-800 text-white border-neutral-800 dark:bg-neutral-200 dark:text-neutral-900 dark:border-neutral-200'
+   662→                                  : 'bg-transparent text-muted-foreground border-black/[0.08] dark:border-white/[0.08] hover:border-black/20 dark:hover:border-white/20'
+   663→                              )}
+   664→                            >
+   665→                              Sem {sem}
+   666→                            </button>
+   667→                          );
+   668→                        })}
+   669→                      </div>
+   670→                    </div>
+   671→                  )}
+   672→
+   673→                  {/* Subject List */}
+   674→                  <div>
+   675→                    <label className="text-sm font-semibold text-foreground block mb-2">
+   676→                      Available Subjects
+   677→                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+   678→                        {filteredAvailableSubjects.length} found
+   679→                      </span>
+   680→                    </label>
+   681→                    <div className="max-h-52 overflow-y-auto space-y-1 custom-scrollbar">
+   682→                      {filteredAvailableSubjects.map((subject: any) => {
+   683→                        const techId = getSubjectTechId(subject);
+   684→                        const tech = technologies.find((t: any) => t.id === techId);
+   685→                        const sem = getSubjectSemester(subject);
+   686→                        return (
+   687→                          <button
+   688→                            key={getSubjectId(subject)}
+   689→                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-left text-foreground hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors group"
+   690→                            onClick={() => handleAddSubject(getSubjectId(subject))}
+   691→                          >
+   692→                            <Plus className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+   693→                            <span className="flex-1 truncate">{getSubjectName(subject)}</span>
+   694→                            <div className="flex items-center gap-1.5 shrink-0">
+   695→                              {tech && (
+   696→                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.06] text-muted-foreground font-semibold">
+   697→                                  {tech.shortCode || tech.name}
+   698→                                </span>
+   699→                              )}
+   700→                              {sem && (
+   701→                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.06] text-muted-foreground font-semibold">
+   702→                                  Sem {sem}
+   703→                                </span>
+   704→                              )}
+   705→                            </div>
+   706→                          </button>
+   707→                        );
+   708→                      })}
+   709→                      {filteredAvailableSubjects.length === 0 && (
+   710→                        <p className="text-sm text-muted-foreground text-center py-4">
+   711→                          {selectedTechs.size === 0 && selectedSemesters.size === 0 && !subjectSearchQuery
+   712→                            ? 'Select technologies or search to see subjects'
+   713→                            : 'No matching subjects found'}
+   714→                        </p>
+   715→                      )}
+   716→                    </div>
+   717→                  </div>
+   718→                </div>
+   719→              </GlassCard>
+   720→            </motion.div>
+   721→          </motion.div>
+   722→        )}
+   723→      </AnimatePresence>
+   724→    </div>
+   725→  );
+   726→}
+   727→
+   728→// Chapter Section Component
+   729→function ChapterSection({
+   730→  chapter,
+   731→  lessons,
+   732→  courseId,
+   733→  onDeleteChapter,
+   734→  onUpdateChapter,
+   735→  onDeleteLesson,
+   736→  onCreateLesson,
+   737→  editingChapter,
+   738→  setEditingChapter,
+   739→  editChapterTitle,
+   740→  setEditChapterTitle,
+   741→  editChapterDesc,
+   742→  setEditChapterDesc,
+   743→  showNewLesson,
+   744→  setShowNewLesson,
+   745→  newLessonTitle,
+   746→  setNewLessonTitle,
+   747→  newLessonType,
+   748→  setNewLessonType,
+   749→  newLessonDuration,
+   750→  setNewLessonDuration,
+   751→  newLessonIsPreview,
+   752→  setNewLessonIsPreview,
+   753→  videoFile,
+   754→  handleVideoFileChange,
+   755→  videoThumbnail,
+   756→  setVideoThumbnail,
+   757→  ccFile,
+   758→  setCcFile,
+   759→  creatingLesson,
+   760→  uploadingVideo,
+   761→  videoUploadProgress,
+   762→  resetLessonForm,
+   763→  subjectId,
+   764→}: any) {
+   765→  const [expanded, setExpanded] = useState(true);
+   766→  const [confirmDelete, setConfirmDelete] = useState(false);
+   767→
+   768→  const chapterDesc = chapter.description || chapter.desc || '';
+   769→
+   770→  return (
+   771→    <div>
+   772→      {/* Chapter Header */}
+   773→      <div
+   774→        className="flex items-center gap-3 px-4 md:px-5 py-3 cursor-pointer hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors"
+   775→        onClick={() => setExpanded(!expanded)}
+   776→      >
+   777→        <motion.div animate={{ rotate: expanded ? 0 : -90 }} transition={{ duration: 0.2 }}>
+   778→          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+   779→        </motion.div>
+   780→        <GripVertical className="w-4 h-4 text-muted-foreground/30" />
+   781→        <div className="flex-1 min-w-0">
+   782→          {editingChapter === chapter.id ? (
+   783→            <div className="space-y-2" onClick={(e: any) => e.stopPropagation()}>
+   784→              <div className="flex items-center gap-2">
+   785→                <input
+   786→                  type="text"
+   787→                  value={editChapterTitle}
+   788→                  onChange={(e) => setEditChapterTitle(e.target.value)}
+   789→                  className="flex-1 px-2 py-1 rounded-lg text-sm premium-input"
+   790→                  placeholder="Chapter title"
+   791→                  autoFocus
+   792→                />
+   793→                <button onClick={() => onUpdateChapter(chapter.id)} className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center"><Check className="w-3.5 h-3.5" /></button>
+   794→                <button onClick={() => setEditingChapter(null)} className="w-7 h-7 rounded-lg bg-muted/50 flex items-center justify-center"><X className="w-3.5 h-3.5" /></button>
+   795→              </div>
+   796→              <input
+   797→                type="text"
+   798→                value={editChapterDesc}
+   799→                onChange={(e) => setEditChapterDesc(e.target.value)}
+   800→                className="w-full px-2 py-1 rounded-lg text-sm premium-input"
+   801→                placeholder="Chapter description (optional)"
+   802→              />
+   803→            </div>
+   804→          ) : (
+   805→            <>
+   806→              <p className="text-sm font-semibold text-foreground truncate">{chapter.title}</p>
+   807→              <p className="text-xs text-muted-foreground">
+   808→                {lessons.length} lessons
+   809→                {chapterDesc ? ` · ${chapterDesc}` : ''}
+   810→              </p>
+   811→            </>
+   812→          )}
+   813→        </div>
+   814→        {!editingChapter && (
+   815→          <div className="flex items-center gap-1" onClick={(e: any) => e.stopPropagation()}>
+   816→            <button
+   817→              onClick={() => { setEditingChapter(chapter.id); setEditChapterTitle(chapter.title); setEditChapterDesc(chapterDesc); }}
+   818→              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+   819→            >
+   820→              <Edit3 className="w-3.5 h-3.5" />
+   821→            </button>
+   822→            {confirmDelete ? (
+   823→              <div className="flex items-center gap-1">
+   824→                <button
+   825→                  onClick={() => { onDeleteChapter(chapter.id); setConfirmDelete(false); }}
+   826→                  className="h-7 px-2 rounded-lg bg-red-100 text-red-700 text-[10px] font-bold flex items-center gap-1 dark:bg-red-900/30 dark:text-red-400"
+   827→                >
+   828→                  <AlertTriangle className="w-3 h-3" />Delete
+   829→                </button>
+   830→                <button
+   831→                  onClick={() => setConfirmDelete(false)}
+   832→                  className="h-7 px-2 rounded-lg bg-muted/50 text-muted-foreground text-[10px] font-bold"
+   833→                >
+   834→                  Keep
+   835→                </button>
+   836→              </div>
+   837→            ) : (
+   838→              <button
+   839→                onClick={() => setConfirmDelete(true)}
+   840→                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors"
+   841→              >
+   842→                <Trash2 className="w-3.5 h-3.5" />
+   843→              </button>
+   844→            )}
+   845→          </div>
+   846→        )}
+   847→      </div>
+   848→
+   849→      {/* Chapter Content */}
+   850→      <AnimatePresence>
+   851→        {expanded && (
+   852→          <motion.div
+   853→            initial={{ height: 0, opacity: 0 }}
+   854→            animate={{ height: 'auto', opacity: 1 }}
+   855→            exit={{ height: 0, opacity: 0 }}
+   856→            transition={{ duration: 0.2 }}
+   857→            className="overflow-hidden"
+   858→          >
+   859→            <div className="pl-8 md:pl-12 pr-4 md:pr-5 pb-3 space-y-1">
+   860→              {/* Lessons */}
+   861→              {lessons.map((lesson: any, li: number) => (
+   862→                <div
+   863→                  key={lesson.id || li}
+   864→                  className="flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors group"
+   865→                >
+   866→                  <GripVertical className="w-3.5 h-3.5 text-muted-foreground/20" />
+   867→                  {lesson.lessonType === 'video' || lesson.lessonType === 'video' ? (
+   868→                    <Video className="w-4 h-4 text-muted-foreground/60" />
+   869→                  ) : lesson.lessonType === 'link' ? (
+   870→                    <LinkIcon className="w-4 h-4 text-muted-foreground/60" />
+   871→                  ) : (
+   872→                    <FileText className="w-4 h-4 text-muted-foreground/60" />
+   873→                  )}
+   874→                  <span className="flex-1 text-sm text-foreground truncate">{lesson.title}</span>
+   875→                  {lesson.duration > 0 && (
+   876→                    <span className="text-[10px] text-muted-foreground">{formatDurationShort(lesson.duration)}</span>
+   877→                  )}
+   878→                  {lesson.isPreview && (
+   879→                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 flex items-center gap-0.5">
+   880→                      <Eye className="w-3 h-3" />Preview
+   881→                    </span>
+   882→                  )}
+   883→                  <button
+   884→                    onClick={() => onDeleteLesson(lesson.id)}
+   885→                    className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+   886→                  >
+   887→                    <Trash2 className="w-3 h-3" />
+   888→                  </button>
+   889→                </div>
+   890→              ))}
+   891→
+   892→              {/* Add Lesson Button */}
+   893→              <div className="pt-1">
+   894→                {showNewLesson === chapter.id ? (
+   895→                  <motion.div
+   896→                    initial={{ opacity: 0, y: -5 }}
+   897→                    animate={{ opacity: 1, y: 0 }}
+   898→                    className="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.03] dark:border-white/[0.03] space-y-3"
+   899→                  >
+   900→                    <input
+   901→                      type="text"
+   902→                      value={newLessonTitle}
+   903→                      onChange={(e) => setNewLessonTitle(e.target.value)}
+   904→                      placeholder="Lesson title"
+   905→                      className="w-full px-3 py-2 rounded-lg text-sm premium-input placeholder:text-muted-foreground/60"
+   906→                      autoFocus
+   907→                    />
+   908→
+   909→                    {/* Lesson Type + Duration */}
+   910→                    <div className="grid grid-cols-2 gap-2">
+   911→                      <select
+   912→                        value={newLessonType}
+   913→                        onChange={(e) => setNewLessonType(e.target.value)}
+   914→                        className="px-3 py-2 rounded-lg text-sm premium-input"
+   915→                      >
+   916→                        <option value="video">Video</option>
+   917→                        <option value="link">Link</option>
+   918→                        <option value="youtube">YouTube</option>
+   919→                        <option value="document">Document</option>
+   920→                      </select>
+   921→                      <input
+   922→                        type="text"
+   923→                        value={newLessonDuration}
+   924→                        onChange={(e) => setNewLessonDuration(e.target.value)}
+   925→                        placeholder="Duration (mm:ss)"
+   926→                        className="px-3 py-2 rounded-lg text-sm premium-input placeholder:text-muted-foreground/60"
+   927→                      />
+   928→                    </div>
+   929→
+   930→                    {/* Video Upload */}
+   931→                    {(newLessonType === 'video') && (
+   932→                      <div className="space-y-2">
+   933→                        <label className="block">
+   934→                          <div className="border-2 border-dashed border-black/[0.06] dark:border-white/[0.04] rounded-xl p-4 text-center cursor-pointer hover:border-black/10 dark:hover:border-white/10 transition-colors">
+   935→                            <Upload className="w-5 h-5 text-muted-foreground mx-auto mb-1" />
+   936→                            <p className="text-xs text-muted-foreground">{videoFile ? videoFile.name : 'Click to upload video'}</p>
+   937→                            <p className="text-[10px] text-muted-foreground/60 mt-0.5">Auto-detects duration</p>
+   938→                          </div>
+   939→                          <input type="file" accept="video/*" className="hidden" onChange={handleVideoFileChange} />
+   940→                        </label>
+   941→
+   942→                        {/* Thumbnail + CC */}
+   943→                        <div className="grid grid-cols-2 gap-2">
+   944→                          <label className="block">
+   945→                            <div className="border border-dashed border-black/[0.04] dark:border-white/[0.04] rounded-lg p-2 text-center cursor-pointer hover:border-black/10 transition-colors">
+   946→                              <p className="text-[10px] text-muted-foreground">{videoThumbnail ? videoThumbnail.name : 'Thumbnail'}</p>
+   947→                            </div>
+   948→                            <input type="file" accept="image/*" className="hidden" onChange={(e) => setVideoThumbnail(e.target.files?.[0] || null)} />
+   949→                          </label>
+   950→                          <label className="block">
+   951→                            <div className="border border-dashed border-black/[0.04] dark:border-white/[0.04] rounded-lg p-2 text-center cursor-pointer hover:border-black/10 transition-colors">
+   952→                              <p className="text-[10px] text-muted-foreground">{ccFile ? ccFile.name : 'Subtitle (.vtt/.srt)'}</p>
+   953→                            </div>
+   954→                            <input type="file" accept=".vtt,.srt" className="hidden" onChange={(e) => setCcFile(e.target.files?.[0] || null)} />
+   955→                          </label>
+   956→                        </div>
+   957→
+   958→                        {/* Upload Progress */}
+   959→                        {uploadingVideo && (
+   960→                          <div>
+   961→                            <div className="h-2 rounded-full bg-black/[0.04] dark:bg-white/[0.04] overflow-hidden">
+   962→                              <motion.div
+   963→                                className="h-full bg-gradient-to-r from-neutral-900 to-neutral-700 dark:from-white dark:to-neutral-400 rounded-full"
+   964→                                initial={{ width: 0 }}
+   965→                                animate={{ width: `${videoUploadProgress}%` }}
+   966→                              />
+   967→                            </div>
+   968→                            <p className="text-xs text-muted-foreground mt-1">Uploading... {videoUploadProgress}%</p>
+   969→                          </div>
+   970→                        )}
+   971→                      </div>
+   972→                    )}
+   973→
+   974→                    {/* Preview toggle */}
+   975→                    <div className="flex items-center justify-between">
+   976→                      <span className="text-sm text-foreground">Free Preview</span>
+   977→                      <button
+   978→                        onClick={() => setNewLessonIsPreview(!newLessonIsPreview)}
+   979→                        className={cn(
+   980→                          'w-10 h-5 rounded-full transition-colors relative',
+   981→                          newLessonIsPreview
+   982→                            ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white'
+   983→                            : 'bg-muted/60'
+   984→                        )}
+   985→                      >
+   986→                        <motion.div
+   987→                          className="w-4 h-4 bg-white dark:bg-black rounded-full shadow-sm absolute top-0.5"
+   988→                          animate={{ left: newLessonIsPreview ? '20px' : '2px' }}
+   989→                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+   990→                        />
+   991→                      </button>
+   992→                    </div>
+   993→
+   994→                    <div className="flex gap-2">
+   995→                      <GradientButton size="sm" loading={creatingLesson || uploadingVideo} onClick={() => onCreateLesson(chapter.id, subjectId)} icon={<Plus className="w-3.5 h-3.5" />}>
+   996→                        Add Lesson
+   997→                      </GradientButton>
+   998→                      <GradientButton size="sm" variant="ghost" onClick={resetLessonForm}>Cancel</GradientButton>
+   999→                    </div>
+  1000→                  </motion.div>
+  1001→                ) : (
+  1002→                  <button
+  1003→                    onClick={() => { setShowNewLesson(chapter.id); setNewLessonTitle(''); setNewLessonType('video'); setNewLessonDuration(''); setNewLessonIsPreview(false); setVideoFile(null); setVideoThumbnail(null); setCcFile(null); }}
+  1004→                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground font-medium py-1 px-2 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-all"
+  1005→                  >
+  1006→                    <Plus className="w-3.5 h-3.5" />
+  1007→                    Add Lesson
+  1008→                  </button>
+  1009→                )}
+  1010→              </div>
+  1011→            </div>
+  1012→          </motion.div>
+  1013→        )}
+  1014→      </AnimatePresence>
+  1015→    </div>
+  1016→  );
+  1017→}
+  1018→
