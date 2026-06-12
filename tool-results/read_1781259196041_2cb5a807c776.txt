@@ -1,0 +1,976 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useState, useMemo } from 'react';
+     4→     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→     5→import {
+     6→     6→  ArrowLeft, Users, Video, Star, Clock, BookOpen,
+     7→     7→  Play, Eye, Link as LinkIcon, CheckCircle2, Youtube,
+     8→     8→  BarChart3, MessageSquare, Plus, X, Trash2,
+     9→     9→  FolderOpen, FileText, Paperclip,
+    10→    10→} from 'lucide-react';
+    11→    11→import { toast } from 'sonner';
+    12→    12→import {
+    13→    13→  AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip,
+    14→    14→  BarChart, Bar,
+    15→    15→} from 'recharts';
+    16→    16→import { GlassCard } from '@/components/shared/GlassCard';
+    17→    17→import { ProgressBar } from '@/components/shared/ProgressBar';
+    18→    18→import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
+    19→    19→import { GradientButton } from '@/components/shared/GradientButton';
+    20→    20→import {
+    21→    21→  useCourse, useCourseStudents, useCourseVideos, useCourseAnalytics,
+    22→    22→  useReviews, useChapters, useCreateChapter, useCreateLesson,
+    23→    23→  useCreateResource, useLessons, useResources,
+    24→    24→} from '@/lib/api-hooks';
+    25→    25→import { useNavigationStore } from '@/lib/store';
+    26→    26→import { cn, formatBDT, formatNumber, formatDuration, formatDurationShort, relativeTime } from '@/lib/utils';
+    27→    27→import type { Course, Video as VideoType, StudentProgress, Review } from '@/lib/types';
+    28→    28→
+    29→    29→type DetailTab = 'overview' | 'videos' | 'curriculum' | 'students' | 'analytics' | 'reviews';
+    30→    30→
+    31→    31→const lessonTypeBadge: Record<VideoType['lessonType'], { label: string; color: string; icon: typeof Play }> = {
+    32→    32→  video: { label: 'Video', color: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800/30 dark:text-neutral-300', icon: Play },
+    33→    33→  link: { label: 'Link', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', icon: LinkIcon },
+    34→    34→  youtube: { label: 'YouTube', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', icon: Youtube },
+    35→    35→};
+    36→    36→
+    37→    37→function RatingStars({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'md' }) {
+    38→    38→  const starSize = size === 'sm' ? 'w-3.5 h-3.5' : 'w-5 h-5';
+    39→    39→  return (
+    40→    40→    <div className="flex items-center gap-0.5">
+    41→    41→      {[1, 2, 3, 4, 5].map((star) => (
+    42→    42→        <Star
+    43→    43→          key={star}
+    44→    44→          className={cn(
+    45→    45→            starSize,
+    46→    46→            star <= Math.round(rating)
+    47→    47→              ? 'text-amber-400 fill-amber-400'
+    48→    48→              : 'text-gray-300 dark:text-gray-600'
+    49→    49→          )}
+    50→    50→        />
+    51→    51→      ))}
+    52→    52→    </div>
+    53→    53→  );
+    54→    54→}
+    55→    55→
+    56→    56→export function CourseDetail() {
+    57→    57→  const navigate = useNavigationStore((s) => s.navigate);
+    58→    58→  const params = useNavigationStore((s) => s.params);
+    59→    59→  const [activeTab, setActiveTab] = useState<DetailTab>('overview');
+    60→    60→
+    61→    61→  // Dialog states
+    62→    62→  const [showAddChapter, setShowAddChapter] = useState(false);
+    63→    63→  const [showAddLesson, setShowAddLesson] = useState(false);
+    64→    64→  const [showAddResource, setShowAddResource] = useState(false);
+    65→    65→  const [selectedChapterId, setSelectedChapterId] = useState('');
+    66→    66→
+    67→    67→  // Form states
+    68→    68→  const [chapterTitle, setChapterTitle] = useState('');
+    69→    69→  const [lessonTitle, setLessonTitle] = useState('');
+    70→    70→  const [lessonType, setLessonType] = useState('video');
+    71→    71→  const [lessonVideoUrl, setLessonVideoUrl] = useState('');
+    72→    72→  const [resourceTitle, setResourceTitle] = useState('');
+    73→    73→  const [resourceUrl, setResourceUrl] = useState('');
+    74→    74→  const [resourceType, setResourceType] = useState('pdf');
+    75→    75→
+    76→    76→  const courseId = params.courseId || params.id || '';
+    77→    77→
+    78→    78→  const { data: courseData, loading: courseLoading } = useCourse(courseId);
+    79→    79→  const { data: studentsData, loading: studentsLoading } = useCourseStudents(courseId);
+    80→    80→  const { data: videosData, loading: videosLoading } = useCourseVideos(courseId);
+    81→    81→  const { data: analyticsData, loading: analyticsLoading } = useCourseAnalytics(courseId);
+    82→    82→  const { data: reviewsData, loading: reviewsLoading } = useReviews();
+    83→    83→  const { data: chaptersData, loading: chaptersLoading, refetch: refetchChapters } = useChapters(courseId);
+    84→    84→  const { data: lessonsData, loading: lessonsLoading, refetch: refetchLessons } = useLessons(courseId);
+    85→    85→  const { data: resourcesData, loading: resourcesLoading, refetch: refetchResources } = useResources(courseId);
+    86→    86→
+    87→    87→  const { mutate: createChapter, loading: creatingChapter } = useCreateChapter(courseId);
+    88→    88→  const { mutate: createLesson, loading: creatingLesson } = useCreateLesson(courseId);
+    89→    89→  const { mutate: createResource, loading: creatingResource } = useCreateResource(courseId);
+    90→    90→
+    91→    91→  const course = useMemo(() => courseData?.course || null, [courseData]);
+    92→    92→  const students = useMemo(() => studentsData?.students || [], [studentsData]);
+    93→    93→  const videos = useMemo(() => videosData?.videos || [], [videosData]);
+    94→    94→  const reviews = useMemo(() => {
+    95→    95→    if (!courseId) return reviewsData?.reviews || [];
+    96→    96→    return (reviewsData?.reviews || []).filter((r: any) => r.courseId === courseId);
+    97→    97→  }, [reviewsData, courseId]);
+    98→    98→  const chapters = useMemo(() => chaptersData?.chapters || [], [chaptersData]);
+    99→    99→  const lessons = useMemo(() => lessonsData?.lessons || [], [lessonsData]);
+   100→   100→  const resources = useMemo(() => resourcesData?.resources || [], [resourcesData]);
+   101→   101→
+   102→   102→  const analytics = useMemo(() => analyticsData?.analytics || {}, [analyticsData]);
+   103→   103→
+   104→   104→  const handleCreateChapter = async () => {
+   105→   105→    if (!chapterTitle.trim()) {
+   106→   106→      toast.error('Please enter a chapter title');
+   107→   107→      return;
+   108→   108→    }
+   109→   109→    const result = await createChapter({
+   110→   110→      title: chapterTitle.trim(),
+   111→   111→      sortOrder: chapters.length + 1,
+   112→   112→    });
+   113→   113→    if (result) {
+   114→   114→      toast.success('Chapter created');
+   115→   115→      setShowAddChapter(false);
+   116→   116→      setChapterTitle('');
+   117→   117→      refetchChapters();
+   118→   118→    } else {
+   119→   119→      toast.error('Failed to create chapter');
+   120→   120→    }
+   121→   121→  };
+   122→   122→
+   123→   123→  const handleCreateLesson = async () => {
+   124→   124→    if (!lessonTitle.trim()) {
+   125→   125→      toast.error('Please enter a lesson title');
+   126→   126→      return;
+   127→   127→    }
+   128→   128→    const lessonData: any = {
+   129→   129→      title: lessonTitle.trim(),
+   130→   130→      lessonType,
+   131→   131→      sortOrder: lessons.length + 1,
+   132→   132→    };
+   133→   133→    if (selectedChapterId) lessonData.chapterId = selectedChapterId;
+   134→   134→    if (lessonVideoUrl.trim()) lessonData.videoUrl = lessonVideoUrl.trim();
+   135→   135→
+   136→   136→    const result = await createLesson(lessonData);
+   137→   137→    if (result) {
+   138→   138→      toast.success('Lesson created');
+   139→   139→      setShowAddLesson(false);
+   140→   140→      setLessonTitle('');
+   141→   141→      setLessonVideoUrl('');
+   142→   142→      setSelectedChapterId('');
+   143→   143→      refetchLessons();
+   144→   144→    } else {
+   145→   145→      toast.error('Failed to create lesson');
+   146→   146→    }
+   147→   147→  };
+   148→   148→
+   149→   149→  const handleCreateResource = async () => {
+   150→   150→    if (!resourceTitle.trim()) {
+   151→   151→      toast.error('Please enter a resource title');
+   152→   152→      return;
+   153→   153→    }
+   154→   154→    const result = await createResource({
+   155→   155→      title: resourceTitle.trim(),
+   156→   156→      type: resourceType,
+   157→   157→      url: resourceUrl.trim(),
+   158→   158→    });
+   159→   159→    if (result) {
+   160→   160→      toast.success('Resource added');
+   161→   161→      setShowAddResource(false);
+   162→   162→      setResourceTitle('');
+   163→   163→      setResourceUrl('');
+   164→   164→      refetchResources();
+   165→   165→    } else {
+   166→   166→      toast.error('Failed to add resource');
+   167→   167→    }
+   168→   168→  };
+   169→   169→
+   170→   170→  // Group lessons by chapter
+   171→   171→  const lessonsByChapter = useMemo(() => {
+   172→   172→    const grouped: Record<string, any[]> = {};
+   173→   173→    lessons.forEach((lesson: any) => {
+   174→   174→      const chId = lesson.chapterId || 'uncategorized';
+   175→   175→      if (!grouped[chId]) grouped[chId] = [];
+   176→   176→      grouped[chId].push(lesson);
+   177→   177→    });
+   178→   178→    // Sort within each group by sortOrder
+   179→   179→    Object.keys(grouped).forEach((key) => {
+   180→   180→      grouped[key].sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0));
+   181→   181→    });
+   182→   182→    return grouped;
+   183→   183→  }, [lessons]);
+   184→   184→
+   185→   185→  if (courseLoading) {
+   186→   186→    return (
+   187→   187→      <div className="space-y-6">
+   188→   188→        <LoadingSkeleton type="card" count={2} />
+   189→   189→      </div>
+   190→   190→    );
+   191→   191→  }
+   192→   192→
+   193→   193→  if (!course) {
+   194→   194→    return (
+   195→   195→      <GlassCard className="p-12 text-center">
+   196→   196→        <p className="text-muted-foreground">Course not found</p>
+   197→   197→      </GlassCard>
+   198→   198→    );
+   199→   199→  }
+   200→   200→
+   201→   201→  const reviewStats = (reviewsData?.stats || {}) as any;
+   202→   202→  const distribution = reviewStats.distribution || {};
+   203→   203→  const totalDist = Object.values(distribution).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+   204→   204→
+   205→   205→  const tabs: { key: DetailTab; label: string; icon: typeof BookOpen }[] = [
+   206→   206→    { key: 'overview', label: 'Overview', icon: BookOpen },
+   207→   207→    { key: 'curriculum', label: 'Curriculum', icon: FolderOpen },
+   208→   208→    { key: 'videos', label: 'Videos', icon: Video },
+   209→   209→    { key: 'students', label: 'Students', icon: Users },
+   210→   210→    { key: 'analytics', label: 'Analytics', icon: BarChart3 },
+   211→   211→    { key: 'reviews', label: 'Reviews', icon: MessageSquare },
+   212→   212→  ];
+   213→   213→
+   214→   214→  return (
+   215→   215→    <div className="space-y-6">
+   216→   216→      {/* Back button */}
+   217→   217→      <motion.button
+   218→   218→        initial={{ opacity: 0, x: -10 }}
+   219→   219→        animate={{ opacity: 1, x: 0 }}
+   220→   220→        onClick={() => navigate('courses')}
+   221→   221→        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+   222→   222→      >
+   223→   223→        <ArrowLeft className="w-4 h-4" />
+   224→   224→        Back to Courses
+   225→   225→      </motion.button>
+   226→   226→
+   227→   227→      {/* Hero Section */}
+   228→   228→      <motion.div
+   229→   229→        initial={{ opacity: 0, y: 12 }}
+   230→   230→        animate={{ opacity: 1, y: 0 }}
+   231→   231→        transition={{ duration: 0.4 }}
+   232→   232→      >
+   233→   233→        <div className="relative rounded-2xl overflow-hidden">
+   234→   234→          {/* Gradient banner */}
+   235→   235→          <div className="h-40 md:h-52 bg-gradient-to-br from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white relative">
+   236→   236→            <div className="absolute inset-0 bg-black/20" />
+   237→   237→            <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-black/40 to-transparent" />
+   238→   238→          </div>
+   239→   239→
+   240→   240→          {/* Course info overlay */}
+   241→   241→          <div className="relative p-6 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/30 dark:border-white/[0.04] border-t-0 rounded-b-2xl">
+   242→   242→            <h1 className="text-xl md:text-2xl font-extrabold text-foreground">{course.title}</h1>
+   243→   243→            <p className="text-sm text-muted-foreground mt-1">{course.semester} • {course.description?.substring(0, 80)}...</p>
+   244→   244→
+   245→   245→            {/* Stats row */}
+   246→   246→            <div className="flex flex-wrap items-center gap-4 mt-4">
+   247→   247→              <div className="flex items-center gap-1.5 text-muted-foreground">
+   248→   248→                <Users className="w-4 h-4" />
+   249→   249→                <span className="text-sm font-medium">{formatNumber(course.totalStudents)} Students</span>
+   250→   250→              </div>
+   251→   251→              <div className="flex items-center gap-1.5 text-muted-foreground">
+   252→   252→                <Video className="w-4 h-4" />
+   253→   253→                <span className="text-sm font-medium">{course.totalVideos} Videos</span>
+   254→   254→              </div>
+   255→   255→              <div className="flex items-center gap-1.5">
+   256→   256→                <RatingStars rating={course.rating} size="sm" />
+   257→   257→                <span className="text-sm font-bold text-foreground">{course.rating}</span>
+   258→   258→                <span className="text-xs text-muted-foreground">({course.totalReviews})</span>
+   259→   259→              </div>
+   260→   260→              <div className="flex items-center gap-1.5 text-muted-foreground">
+   261→   261→                <Clock className="w-4 h-4" />
+   262→   262→                <span className="text-sm font-medium">{formatDuration(course.duration / 60)}</span>
+   263→   263→              </div>
+   264→   264→            </div>
+   265→   265→          </div>
+   266→   266→        </div>
+   267→   267→      </motion.div>
+   268→   268→
+   269→   269→      {/* Tab Navigation */}
+   270→   270→      <motion.div
+   271→   271→        initial={{ opacity: 0, y: 8 }}
+   272→   272→        animate={{ opacity: 1, y: 0 }}
+   273→   273→        transition={{ delay: 0.15, duration: 0.3 }}
+   274→   274→      >
+   275→   275→        <div className="flex items-center gap-1 premium-input p-1 overflow-x-auto">
+   276→   276→          {tabs.map((tab) => (
+   277→   277→            <button
+   278→   278→              key={tab.key}
+   279→   279→              onClick={() => setActiveTab(tab.key)}
+   280→   280→              className={cn(
+   281→   281→                'relative flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg whitespace-nowrap transition-colors',
+   282→   282→                activeTab === tab.key ? 'text-white' : 'text-muted-foreground hover:text-foreground'
+   283→   283→              )}
+   284→   284→            >
+   285→   285→              {activeTab === tab.key && (
+   286→   286→                <motion.div
+   287→   287→                  layoutId="course-detail-tab"
+   288→   288→                  className="absolute inset-0 bg-gradient-to-r from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white rounded-lg shadow-[0_4px_15px_rgba(0,0,0,0.1)]"
+   289→   289→                  transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+   290→   290→                />
+   291→   291→              )}
+   292→   292→              <tab.icon className="w-4 h-4 relative z-10" />
+   293→   293→              <span className="relative z-10">{tab.label}</span>
+   294→   294→            </button>
+   295→   295→          ))}
+   296→   296→        </div>
+   297→   297→      </motion.div>
+   298→   298→
+   299→   299→      {/* Tab Content */}
+   300→   300→      <AnimatePresence mode="wait">
+   301→   301→        <motion.div
+   302→   302→          key={activeTab}
+   303→   303→          initial={{ opacity: 0, y: 8 }}
+   304→   304→          animate={{ opacity: 1, y: 0 }}
+   305→   305→          exit={{ opacity: 0, y: -8 }}
+   306→   306→          transition={{ duration: 0.25 }}
+   307→   307→        >
+   308→   308→          {activeTab === 'overview' && (
+   309→   309→            <div className="space-y-6">
+   310→   310→              {/* Description */}
+   311→   311→              <GlassCard glow className="p-6">
+   312→   312→                <h3 className="text-lg font-bold gradient-text mb-3">Course Description</h3>
+   313→   313→                <p className="text-sm text-muted-foreground leading-relaxed">{course.description}</p>
+   314→   314→              </GlassCard>
+   315→   315→
+   316→   316→              {/* What you'll learn */}
+   317→   317→              {course.whatYouLearn && course.whatYouLearn.length > 0 && (
+   318→   318→                <GlassCard glow className="p-6">
+   319→   319→                  <h3 className="text-lg font-bold gradient-text mb-3">What You&apos;ll Learn</h3>
+   320→   320→                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+   321→   321→                    {course.whatYouLearn.map((item: string, i: number) => (
+   322→   322→                      <motion.div
+   323→   323→                        key={i}
+   324→   324→                        initial={{ opacity: 0, x: -10 }}
+   325→   325→                        animate={{ opacity: 1, x: 0 }}
+   326→   326→                        transition={{ delay: i * 0.05 }}
+   327→   327→                        className="flex items-start gap-2"
+   328→   328→                      >
+   329→   329→                        <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+   330→   330→                        <span className="text-sm text-foreground">{item}</span>
+   331→   331→                      </motion.div>
+   332→   332→                    ))}
+   333→   333→                  </div>
+   334→   334→                </GlassCard>
+   335→   335→              )}
+   336→   336→
+   337→   337→              {/* Stats cards */}
+   338→   338→              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   339→   339→                {[
+   340→   340→                  { label: 'Total Students', value: formatNumber(course.totalStudents), icon: Users },
+   341→   341→                  { label: 'Total Videos', value: String(course.totalVideos), icon: Video },
+   342→   342→                  { label: 'Rating', value: `${course.rating}/5`, icon: Star },
+   343→   343→                  { label: 'Price', value: formatBDT(course.price), icon: Clock },
+   344→   344→                ].map((stat, i) => (
+   345→   345→                  <motion.div
+   346→   346→                    key={stat.label}
+   347→   347→                    initial={{ opacity: 0, y: 12 }}
+   348→   348→                    animate={{ opacity: 1, y: 0 }}
+   349→   349→                    transition={{ delay: i * 0.05 }}
+   350→   350→                  >
+   351→   351→                    <GlassCard className="p-4 text-center">
+   352→   352→                      <stat.icon className="w-5 h-5 text-foreground/70 mx-auto mb-2" />
+   353→   353→                      <p className="text-lg font-extrabold text-foreground">{stat.value}</p>
+   354→   354→                      <p className="text-xs text-muted-foreground">{stat.label}</p>
+   355→   355→                    </GlassCard>
+   356→   356→                  </motion.div>
+   357→   357→                ))}
+   358→   358→              </div>
+   359→   359→            </div>
+   360→   360→          )}
+   361→   361→
+   362→   362→          {activeTab === 'curriculum' && (
+   363→   363→            <div className="space-y-4">
+   364→   364→              {/* Action buttons */}
+   365→   365→              <div className="flex flex-wrap items-center gap-3">
+   366→   366→                <GradientButton
+   367→   367→                  size="sm"
+   368→   368→                  icon={<FolderOpen className="w-3.5 h-3.5" />}
+   369→   369→                  onClick={() => setShowAddChapter(true)}
+   370→   370→                >
+   371→   371→                  Add Chapter
+   372→   372→                </GradientButton>
+   373→   373→                <GradientButton
+   374→   374→                  size="sm"
+   375→   375→                  icon={<FileText className="w-3.5 h-3.5" />}
+   376→   376→                  onClick={() => setShowAddLesson(true)}
+   377→   377→                >
+   378→   378→                  Add Lesson
+   379→   379→                </GradientButton>
+   380→   380→                <GradientButton
+   381→   381→                  size="sm"
+   382→   382→                  icon={<Paperclip className="w-3.5 h-3.5" />}
+   383→   383→                  onClick={() => setShowAddResource(true)}
+   384→   384→                >
+   385→   385→                  Add Resource
+   386→   386→                </GradientButton>
+   387→   387→              </div>
+   388→   388→
+   389→   389→              {/* Chapters and Lessons tree */}
+   390→   390→              {chaptersLoading || lessonsLoading ? (
+   391→   391→                <LoadingSkeleton type="card" count={3} />
+   392→   392→              ) : chapters.length === 0 && lessons.length === 0 ? (
+   393→   393→                <GlassCard className="p-12 text-center">
+   394→   394→                  <FolderOpen className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+   395→   395→                  <p className="text-muted-foreground font-semibold">No curriculum yet</p>
+   396→   396→                  <p className="text-xs text-muted-foreground/60 mt-1">Add chapters and lessons to structure your course</p>
+   397→   397→                </GlassCard>
+   398→   398→              ) : (
+   399→   399→                <div className="space-y-4">
+   400→   400→                  {/* Chapters */}
+   401→   401→                  {chapters.map((chapter: any, ci: number) => {
+   402→   402→                    const chapterLessons = lessonsByChapter[chapter.id] || [];
+   403→   403→                    return (
+   404→   404→                      <motion.div
+   405→   405→                        key={chapter.id || ci}
+   406→   406→                        initial={{ opacity: 0, y: 8 }}
+   407→   407→                        animate={{ opacity: 1, y: 0 }}
+   408→   408→                        transition={{ delay: ci * 0.05 }}
+   409→   409→                      >
+   410→   410→                        <GlassCard className="p-4">
+   411→   411→                          <div className="flex items-center gap-3">
+   412→   412→                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white flex items-center justify-center flex-shrink-0">
+   413→   413→                              <FolderOpen className="w-4 h-4 text-white dark:text-black" />
+   414→   414→                            </div>
+   415→   415→                            <div className="flex-1 min-w-0">
+   416→   416→                              <p className="text-sm font-bold text-foreground">{chapter.title}</p>
+   417→   417→                              <p className="text-xs text-muted-foreground mt-0.5">
+   418→   418→                                {chapterLessons.length} lesson{chapterLessons.length !== 1 ? 's' : ''}
+   419→   419→                              </p>
+   420→   420→                            </div>
+   421→   421→                            <span className="text-xs text-muted-foreground">#{chapter.sortOrder || ci + 1}</span>
+   422→   422→                          </div>
+   423→   423→
+   424→   424→                          {/* Lessons under this chapter */}
+   425→   425→                          {chapterLessons.length > 0 && (
+   426→   426→                            <div className="mt-3 ml-11 space-y-2">
+   427→   427→                              {chapterLessons.map((lesson: any, li: number) => {
+   428→   428→                                const typeBadge = lessonTypeBadge[lesson.lessonType] || lessonTypeBadge.video;
+   429→   429→                                return (
+   430→   430→                                  <div
+   431→   431→                                    key={lesson.id || li}
+   432→   432→                                    className="flex items-center gap-3 p-3 rounded-xl bg-white/30 dark:bg-white/[0.03] border border-white/30 dark:border-white/[0.04]"
+   433→   433→                                  >
+   434→   434→                                    <div className="w-6 h-6 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] flex items-center justify-center flex-shrink-0">
+   435→   435→                                      <span className="text-xs font-bold text-foreground/70">{lesson.sortOrder || li + 1}</span>
+   436→   436→                                    </div>
+   437→   437→                                    <div className="flex-1 min-w-0">
+   438→   438→                                      <p className="text-sm font-medium text-foreground truncate">{lesson.title}</p>
+   439→   439→                                      <div className="flex items-center gap-2 mt-0.5">
+   440→   440→                                        <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', typeBadge.color)}>
+   441→   441→                                          {typeBadge.label}
+   442→   442→                                        </span>
+   443→   443→                                      </div>
+   444→   444→                                    </div>
+   445→   445→                                  </div>
+   446→   446→                                );
+   447→   447→                              })}
+   448→   448→                            </div>
+   449→   449→                          )}
+   450→   450→                        </GlassCard>
+   451→   451→                      </motion.div>
+   452→   452→                    );
+   453→   453→                  })}
+   454→   454→
+   455→   455→                  {/* Uncategorized lessons */}
+   456→   456→                  {lessonsByChapter['uncategorized'] && lessonsByChapter['uncategorized'].length > 0 && (
+   457→   457→                    <GlassCard className="p-4">
+   458→   458→                      <div className="flex items-center gap-3 mb-3">
+   459→   459→                        <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center flex-shrink-0">
+   460→   460→                          <FileText className="w-4 h-4 text-muted-foreground" />
+   461→   461→                        </div>
+   462→   462→                        <div className="flex-1">
+   463→   463→                          <p className="text-sm font-bold text-foreground">Uncategorized Lessons</p>
+   464→   464→                          <p className="text-xs text-muted-foreground">Assign these to a chapter</p>
+   465→   465→                        </div>
+   466→   466→                      </div>
+   467→   467→                      <div className="space-y-2">
+   468→   468→                        {lessonsByChapter['uncategorized'].map((lesson: any, li: number) => {
+   469→   469→                          const typeBadge = lessonTypeBadge[lesson.lessonType] || lessonTypeBadge.video;
+   470→   470→                          return (
+   471→   471→                            <div
+   472→   472→                              key={lesson.id || li}
+   473→   473→                              className="flex items-center gap-3 p-3 rounded-xl bg-white/30 dark:bg-white/[0.03] border border-white/30 dark:border-white/[0.04]"
+   474→   474→                            >
+   475→   475→                              <div className="w-6 h-6 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] flex items-center justify-center flex-shrink-0">
+   476→   476→                                <span className="text-xs font-bold text-foreground/70">{lesson.sortOrder || li + 1}</span>
+   477→   477→                              </div>
+   478→   478→                              <div className="flex-1 min-w-0">
+   479→   479→                                <p className="text-sm font-medium text-foreground truncate">{lesson.title}</p>
+   480→   480→                                <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', typeBadge.color)}>
+   481→   481→                                  {typeBadge.label}
+   482→   482→                                </span>
+   483→   483→                              </div>
+   484→   484→                            </div>
+   485→   485→                          );
+   486→   486→                        })}
+   487→   487→                      </div>
+   488→   488→                    </GlassCard>
+   489→   489→                  )}
+   490→   490→
+   491→   491→                  {/* Resources */}
+   492→   492→                  {resources.length > 0 && (
+   493→   493→                    <GlassCard className="p-4">
+   494→   494→                      <div className="flex items-center gap-3 mb-3">
+   495→   495→                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-neutral-700 via-neutral-600 to-neutral-800 dark:from-neutral-300 dark:via-neutral-200 dark:to-neutral-400 flex items-center justify-center flex-shrink-0">
+   496→   496→                          <Paperclip className="w-4 h-4 text-white dark:text-black" />
+   497→   497→                        </div>
+   498→   498→                        <p className="text-sm font-bold text-foreground">Resources</p>
+   499→   499→                      </div>
+   500→   500→                      <div className="space-y-2">
+   501→   501→                        {resources.map((resource: any, ri: number) => (
+   502→   502→                          <div
+   503→   503→                            key={resource.id || ri}
+   504→   504→                            className="flex items-center gap-3 p-3 rounded-xl bg-white/30 dark:bg-white/[0.03] border border-white/30 dark:border-white/[0.04]"
+   505→   505→                          >
+   506→   506→                            <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+   507→   507→                            <div className="flex-1 min-w-0">
+   508→   508→                              <p className="text-sm font-medium text-foreground truncate">{resource.title}</p>
+   509→   509→                              <p className="text-xs text-muted-foreground">{resource.type || 'File'}</p>
+   510→   510→                            </div>
+   511→   511→                            {resource.url && (
+   512→   512→                              <a
+   513→   513→                                href={resource.url}
+   514→   514→                                target="_blank"
+   515→   515→                                rel="noopener noreferrer"
+   516→   516→                                className="text-xs text-foreground/70 hover:text-foreground font-medium"
+   517→   517→                                onClick={(e) => e.stopPropagation()}
+   518→   518→                              >
+   519→   519→                                Open
+   520→   520→                              </a>
+   521→   521→                            )}
+   522→   522→                          </div>
+   523→   523→                        ))}
+   524→   524→                      </div>
+   525→   525→                    </GlassCard>
+   526→   526→                  )}
+   527→   527→                </div>
+   528→   528→              )}
+   529→   529→
+   530→   530→              {/* Add Chapter Dialog */}
+   531→   531→              <AnimatePresence>
+   532→   532→                {showAddChapter && (
+   533→   533→                  <motion.div
+   534→   534→                    initial={{ opacity: 0 }}
+   535→   535→                    animate={{ opacity: 1 }}
+   536→   536→                    exit={{ opacity: 0 }}
+   537→   537→                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+   538→   538→                    onClick={() => setShowAddChapter(false)}
+   539→   539→                  >
+   540→   540→                    <motion.div
+   541→   541→                      initial={{ opacity: 0, scale: 0.95, y: 20 }}
+   542→   542→                      animate={{ opacity: 1, scale: 1, y: 0 }}
+   543→   543→                      exit={{ opacity: 0, scale: 0.95, y: 20 }}
+   544→   544→                      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+   545→   545→                      onClick={(e) => e.stopPropagation()}
+   546→   546→                      className="w-full max-w-md"
+   547→   547→                    >
+   548→   548→                      <GlassCard className="p-6">
+   549→   549→                        <div className="flex items-center justify-between mb-4">
+   550→   550→                          <h3 className="text-lg font-bold gradient-text">Add Chapter</h3>
+   551→   551→                          <button onClick={() => setShowAddChapter(false)} className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center">
+   552→   552→                            <X className="w-4 h-4" />
+   553→   553→                          </button>
+   554→   554→                        </div>
+   555→   555→                        <div className="space-y-4">
+   556→   556→                          <div>
+   557→   557→                            <label className="text-sm font-medium text-foreground mb-1.5 block">Chapter Title *</label>
+   558→   558→                            <input
+   559→   559→                              type="text"
+   560→   560→                              value={chapterTitle}
+   561→   561→                              onChange={(e) => setChapterTitle(e.target.value)}
+   562→   562→                              placeholder="Enter chapter title"
+   563→   563→                              className="w-full px-4 py-2.5 rounded-xl text-sm premium-input placeholder:text-muted-foreground/60"
+   564→   564→                            />
+   565→   565→                          </div>
+   566→   566→                          <div className="flex justify-end gap-3">
+   567→   567→                            <GradientButton variant="ghost" onClick={() => setShowAddChapter(false)}>Cancel</GradientButton>
+   568→   568→                            <GradientButton onClick={handleCreateChapter} loading={creatingChapter} disabled={!chapterTitle.trim()} icon={<Plus className="w-4 h-4" />}>Create</GradientButton>
+   569→   569→                          </div>
+   570→   570→                        </div>
+   571→   571→                      </GlassCard>
+   572→   572→                    </motion.div>
+   573→   573→                  </motion.div>
+   574→   574→                )}
+   575→   575→              </AnimatePresence>
+   576→   576→
+   577→   577→              {/* Add Lesson Dialog */}
+   578→   578→              <AnimatePresence>
+   579→   579→                {showAddLesson && (
+   580→   580→                  <motion.div
+   581→   581→                    initial={{ opacity: 0 }}
+   582→   582→                    animate={{ opacity: 1 }}
+   583→   583→                    exit={{ opacity: 0 }}
+   584→   584→                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+   585→   585→                    onClick={() => setShowAddLesson(false)}
+   586→   586→                  >
+   587→   587→                    <motion.div
+   588→   588→                      initial={{ opacity: 0, scale: 0.95, y: 20 }}
+   589→   589→                      animate={{ opacity: 1, scale: 1, y: 0 }}
+   590→   590→                      exit={{ opacity: 0, scale: 0.95, y: 20 }}
+   591→   591→                      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+   592→   592→                      onClick={(e) => e.stopPropagation()}
+   593→   593→                      className="w-full max-w-md"
+   594→   594→                    >
+   595→   595→                      <GlassCard className="p-6">
+   596→   596→                        <div className="flex items-center justify-between mb-4">
+   597→   597→                          <h3 className="text-lg font-bold gradient-text">Add Lesson</h3>
+   598→   598→                          <button onClick={() => setShowAddLesson(false)} className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center">
+   599→   599→                            <X className="w-4 h-4" />
+   600→   600→                          </button>
+   601→   601→                        </div>
+   602→   602→                        <div className="space-y-4">
+   603→   603→                          <div>
+   604→   604→                            <label className="text-sm font-medium text-foreground mb-1.5 block">Lesson Title *</label>
+   605→   605→                            <input
+   606→   606→                              type="text"
+   607→   607→                              value={lessonTitle}
+   608→   608→                              onChange={(e) => setLessonTitle(e.target.value)}
+   609→   609→                              placeholder="Enter lesson title"
+   610→   610→                              className="w-full px-4 py-2.5 rounded-xl text-sm premium-input placeholder:text-muted-foreground/60"
+   611→   611→                            />
+   612→   612→                          </div>
+   613→   613→                          <div>
+   614→   614→                            <label className="text-sm font-medium text-foreground mb-1.5 block">Chapter</label>
+   615→   615→                            <select
+   616→   616→                              value={selectedChapterId}
+   617→   617→                              onChange={(e) => setSelectedChapterId(e.target.value)}
+   618→   618→                              className="w-full px-4 py-2.5 rounded-xl text-sm premium-input"
+   619→   619→                            >
+   620→   620→                              <option value="">No chapter (uncategorized)</option>
+   621→   621→                              {chapters.map((ch: any) => (
+   622→   622→                                <option key={ch.id} value={ch.id}>{ch.title}</option>
+   623→   623→                              ))}
+   624→   624→                            </select>
+   625→   625→                          </div>
+   626→   626→                          <div>
+   627→   627→                            <label className="text-sm font-medium text-foreground mb-1.5 block">Type</label>
+   628→   628→                            <select
+   629→   629→                              value={lessonType}
+   630→   630→                              onChange={(e) => setLessonType(e.target.value)}
+   631→   631→                              className="w-full px-4 py-2.5 rounded-xl text-sm premium-input"
+   632→   632→                            >
+   633→   633→                              <option value="video">Video</option>
+   634→   634→                              <option value="link">Link</option>
+   635→   635→                              <option value="youtube">YouTube</option>
+   636→   636→                            </select>
+   637→   637→                          </div>
+   638→   638→                          <div>
+   639→   639→                            <label className="text-sm font-medium text-foreground mb-1.5 block">Video/Content URL</label>
+   640→   640→                            <input
+   641→   641→                              type="url"
+   642→   642→                              value={lessonVideoUrl}
+   643→   643→                              onChange={(e) => setLessonVideoUrl(e.target.value)}
+   644→   644→                              placeholder="https://..."
+   645→   645→                              className="w-full px-4 py-2.5 rounded-xl text-sm premium-input placeholder:text-muted-foreground/60"
+   646→   646→                            />
+   647→   647→                          </div>
+   648→   648→                          <div className="flex justify-end gap-3">
+   649→   649→                            <GradientButton variant="ghost" onClick={() => setShowAddLesson(false)}>Cancel</GradientButton>
+   650→   650→                            <GradientButton onClick={handleCreateLesson} loading={creatingLesson} disabled={!lessonTitle.trim()} icon={<Plus className="w-4 h-4" />}>Create</GradientButton>
+   651→   651→                          </div>
+   652→   652→                        </div>
+   653→   653→                      </GlassCard>
+   654→   654→                    </motion.div>
+   655→   655→                  </motion.div>
+   656→   656→                )}
+   657→   657→              </AnimatePresence>
+   658→   658→
+   659→   659→              {/* Add Resource Dialog */}
+   660→   660→              <AnimatePresence>
+   661→   661→                {showAddResource && (
+   662→   662→                  <motion.div
+   663→   663→                    initial={{ opacity: 0 }}
+   664→   664→                    animate={{ opacity: 1 }}
+   665→   665→                    exit={{ opacity: 0 }}
+   666→   666→                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+   667→   667→                    onClick={() => setShowAddResource(false)}
+   668→   668→                  >
+   669→   669→                    <motion.div
+   670→   670→                      initial={{ opacity: 0, scale: 0.95, y: 20 }}
+   671→   671→                      animate={{ opacity: 1, scale: 1, y: 0 }}
+   672→   672→                      exit={{ opacity: 0, scale: 0.95, y: 20 }}
+   673→   673→                      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+   674→   674→                      onClick={(e) => e.stopPropagation()}
+   675→   675→                      className="w-full max-w-md"
+   676→   676→                    >
+   677→   677→                      <GlassCard className="p-6">
+   678→   678→                        <div className="flex items-center justify-between mb-4">
+   679→   679→                          <h3 className="text-lg font-bold gradient-text">Add Resource</h3>
+   680→   680→                          <button onClick={() => setShowAddResource(false)} className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center">
+   681→   681→                            <X className="w-4 h-4" />
+   682→   682→                          </button>
+   683→   683→                        </div>
+   684→   684→                        <div className="space-y-4">
+   685→   685→                          <div>
+   686→   686→                            <label className="text-sm font-medium text-foreground mb-1.5 block">Resource Title *</label>
+   687→   687→                            <input
+   688→   688→                              type="text"
+   689→   689→                              value={resourceTitle}
+   690→   690→                              onChange={(e) => setResourceTitle(e.target.value)}
+   691→   691→                              placeholder="e.g. Course Slides, Reference Guide"
+   692→   692→                              className="w-full px-4 py-2.5 rounded-xl text-sm premium-input placeholder:text-muted-foreground/60"
+   693→   693→                            />
+   694→   694→                          </div>
+   695→   695→                          <div>
+   696→   696→                            <label className="text-sm font-medium text-foreground mb-1.5 block">Type</label>
+   697→   697→                            <select
+   698→   698→                              value={resourceType}
+   699→   699→                              onChange={(e) => setResourceType(e.target.value)}
+   700→   700→                              className="w-full px-4 py-2.5 rounded-xl text-sm premium-input"
+   701→   701→                            >
+   702→   702→                              <option value="pdf">PDF</option>
+   703→   703→                              <option value="document">Document</option>
+   704→   704→                              <option value="link">Link</option>
+   705→   705→                              <option value="code">Code</option>
+   706→   706→                              <option value="other">Other</option>
+   707→   707→                            </select>
+   708→   708→                          </div>
+   709→   709→                          <div>
+   710→   710→                            <label className="text-sm font-medium text-foreground mb-1.5 block">URL</label>
+   711→   711→                            <input
+   712→   712→                              type="url"
+   713→   713→                              value={resourceUrl}
+   714→   714→                              onChange={(e) => setResourceUrl(e.target.value)}
+   715→   715→                              placeholder="https://..."
+   716→   716→                              className="w-full px-4 py-2.5 rounded-xl text-sm premium-input placeholder:text-muted-foreground/60"
+   717→   717→                            />
+   718→   718→                          </div>
+   719→   719→                          <div className="flex justify-end gap-3">
+   720→   720→                            <GradientButton variant="ghost" onClick={() => setShowAddResource(false)}>Cancel</GradientButton>
+   721→   721→                            <GradientButton onClick={handleCreateResource} loading={creatingResource} disabled={!resourceTitle.trim()} icon={<Plus className="w-4 h-4" />}>Add</GradientButton>
+   722→   722→                          </div>
+   723→   723→                        </div>
+   724→   724→                      </GlassCard>
+   725→   725→                    </motion.div>
+   726→   726→                  </motion.div>
+   727→   727→                )}
+   728→   728→              </AnimatePresence>
+   729→   729→            </div>
+   730→   730→          )}
+   731→   731→
+   732→   732→          {activeTab === 'videos' && (
+   733→   733→            <div className="space-y-2">
+   734→   734→              {videosLoading ? (
+   735→   735→                <LoadingSkeleton type="card" count={3} />
+   736→   736→              ) : videos.length === 0 ? (
+   737→   737→                <GlassCard className="p-12 text-center">
+   738→   738→                  <p className="text-muted-foreground">No videos found</p>
+   739→   739→                </GlassCard>
+   740→   740→              ) : (
+   741→   741→                videos.map((video: any, i: number) => {
+   742→   742→                  const typeBadge = lessonTypeBadge[video.lessonType] || lessonTypeBadge.video;
+   743→   743→                  return (
+   744→   744→                    <motion.div
+   745→   745→                      key={video.id || i}
+   746→   746→                      initial={{ opacity: 0, x: -10 }}
+   747→   747→                      animate={{ opacity: 1, x: 0 }}
+   748→   748→                      transition={{ delay: i * 0.04 }}
+   749→   749→                    >
+   750→   750→                      <GlassCard className="p-4">
+   751→   751→                        <div className="flex items-center gap-3">
+   752→   752→                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-black/[0.04] to-black/[0.06] dark:from-white/[0.04] dark:to-white/[0.06] flex items-center justify-center flex-shrink-0">
+   753→   753→                            <span className="text-sm font-bold text-foreground/70">{video.sortOrder || i + 1}</span>
+   754→   754→                          </div>
+   755→   755→                          <div className="flex-1 min-w-0">
+   756→   756→                            <p className="text-sm font-semibold text-foreground truncate">{video.title}</p>
+   757→   757→                            <div className="flex items-center gap-2 mt-1">
+   758→   758→                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+   759→   759→                                <Clock className="w-3 h-3" />
+   760→   760→                                {formatDurationShort(video.duration || 0)}
+   761→   761→                              </span>
+   762→   762→                              <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', typeBadge.color)}>
+   763→   763→                                {typeBadge.label}
+   764→   764→                              </span>
+   765→   765→                              {video.isPreview && (
+   766→   766→                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+   767→   767→                                  Preview
+   768→   768→                                </span>
+   769→   769→                              )}
+   770→   770→                            </div>
+   771→   771→                          </div>
+   772→   772→                          <button className="w-8 h-8 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] flex items-center justify-center hover:bg-black/[0.06] dark:hover:bg-white/[0.06] transition-colors">
+   773→   773→                            <Play className="w-4 h-4 text-foreground/70" />
+   774→   774→                          </button>
+   775→   775→                        </div>
+   776→   776→                      </GlassCard>
+   777→   777→                    </motion.div>
+   778→   778→                  );
+   779→   779→                })
+   780→   780→              )}
+   781→   781→            </div>
+   782→   782→          )}
+   783→   783→
+   784→   784→          {activeTab === 'students' && (
+   785→   785→            <div className="space-y-3">
+   786→   786→              {studentsLoading ? (
+   787→   787→                <LoadingSkeleton type="card" count={3} />
+   788→   788→              ) : students.length === 0 ? (
+   789→   789→                <GlassCard className="p-12 text-center">
+   790→   790→                  <p className="text-muted-foreground">No students found</p>
+   791→   791→                </GlassCard>
+   792→   792→              ) : (
+   793→   793→                students.map((student: any, i: number) => (
+   794→   794→                  <motion.div
+   795→   795→                    key={student.userId || student.id || i}
+   796→   796→                    initial={{ opacity: 0, y: 8 }}
+   797→   797→                    animate={{ opacity: 1, y: 0 }}
+   798→   798→                    transition={{ delay: i * 0.05 }}
+   799→   799→                  >
+   800→   800→                    <GlassCard className="p-4">
+   801→   801→                      <div className="flex items-center gap-3">
+   802→   802→                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white flex items-center justify-center flex-shrink-0 shadow-[0_4px_15px_rgba(0,0,0,0.1)]">
+   803→   803→                          <span className="text-white dark:text-black text-sm font-bold">{(student.userName || student.name || '?').charAt(0)}</span>
+   804→   804→                        </div>
+   805→   805→                        <div className="flex-1 min-w-0">
+   806→   806→                          <div className="flex items-center justify-between">
+   807→   807→                            <p className="text-sm font-semibold text-foreground">{student.userName || student.name}</p>
+   808→   808→                            <span className={cn(
+   809→   809→                              'text-[10px] font-bold px-2 py-0.5 rounded-full',
+   810→   810→                              student.completed || student.progress >= 100
+   811→   811→                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+   812→   812→                                : 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800/30 dark:text-neutral-300'
+   813→   813→                            )}>
+   814→   814→                              {student.completed || student.progress >= 100 ? 'Completed' : 'In Progress'}
+   815→   815→                            </span>
+   816→   816→                          </div>
+   817→   817→                          <div className="mt-2">
+   818→   818→                            <div className="flex items-center justify-between mb-1">
+   819→   819→                              <span className="text-xs text-muted-foreground">
+   820→   820→                                {student.watchedVideos || 0}/{student.totalVideos || 0} Videos
+   821→   821→                              </span>
+   822→   822→                              <span className="text-xs font-bold gradient-text">{student.progress || 0}%</span>
+   823→   823→                            </div>
+   824→   824→                            <ProgressBar
+   825→   825→                              value={student.progress || 0}
+   826→   826→                              variant={student.completed || student.progress >= 100 ? 'green' : 'black'}
+   827→   827→                              size="sm"
+   828→   828→                            />
+   829→   829→                          </div>
+   830→   830→                          <p className="text-[11px] text-muted-foreground mt-1.5">
+   831→   831→                            Last active: {relativeTime(student.lastActive || student.updatedAt || new Date().toISOString())}
+   832→   832→                          </p>
+   833→   833→                        </div>
+   834→   834→                      </div>
+   835→   835→                    </GlassCard>
+   836→   836→                  </motion.div>
+   837→   837→                ))
+   838→   838→              )}
+   839→   839→            </div>
+   840→   840→          )}
+   841→   841→
+   842→   842→          {activeTab === 'analytics' && (
+   843→   843→            <div className="space-y-6">
+   844→   844→              {/* Enrollment chart */}
+   845→   845→              <GlassCard className="p-6">
+   846→   846→                <h3 className="text-lg font-bold gradient-text mb-4">Enrollment Trend</h3>
+   847→   847→                <div className="h-64">
+   848→   848→                  {(analytics as any).enrollmentTrends?.length > 0 ? (
+   849→   849→                    <ResponsiveContainer width="100%" height="100%">
+   850→   850→                      <AreaChart data={(analytics as any).enrollmentTrends}>
+   851→   851→                        <defs>
+   852→   852→                          <linearGradient id="enrollGradient" x1="0" y1="0" x2="0" y2="1">
+   853→   853→                            <stop offset="5%" stopColor="#0a0a0a" stopOpacity={0.4} />
+   854→   854→                            <stop offset="95%" stopColor="#0a0a0a" stopOpacity={0} />
+   855→   855→                          </linearGradient>
+   856→   856→                        </defs>
+   857→   857→                        <XAxis dataKey="month" tickFormatter={(v) => v.split('-')[1]} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+   858→   858→                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+   859→   859→                        <Tooltip
+   860→   860→                          contentStyle={{ background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '12px' }}
+   861→   861→                        />
+   862→   862→                        <Area type="monotone" dataKey="students" stroke="#0a0a0a" strokeWidth={2} fill="url(#enrollGradient)" />
+   863→   863→                      </AreaChart>
+   864→   864→                    </ResponsiveContainer>
+   865→   865→                  ) : (
+   866→   866→                    <p className="text-sm text-muted-foreground text-center py-20">No analytics data available</p>
+   867→   867→                  )}
+   868→   868→                </div>
+   869→   869→              </GlassCard>
+   870→   870→
+   871→   871→              {/* Rating display */}
+   872→   872→              <GlassCard className="p-6">
+   873→   873→                <h3 className="text-lg font-bold gradient-text mb-4">Rating</h3>
+   874→   874→                <div className="flex items-center gap-6">
+   875→   875→                  <div className="text-center">
+   876→   876→                    <p className="text-4xl font-extrabold text-foreground">{course.rating}</p>
+   877→   877→                    <RatingStars rating={course.rating} size="md" />
+   878→   878→                    <p className="text-xs text-muted-foreground mt-1">{course.totalReviews} Reviews</p>
+   879→   879→                  </div>
+   880→   880→                  <div className="flex-1 space-y-2">
+   881→   881→                    {[5, 4, 3, 2, 1].map((star) => {
+   882→   882→                      const count = distribution[star] || 0;
+   883→   883→                      const pct = totalDist > 0 ? (Number(count) / totalDist) * 100 : 0;
+   884→   884→                      return (
+   885→   885→                        <div key={star} className="flex items-center gap-2">
+   886→   886→                          <span className="text-xs font-medium text-muted-foreground w-3">{star}</span>
+   887→   887→                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+   888→   888→                          <div className="flex-1 h-2 bg-muted/50 rounded-full overflow-hidden">
+   889→   889→                            <div className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full" style={{ width: `${pct}%` }} />
+   890→   890→                          </div>
+   891→   891→                          <span className="text-xs text-muted-foreground w-8 text-right">{Number(count)}</span>
+   892→   892→                        </div>
+   893→   893→                      );
+   894→   894→                    })}
+   895→   895→                  </div>
+   896→   896→                </div>
+   897→   897→              </GlassCard>
+   898→   898→            </div>
+   899→   899→          )}
+   900→   900→
+   901→   901→          {activeTab === 'reviews' && (
+   902→   902→            <div className="space-y-4">
+   903→   903→              {/* Rating summary */}
+   904→   904→              <GlassCard className="p-6">
+   905→   905→                <div className="flex items-center gap-6">
+   906→   906→                  <div className="text-center">
+   907→   907→                    <p className="text-4xl font-extrabold text-foreground">{reviewStats.averageRating || course.rating}</p>
+   908→   908→                    <RatingStars rating={reviewStats.averageRating || course.rating} size="md" />
+   909→   909→                    <p className="text-xs text-muted-foreground mt-1">{reviewStats.totalReviews || course.totalReviews} Reviews</p>
+   910→   910→                  </div>
+   911→   911→                  <div className="flex-1 space-y-2">
+   912→   912→                    {[5, 4, 3, 2, 1].map((star) => {
+   913→   913→                      const count = distribution[star] || 0;
+   914→   914→                      const pct = totalDist > 0 ? (Number(count) / totalDist) * 100 : 0;
+   915→   915→                      return (
+   916→   916→                        <div key={star} className="flex items-center gap-2">
+   917→   917→                          <span className="text-xs font-medium text-muted-foreground w-3">{star}</span>
+   918→   918→                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+   919→   919→                          <div className="flex-1 h-2 bg-muted/50 rounded-full overflow-hidden">
+   920→   920→                            <div className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full" style={{ width: `${pct}%` }} />
+   921→   921→                          </div>
+   922→   922→                          <span className="text-xs text-muted-foreground w-8 text-right">{Number(count)}</span>
+   923→   923→                        </div>
+   924→   924→                      );
+   925→   925→                    })}
+   926→   926→                  </div>
+   927→   927→                </div>
+   928→   928→              </GlassCard>
+   929→   929→
+   930→   930→              {/* Review list */}
+   931→   931→              {reviews.length === 0 ? (
+   932→   932→                <GlassCard className="p-12 text-center">
+   933→   933→                  <p className="text-muted-foreground">No reviews yet</p>
+   934→   934→                </GlassCard>
+   935→   935→              ) : (
+   936→   936→                reviews.map((review: any, i: number) => (
+   937→   937→                  <motion.div
+   938→   938→                    key={review.id || i}
+   939→   939→                    initial={{ opacity: 0, y: 8 }}
+   940→   940→                    animate={{ opacity: 1, y: 0 }}
+   941→   941→                    transition={{ delay: i * 0.05 }}
+   942→   942→                  >
+   943→   943→                    <GlassCard className="p-4">
+   944→   944→                      <div className="flex items-start gap-3">
+   945→   945→                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-neutral-900 via-neutral-800 to-black dark:from-white dark:via-neutral-200 dark:to-white flex items-center justify-center flex-shrink-0 shadow-[0_4px_15px_rgba(0,0,0,0.1)]">
+   946→   946→                          <span className="text-white dark:text-black text-sm font-bold">{(review.studentName || '?').charAt(0)}</span>
+   947→   947→                        </div>
+   948→   948→                        <div className="flex-1 min-w-0">
+   949→   949→                          <div className="flex items-center justify-between">
+   950→   950→                            <p className="text-sm font-semibold text-foreground">{review.studentName}</p>
+   951→   951→                            <span className="text-[11px] text-muted-foreground">{relativeTime(review.createdAt)}</span>
+   952→   952→                          </div>
+   953→   953→                          <div className="flex items-center gap-1 mt-0.5">
+   954→   954→                            <RatingStars rating={review.rating} size="sm" />
+   955→   955→                          </div>
+   956→   956→                          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{review.text}</p>
+   957→   957→                          {review.hasReply && review.replyText && (
+   958→   958→                            <div className="mt-3 ml-3 pl-3 border-l-2 border-neutral-300 dark:border-neutral-700">
+   959→   959→                              <p className="text-xs font-semibold text-foreground/70 mb-1">Your Reply</p>
+   960→   960→                              <p className="text-sm text-muted-foreground">{review.replyText}</p>
+   961→   961→                            </div>
+   962→   962→                          )}
+   963→   963→                        </div>
+   964→   964→                      </div>
+   965→   965→                    </GlassCard>
+   966→   966→                  </motion.div>
+   967→   967→                ))
+   968→   968→              )}
+   969→   969→            </div>
+   970→   970→          )}
+   971→   971→        </motion.div>
+   972→   972→      </AnimatePresence>
+   973→   973→    </div>
+   974→   974→  );
+   975→   975→}
+   976→   976→
