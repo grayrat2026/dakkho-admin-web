@@ -7,6 +7,7 @@ import { useSearchStore, useNavigationStore } from '@/lib/store';
 import { useCourseSearch, useInstructorSearch, useVideoSearch } from '@/lib/data-hooks';
 import { formatDuration } from '@/lib/mock-data';
 import { GlassCard } from '../shared/GlassCard';
+import { ProgressiveImage } from '@/components/shared/ProgressiveImage';
 
 const TRENDING_SEARCHES = [
   'Web Development',
@@ -155,12 +156,15 @@ export function SearchPage() {
                       className="p-3 flex items-center gap-3 cursor-pointer"
                       onClick={() => navigate('course-detail', { courseId: course.id })}
                     >
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                        {course.thumbnailUrl ? (
-                          <img src={course.thumbnailUrl} alt={course.title} className="w-full h-full object-cover" />
-                        ) : (
-                          <BookOpen className="w-6 h-6 text-white/50" />
-                        )}
+                      <div className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden">
+                        <ProgressiveImage
+                          src={course.thumbnailUrl}
+                          alt={course.title}
+                          className="w-full h-full rounded-xl"
+                          imgClassName="w-full h-full object-cover"
+                          placeholderGradient="from-sky-400 to-blue-600"
+                          fallback={<div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center"><BookOpen className="w-6 h-6 text-white/50" /></div>}
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="text-sm font-bold text-foreground line-clamp-1">{course.title}</h4>
@@ -193,12 +197,15 @@ export function SearchPage() {
                       className="p-3 flex items-center gap-3 cursor-pointer"
                       onClick={() => navigate('instructor-profile', { instructorId: inst.id })}
                     >
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white font-bold flex-shrink-0 overflow-hidden">
-                        {inst.avatarUrl ? (
-                          <img src={inst.avatarUrl} alt={inst.name} className="w-full h-full object-cover" />
-                        ) : (
-                          inst.name.charAt(0)
-                        )}
+                      <div className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden">
+                        <ProgressiveImage
+                          src={inst.avatarUrl}
+                          alt={inst.name}
+                          className="w-full h-full rounded-full"
+                          imgClassName="w-full h-full object-cover"
+                          placeholderGradient="from-emerald-400 to-teal-600"
+                          fallback={<div className="w-full h-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white font-bold">{inst.name.charAt(0)}</div>}
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="text-sm font-bold text-foreground">{inst.name}</h4>

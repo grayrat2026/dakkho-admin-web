@@ -8,6 +8,7 @@ import { useInstructors } from '@/lib/data-hooks';
 import type { Instructor } from '@/lib/mock-data';
 import { LoadingSkeleton } from '../shared/LoadingSkeleton';
 import { GlassCard } from '../shared/GlassCard';
+import { ProgressiveImage } from '@/components/shared/ProgressiveImage';
 
 const AVATAR_GRADIENTS = [
   'from-sky-400 to-blue-600',
@@ -86,22 +87,19 @@ export function FeaturedInstructors() {
                 className="p-5 text-center cursor-pointer"
                 onClick={() => navigate('instructor-profile', { instructorId: instructor.id })}
               >
-                {/* Avatar with image or gradient fallback */}
+                {/* Avatar with progressive image or gradient fallback */}
                 <motion.div
-                  className={`w-16 h-16 mx-auto rounded-full mb-3 shadow-lg overflow-hidden ${
-                    instructor.avatarUrl ? '' : `bg-gradient-to-br ${gradient} flex items-center justify-center`
-                  }`}
+                  className="w-16 h-16 mx-auto rounded-full mb-3 shadow-lg overflow-hidden"
                   whileHover={{ scale: 1.1 }}
                 >
-                  {instructor.avatarUrl ? (
-                    <img
-                      src={instructor.avatarUrl}
-                      alt={instructor.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-white text-xl font-extrabold">{instructor.name.charAt(0)}</span>
-                  )}
+                  <ProgressiveImage
+                    src={instructor.avatarUrl}
+                    alt={instructor.name}
+                    className="w-full h-full rounded-full"
+                    imgClassName="w-full h-full object-cover"
+                    placeholderGradient={gradient}
+                    fallback={<div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}><span className="text-white text-xl font-extrabold">{instructor.name.charAt(0)}</span></div>}
+                  />
                 </motion.div>
 
                 {/* Name */}

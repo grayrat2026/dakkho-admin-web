@@ -9,6 +9,7 @@ import { useWatchProgressStore } from '@/lib/store';
 import { mapApiCourse } from '@/components/dakkho/shared/apiMappers';
 import type { Course } from '@/lib/mock-data';
 import { GlassCard } from '../shared/GlassCard';
+import { ProgressiveImage } from '@/components/shared/ProgressiveImage';
 
 export function MyCoursesPage() {
   const [activeTab, setActiveTab] = useState<'in-progress' | 'completed' | 'all'>('all');
@@ -180,18 +181,15 @@ export function MyCoursesPage() {
                   onClick={() => navigate('course-detail', { courseId: course.id })}
                 >
                   {/* Thumbnail */}
-                  <div className="relative aspect-video bg-gradient-to-br from-sky-400 to-blue-600">
-                    {course.thumbnailUrl ? (
-                      <img
-                        src={course.thumbnailUrl}
-                        alt={course.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <PlayCircle className="w-10 h-10 text-white/30" />
-                      </div>
-                    )}
+                  <div className="relative aspect-video overflow-hidden">
+                    <ProgressiveImage
+                      src={course.thumbnailUrl}
+                      alt={course.title}
+                      className="w-full h-full"
+                      imgClassName="w-full h-full object-cover"
+                      placeholderGradient="from-sky-400 to-blue-600"
+                      fallback={<div className="absolute inset-0 bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center"><PlayCircle className="w-10 h-10 text-white/30" /></div>}
+                    />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
                       <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                         <PlayCircle className="w-6 h-6 text-sky-600" />

@@ -12,6 +12,7 @@ import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
 import { ProgressBar } from '../shared/ProgressBar';
 import { CourseCardGrid } from '../shared/CourseCardGrid';
+import { ProgressiveImage } from '@/components/shared/ProgressiveImage';
 
 // Package type visual config
 function getPackageTypeInfo(type: string): { label: string; labelBn: string; icon: React.ComponentType<{ className?: string }>; color: string; bgColor: string; borderColor: string; description: string } {
@@ -431,13 +432,14 @@ export function CourseDetailPage() {
                             className="w-14 h-14 rounded-full flex-shrink-0 overflow-hidden"
                             whileHover={{ scale: 1.1 }}
                           >
-                            {inst.avatarUrl ? (
-                              <img src={inst.avatarUrl} alt={inst.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white text-lg font-extrabold">
-                                {inst.name.charAt(0)}
-                              </div>
-                            )}
+                            <ProgressiveImage
+                              src={inst.avatarUrl}
+                              alt={inst.name}
+                              className="w-full h-full rounded-full"
+                              imgClassName="w-full h-full object-cover"
+                              placeholderGradient="from-sky-400 to-blue-600"
+                              fallback={<div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white text-lg font-extrabold">{inst.name.charAt(0)}</div>}
+                            />
                           </motion.div>
                           <div className="flex-1 min-w-0">
                             <h3 className="text-base font-bold text-foreground">{inst.name}</h3>
@@ -586,13 +588,14 @@ export function CourseDetailPage() {
                         className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0"
                         whileHover={{ scale: 1.1 }}
                       >
-                        {inst.avatarUrl ? (
-                          <img src={inst.avatarUrl} alt={inst.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white text-xl font-extrabold">
-                            {inst.name.charAt(0)}
-                          </div>
-                        )}
+                        <ProgressiveImage
+                          src={inst.avatarUrl}
+                          alt={inst.name}
+                          className="w-full h-full rounded-full"
+                          imgClassName="w-full h-full object-cover"
+                          placeholderGradient="from-sky-400 to-blue-600"
+                          fallback={<div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white text-xl font-extrabold">{inst.name.charAt(0)}</div>}
+                        />
                       </motion.div>
                       <div className="flex-1 min-w-0">
                         <h3 className="text-lg font-bold text-foreground">{inst.name}</h3>

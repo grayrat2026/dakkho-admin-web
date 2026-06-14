@@ -9,6 +9,7 @@ import { GlassCard } from '../shared/GlassCard';
 import { CourseCardGrid } from '../shared/CourseCardGrid';
 import { AnimatedCounter } from '../shared/AnimatedCounter';
 import { GradientButton } from '../shared/GradientButton';
+import { ProgressiveImage } from '@/components/shared/ProgressiveImage';
 
 export function InstructorProfilePage() {
   const { pageParams, navigate, goBack } = useNavigationStore();
@@ -49,27 +50,25 @@ export function InstructorProfilePage() {
 
       {/* Cover + Avatar */}
       <GlassCard className="overflow-hidden mb-6">
-        <div className={`h-32 md:h-48 relative ${instructor.coverUrl ? '' : `bg-gradient-to-br ${coverColors[0]}`}`}>
-          {instructor.coverUrl && (
-            <img
-              src={instructor.coverUrl}
-              alt="Cover"
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          )}
+        <div className={`h-32 md:h-48 relative overflow-hidden`}>
+          <ProgressiveImage
+            src={instructor.coverUrl}
+            alt="Cover"
+            className="absolute inset-0 w-full h-full"
+            imgClassName="absolute inset-0 w-full h-full object-cover"
+            placeholderGradient={`from-sky-400 to-blue-600`}
+            lazy={true}
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
           <div className="absolute inset-0 flex items-center justify-center">
-            {instructor.avatarUrl ? (
-              <img
-                src={instructor.avatarUrl}
-                alt={instructor.name}
-                className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
-              />
-            ) : (
-              <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center text-white text-4xl font-extrabold">
-                {instructor.name.charAt(0)}
-              </div>
-            )}
+            <ProgressiveImage
+              src={instructor.avatarUrl}
+              alt={instructor.name}
+              className="w-24 h-24 rounded-full"
+              imgClassName="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
+              placeholderGradient="from-gray-300 to-gray-400"
+              fallback={<div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center text-white text-4xl font-extrabold">{instructor.name.charAt(0)}</div>}
+            />
           </div>
         </div>
         <div className="p-6 pt-4">

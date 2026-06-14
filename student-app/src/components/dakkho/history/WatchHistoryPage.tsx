@@ -5,6 +5,7 @@ import { Clock, Trash2, Play, ChevronRight, Loader2, Video } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react';
 import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
+import { ProgressiveImage } from '@/components/shared/ProgressiveImage';
 import { formatTimeAgo } from '@/lib/mock-data';
 import { watchHistoryApi, type WatchHistoryEntry } from '@/lib/api-client';
 import { useNavigationStore, useAuthStore } from '@/lib/store';
@@ -166,18 +167,19 @@ export function WatchHistoryPage() {
                 <div className="flex items-start gap-4">
                   {/* Thumbnail or play icon */}
                   <motion.div
-                    className="w-14 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gradient-to-br from-sky-500/10 to-blue-600/10 flex items-center justify-center cursor-pointer"
+                    className="w-14 h-10 rounded-lg overflow-hidden flex-shrink-0 cursor-pointer"
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => navigate('video-player', { videoId: item.videoId, courseId: item.courseId })}
                   >
-                    {item.videoThumbnail ? (
-                      <img src={item.videoThumbnail} alt={item.videoTitle} className="w-full h-full object-cover" />
-                    ) : item.courseThumbnail ? (
-                      <img src={item.courseThumbnail} alt={item.courseName} className="w-full h-full object-cover" />
-                    ) : (
-                      <Play className="w-4 h-4 text-sky-500" />
-                    )}
+                    <ProgressiveImage
+                      src={item.videoThumbnail || item.courseThumbnail}
+                      alt={item.videoTitle || item.courseName}
+                      className="w-full h-full rounded-lg"
+                      imgClassName="w-full h-full object-cover"
+                      placeholderGradient="from-sky-500/10 to-blue-600/10"
+                      fallback={<div className="w-full h-full bg-gradient-to-br from-sky-500/10 to-blue-600/10 flex items-center justify-center"><Play className="w-4 h-4 text-sky-500" /></div>}
+                    />
                   </motion.div>
 
                   {/* Content */}

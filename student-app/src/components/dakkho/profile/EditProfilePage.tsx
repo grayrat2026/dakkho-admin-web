@@ -12,6 +12,7 @@ import { instituteApi, technologyApi, studentProfileApi, type Institute, type Te
 import { GlassCard } from '../shared/GlassCard';
 import { AnimatedPage } from '../shared/AnimatedPage';
 import { GradientButton } from '../shared/GradientButton';
+import { ProgressiveImage } from '@/components/shared/ProgressiveImage';
 
 export function EditProfilePage() {
   const { goBack, navigate } = useNavigationStore();
@@ -173,14 +174,17 @@ export function EditProfilePage() {
           <div className="flex items-center gap-4">
             <div className="relative">
               <motion.div
-                className="w-20 h-20 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white text-3xl font-extrabold shadow-lg overflow-hidden"
+                className="w-20 h-20 rounded-full shadow-lg overflow-hidden"
                 whileHover={{ scale: 1.05 }}
               >
-                {user?.avatarUrl ? (
-                  <img src={user.avatarUrl} alt={fullName} className="w-full h-full object-cover" />
-                ) : (
-                  fullName.charAt(0) || 'U'
-                )}
+                <ProgressiveImage
+                  src={user?.avatarUrl}
+                  alt={fullName}
+                  className="w-full h-full rounded-full"
+                  imgClassName="w-full h-full object-cover"
+                  placeholderGradient="from-sky-400 to-blue-600"
+                  fallback={<div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white text-3xl font-extrabold">{fullName.charAt(0) || 'U'}</div>}
+                />
               </motion.div>
               <motion.button
                 className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-sky-500 flex items-center justify-center text-white shadow-md"

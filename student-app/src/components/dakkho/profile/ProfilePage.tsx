@@ -12,6 +12,7 @@ import { studentProfileApi, activityApi, achievementsApi, instituteApi } from '@
 import { TECHNOLOGY_SHORT_NAMES } from '@/lib/constants';
 import { GlassCard } from '../shared/GlassCard';
 import { AnimatedCounter } from '../shared/AnimatedCounter';
+import { ProgressiveImage } from '@/components/shared/ProgressiveImage';
 
 // Icon map for dynamic icon resolution from API string names
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -190,14 +191,17 @@ export function ProfilePage() {
         <GlassCard className="p-6 mb-6">
           <div className="flex items-center gap-4">
             <motion.div
-              className="w-16 h-16 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white text-2xl font-extrabold shadow-lg shadow-sky-500/20"
+              className="w-16 h-16 rounded-full shadow-lg shadow-sky-500/20 overflow-hidden"
               whileHover={{ scale: 1.05 }}
             >
-              {user.avatarUrl ? (
-                <img src={user.avatarUrl} alt={user.fullName} className="w-full h-full rounded-full object-cover" />
-              ) : (
-                user.fullName.charAt(0)
-              )}
+              <ProgressiveImage
+                src={user.avatarUrl}
+                alt={user.fullName}
+                className="w-full h-full rounded-full"
+                imgClassName="w-full h-full object-cover"
+                placeholderGradient="from-sky-400 to-blue-600"
+                fallback={<div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white text-2xl font-extrabold">{user.fullName.charAt(0)}</div>}
+              />
             </motion.div>
             <div className="flex-1">
               <h1 className="text-xl font-extrabold text-foreground">{user.fullName}</h1>

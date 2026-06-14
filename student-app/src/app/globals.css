@@ -258,6 +258,26 @@
   transform: translateX(-100%);
 }
 
+/* ProgressiveImage shimmer overlay */
+@keyframes shimmerSlide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.bg-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.bg-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+  animation: shimmerSlide 1.8s ease-in-out infinite;
+}
+
 /* Smooth page transitions */
 .page-transition {
   animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);

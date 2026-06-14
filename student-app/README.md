@@ -144,6 +144,8 @@ npx wrangler pages deploy out --project-name dakkho-student
 - **Search results images**: Instructor avatars and course thumbnails now display in search results instead of placeholder icons
 - **Semester persistence**: Semester now survives page refresh — stored via /auth/me and profile/stats API
 - **Institute name from API**: Login and refreshUser now get institute name directly from /auth/me response
+- **Progressive image loading**: All images across the app now use lazy loading + progressive blur-up (ProgressiveImage component) — IntersectionObserver-based lazy load with shimmer placeholder, smooth crossfade transition, and error fallback
+- **Radix Avatar lazy**: AvatarImage components now include `loading="lazy"` and `decoding="async"` for deferred loading
 
 ## 📄 License
 
