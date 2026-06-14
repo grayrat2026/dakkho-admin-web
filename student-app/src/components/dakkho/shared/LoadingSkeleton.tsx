@@ -36,14 +36,13 @@ export function LoadingSkeleton({ className, count = 1, type = 'card' }: Loading
 
 export function CourseCardSkeleton() {
   return (
-    <div className="glass-card p-0 overflow-hidden h-full flex flex-col">
-      <div className="flex-1 bg-muted/50 animate-pulse" />
-      <div className="p-4 space-y-3 flex-shrink-0">
-        <div className="h-4 bg-muted/50 animate-pulse rounded w-3/4" />
-        <div className="h-3 bg-muted/50 animate-pulse rounded w-1/2" />
-        <div className="flex items-center gap-2">
-          <div className="h-6 w-6 bg-muted/50 animate-pulse rounded-full" />
-          <div className="h-3 bg-muted/50 animate-pulse rounded w-1/3" />
+    <div className="glass-card p-0 overflow-hidden h-full">
+      <div className="w-full h-full bg-muted/50 animate-pulse relative">
+        {/* Simulate poster card layout */}
+        <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
+          <div className="h-3 bg-muted/70 animate-pulse rounded w-1/2" />
+          <div className="h-4 bg-muted/70 animate-pulse rounded w-3/4" />
+          <div className="h-3 bg-muted/70 animate-pulse rounded w-1/3" />
         </div>
       </div>
     </div>

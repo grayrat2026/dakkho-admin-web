@@ -23,9 +23,12 @@ DAKKHO Student App is a mobile-first SPA built with Next.js 16 (static export) t
 
 | Repository | Description | Live URL |
 |---|---|---|
+| [dakkho-student-app](https://github.com/grayrat2026/dakkho-student-app) | Student-facing Next.js 16 SPA (this repo) | [dakkho-student.pages.dev](https://dakkho-student.pages.dev) |
 | [dakkho-worker](https://github.com/grayrat2026/dakkho-worker) | Backend API (Hono + Cloudflare Workers) | [dakkho-admin-api.dakkho-admin.workers.dev](https://dakkho-admin-api.dakkho-admin.workers.dev) |
 | [dakkho-instructor](https://github.com/grayrat2026/dakkho-instructor) | Instructor-facing Next.js 16 SPA | [dakkho-instructor.pages.dev](https://dakkho-instructor.pages.dev) |
 | [dakkho-admin-web](https://github.com/grayrat2026/dakkho-admin-web) | Admin panel Next.js 16 SPA | [dakkho-admin.pages.dev](https://dakkho-admin.pages.dev) |
+| [dakkho-admin-src](https://github.com/grayrat2026/dakkho-admin-src) *(private)* | Admin panel source (build artifact repo) | — |
+| [dakkho-types](https://github.com/grayrat2026/dakkho-types) *(private)* | Shared TypeScript type definitions | — |
 
 ## 🏗 Architecture
 
@@ -143,6 +146,9 @@ npx wrangler pages deploy out --project-name dakkho-student
 
 ## 📋 Recent Changes (June 2026)
 
+- **Trending course cards redesign**: Full-poster image cards with minimal mobile UI (title overlay only) and desktop hover micro-animations (image zoom, staggered metadata reveal with category, instructor, rating, students, duration)
+- **Custom cursors**: Dark-mode and light-mode custom SVG cursors applied via CSS variables (desktop only, no-touch devices)
+- **Exam tips admin CRUD**: ExamTipsPage fetches from /api/exam-tips endpoint (stored in app_config, editable by admin via D1)
 - **Enrollment status on course detail**: Enrolled users now see "Continue Learning" + "Enrolled ✓" badge instead of "Enroll Now — ৳XXX"
 - **Payment verification by payment_id**: PaymentResultPage now verifies using `payment_id` from URL, fixing the `{pp_id}` placeholder issue
 - **PipraPay natural redirect**: Full-page redirect instead of iframe for better payment gateway compatibility
