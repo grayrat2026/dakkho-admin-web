@@ -56,19 +56,21 @@ export function EditProfilePage() {
           if (profileRes.profile.phone) setPhone(profileRes.profile.phone);
           if (profileRes.profile.bio) setBio(profileRes.profile.bio);
           if (profileRes.profile.semester) setSemester(profileRes.profile.semester);
-          // Pre-fill instituteId & technology from API if not in store
-          if (profileRes.profile.instituteId && !instituteId) {
+          // Pre-fill instituteId & technology from API (always override from server as source of truth)
+          if (profileRes.profile.instituteId) {
             setInstituteId(String(profileRes.profile.instituteId));
           }
-          if (profileRes.profile.technology && !technology) {
+          if (profileRes.profile.technology) {
             setTechnology(profileRes.profile.technology);
           }
-          // Update avatarUrl & semester in store if available
+          // Update store with semester from server
           const currentUser = userRef.current;
           if (currentUser) {
             const updates: Partial<UserType> = {};
             if (profileRes.profile.avatarUrl && !currentUser.avatarUrl) updates.avatarUrl = profileRes.profile.avatarUrl;
-            if (profileRes.profile.semester && !currentUser.semester) updates.semester = Number(profileRes.profile.semester);
+            if (profileRes.profile.semester) updates.semester = Math.floor(Number(profileRes.profile.semester));
+            if (profileRes.profile.instituteId) updates.instituteId = Number(profileRes.profile.instituteId);
+            if (profileRes.profile.technology) updates.technology = profileRes.profile.technology;
             if (Object.keys(updates).length > 0) {
               setUser({ ...currentUser, ...updates });
             }

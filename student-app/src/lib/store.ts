@@ -386,6 +386,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           id: res.user?.id || '',
           fullName: res.user?.name || '',
           email: res.user?.email || email,
+          institute: res.user?.instituteName || undefined,
           instituteId: res.user?.instituteId || undefined,
           technology: res.user?.technology || undefined,
           semester: res.user?.semester ? Math.floor(Number(res.user.semester)) : undefined,
@@ -398,7 +399,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ user, isAuthenticated: true, isLoading: false });
         saveAuthSession(user, true);
 
-        if (user.instituteId) {
+        if (user.instituteId && !user.institute) {
           try {
             const instRes = await instituteApi.list({ limit: 100 });
             const inst = instRes.institutes?.find((i: any) => i.id === user.instituteId);
@@ -543,6 +544,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           id: res.user.id,
           fullName: res.user.name,
           email: res.user.email,
+          institute: res.user.instituteName || undefined,
           instituteId: res.user.instituteId || undefined,
           technology: res.user.technology || undefined,
           semester: res.user.semester ? Math.floor(Number(res.user.semester)) : undefined,
@@ -553,8 +555,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ user });
         saveAuthSession(user, true);
 
-        // Resolve institute name from ID
-        if (user.instituteId) {
+        // Resolve institute name from ID if not returned by API
+        if (user.instituteId && !user.institute) {
           try {
             const instRes = await instituteApi.list({ limit: 100 });
             const inst = instRes.institutes?.find((i: any) => i.id === user.instituteId);
