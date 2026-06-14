@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, EyeOff, Mail, Lock, LogIn, Check, AlertCircle, KeyRound } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, LogIn, Check, AlertCircle, KeyRound, Shield, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore, useNavigationStore } from '@/lib/store';
+import { twoFAApi } from '@/lib/api-client';
 import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
+import { setAuthToken } from '@/lib/api-client';
 import Image from 'next/image';
 
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -93,6 +95,13 @@ export function LoginPage() {
   const { login, isLoading } = useAuthStore();
   const navigate = useNavigationStore((s) => s.navigate);
 
+  // 2FA verification state
+  const [requires2FA, setRequires2FA] = useState(false);
+  const [pendingToken, setPendingToken] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [isVerifying2FA, setIsVerifying2FA] = useState(false);
+  const [twoFAError, setTwoFAError] = useState('');
+
   // Load remembered email (deferred to avoid synchronous setState in effect)
   useEffect(() => {
     try {
@@ -131,10 +140,118 @@ export function LoginPage() {
       } else {
         localStorage.removeItem('dakkho-remember-me');
       }
-    } catch {
+    } catch (err: any) {
+      // Check if the error indicates 2FA is required
+      if (err?.requires2FA) {
+        setRequires2FA(true);
+        setPendingToken(err.pendingToken);
+        return;
+      }
       setError('Invalid email or password. Please try again.');
     }
   }, [email, password, rememberMe, login]);
+
+  // Handle 2FA login - we need to intercept the login response
+  const handleLogin = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setTwoFAError('');
+
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    try {
+      // Directly call the login API to check for 2FA
+      const { authApi, setAuthToken } = await import('@/lib/api-client');
+      const res = await authApi.login({ email, password });
+
+      if (res.requires2FA) {
+        // 2FA is required - show verification screen
+        setRequires2FA(true);
+        setPendingToken(res.pendingToken);
+        return;
+      }
+
+      // Normal login flow
+      if (res.success && res.token) {
+        setAuthToken(res.token);
+        // Use the auth store to complete login
+        const { useAuthStore } = await import('@/lib/store');
+        const user = {
+          id: res.user?.id || '',
+          fullName: res.user?.name || '',
+          email: res.user?.email || email,
+          institute: res.user?.instituteName || undefined,
+          instituteId: res.user?.instituteId || undefined,
+          technology: res.user?.technology || undefined,
+          semester: undefined,
+          emailVerified: res.user?.emailVerified || false,
+          avatarUrl: res.user?.avatarUrl || '',
+          role: 'student' as const,
+          isNewUser: false,
+          enrolledCourseIds: [],
+        };
+        useAuthStore.getState().setUser(user);
+        useAuthStore.getState().set({ user, isAuthenticated: true, isLoading: false });
+      }
+
+      // Save remember me
+      if (rememberMe) {
+        localStorage.setItem('dakkho-remember-me', JSON.stringify({ email }));
+      } else {
+        localStorage.removeItem('dakkho-remember-me');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Invalid email or password. Please try again.');
+    }
+  }, [email, password, rememberMe]);
+
+  const handle2FAVerify = useCallback(async () => {
+    if (totpCode.length !== 6) return;
+    setIsVerifying2FA(true);
+    setTwoFAError('');
+
+    try {
+      const res = await twoFAApi.verifyLogin(pendingToken, totpCode);
+      if (res.success && res.token) {
+        setAuthToken(res.token);
+        const { useAuthStore } = await import('@/lib/store');
+        const user = {
+          id: res.user?.id || '',
+          fullName: res.user?.name || '',
+          email: res.user?.email || email,
+          institute: res.user?.instituteName || undefined,
+          instituteId: res.user?.instituteId || undefined,
+          technology: res.user?.technology || undefined,
+          semester: undefined,
+          emailVerified: res.user?.emailVerified || false,
+          avatarUrl: res.user?.avatarUrl || '',
+          role: 'student' as const,
+          isNewUser: false,
+          enrolledCourseIds: [],
+        };
+        useAuthStore.getState().set({ user, isAuthenticated: true, isLoading: false });
+
+        // Save remember me
+        if (rememberMe) {
+          localStorage.setItem('dakkho-remember-me', JSON.stringify({ email }));
+        } else {
+          localStorage.removeItem('dakkho-remember-me');
+        }
+      }
+    } catch (err: any) {
+      setTwoFAError(err?.message || 'Invalid verification code. Please try again.');
+    } finally {
+      setIsVerifying2FA(false);
+    }
+  }, [pendingToken, totpCode, email, rememberMe]);
 
   const handleSocialLogin = (provider: string) => {
     toast.info(`${provider} login coming soon!`, {
@@ -152,6 +269,128 @@ export function LoginPage() {
 
   const emailValid = email && isValidEmail(email);
   const passwordStrength = getPasswordStrength(password);
+
+  // 2FA Verification Screen
+  if (requires2FA) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-sky-950 p-4 relative overflow-hidden">
+        <BackgroundBlobs />
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="w-full max-w-md relative z-10"
+        >
+          <GlassCard className="p-6 sm:p-8">
+            {/* Logo */}
+            <motion.div
+              className="flex flex-col items-center mb-8"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+            >
+              <motion.div
+                className="w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center mb-3 shadow-lg shadow-sky-500/30"
+                animate={{ rotate: [0, 5, -5, 0] }}
+                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                <Image src="/logo.png" alt="DAKKHO" width={40} height={40} className="rounded-xl" />
+              </motion.div>
+              <h1 className="text-2xl font-extrabold gradient-text">Two-Factor Authentication</h1>
+              <p className="text-sm text-muted-foreground mt-1">Enter the code from your authenticator app</p>
+            </motion.div>
+
+            {/* Shield icon */}
+            <div className="flex justify-center mb-6">
+              <div className="w-20 h-20 rounded-2xl bg-sky-50 dark:bg-sky-900/20 flex items-center justify-center border-2 border-sky-200 dark:border-sky-800">
+                <Shield className="w-10 h-10 text-sky-500" />
+              </div>
+            </div>
+
+            {/* Info */}
+            <div className="p-3 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 mb-4">
+              <p className="text-xs text-sky-700 dark:text-sky-300 text-center">
+                Open your authenticator app (Google Authenticator, Authy, etc.) and enter the 6-digit code for <strong>{email}</strong>
+              </p>
+            </div>
+
+            {/* Error */}
+            {twoFAError && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4"
+              >
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50">
+                  <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                  <p className="text-xs font-medium text-red-600 dark:text-red-400">{twoFAError}</p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Code input */}
+            <div className="mb-4">
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={totpCode}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                  setTotpCode(val);
+                  setTwoFAError('');
+                }}
+                placeholder="Enter 6-digit code"
+                className="w-full px-4 py-4 rounded-xl bg-muted/30 border-2 border-transparent focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 outline-none transition-all text-center text-2xl font-bold tracking-[0.5em] text-foreground"
+                autoFocus
+              />
+            </div>
+
+            {/* Verify button */}
+            <GradientButton
+              onClick={handle2FAVerify}
+              loading={isVerifying2FA}
+              disabled={totpCode.length !== 6}
+              className="w-full"
+              size="lg"
+            >
+              {isVerifying2FA ? (
+                <>
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                    className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+                  />
+                  Verifying...
+                </>
+              ) : (
+                <>
+                  <Shield className="w-4 h-4" />
+                  Verify & Sign In
+                </>
+              )}
+            </GradientButton>
+
+            {/* Back to login */}
+            <div className="text-center mt-4">
+              <button
+                onClick={() => {
+                  setRequires2FA(false);
+                  setPendingToken('');
+                  setTotpCode('');
+                  setTwoFAError('');
+                }}
+                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Back to login
+              </button>
+            </div>
+          </GlassCard>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-sky-950 p-4 relative overflow-hidden">
@@ -200,7 +439,7 @@ export function LoginPage() {
           </AnimatePresence>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleLogin} className="space-y-5">
             {/* Email */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}

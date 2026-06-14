@@ -8,26 +8,10 @@ import {
   RefreshCw, Check, Loader2,
 } from 'lucide-react';
 import { useNavigationStore, useAuthStore } from '@/lib/store';
-import { studentProfileApi } from '@/lib/api-client';
+import { studentProfileApi, twoFAApi } from '@/lib/api-client';
 import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
 import { SensitiveActionPrompt } from '../shared/SensitiveActionPrompt';
-
-function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
-  return (
-    <motion.button
-      className={`w-11 h-6 rounded-full p-0.5 transition-colors ${enabled ? 'bg-sky-500' : 'bg-muted'}`}
-      onClick={onToggle}
-      whileTap={{ scale: 0.9 }}
-    >
-      <motion.div
-        className="w-5 h-5 rounded-full bg-white shadow-sm"
-        animate={{ x: enabled ? 20 : 0 }}
-        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-      />
-    </motion.button>
-  );
-}
 
 export function AccountSettingsPage() {
   const { goBack, navigate } = useNavigationStore();
@@ -38,15 +22,17 @@ export function AccountSettingsPage() {
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState('');
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [twoFALoading, setTwoFALoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [sessionCount, setSessionCount] = useState(1);
 
   const [showDeletePrompt, setShowDeletePrompt] = useState(false);
 
-  // Fetch profile data on mount
+  // Fetch profile data and 2FA status on mount
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -61,6 +47,32 @@ export function AccountSettingsPage() {
         if (!cancelled) setProfileLoading(false);
       }
     })();
+
+    // Fetch 2FA status
+    (async () => {
+      try {
+        const status = await twoFAApi.status();
+        if (cancelled) return;
+        setTwoFactorEnabled(status.enabled);
+      } catch {
+        // 2FA status may fail — assume disabled
+      } finally {
+        if (!cancelled) setTwoFALoading(false);
+      }
+    })();
+
+    // Fetch session count
+    (async () => {
+      try {
+        const { sessionApi } = await import('@/lib/api-client');
+        const result = await sessionApi.list();
+        if (cancelled) return;
+        setSessionCount(result.sessions?.length || 1);
+      } catch {
+        // May fail — keep default
+      }
+    })();
+
     return () => { cancelled = true; };
   }, []);
 
@@ -256,19 +268,31 @@ export function AccountSettingsPage() {
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </motion.div>
 
-            {/* Two-Factor Authentication */}
-            <div className="flex items-center justify-between py-2">
+            {/* Two-Factor Authentication — Real toggle */}
+            <motion.div
+              className="flex items-center justify-between py-2 cursor-pointer hover:bg-muted/20 rounded-lg px-1 -mx-1 transition-colors"
+              onClick={() => navigate(twoFactorEnabled ? '2fa-disable' : '2fa-setup')}
+              whileHover={{ x: 2 }}
+              whileTap={{ scale: 0.98 }}
+            >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-sky-50 dark:bg-sky-900/20 flex items-center justify-center">
-                  <Smartphone className="w-4 h-4 text-sky-500" />
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${twoFactorEnabled ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-sky-50 dark:bg-sky-900/20'}`}>
+                  <Smartphone className={`w-4 h-4 ${twoFactorEnabled ? 'text-emerald-500' : 'text-sky-500'}`} />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground">Two-Factor Authentication</p>
-                  <p className="text-xs text-muted-foreground">{twoFactorEnabled ? 'Enabled — Extra security active' : 'Disabled — Enable for extra security'}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {twoFALoading ? 'Loading...' : twoFactorEnabled ? 'Enabled — Extra security active' : 'Disabled — Tap to enable'}
+                  </p>
                 </div>
               </div>
-              <Toggle enabled={twoFactorEnabled} onToggle={() => setTwoFactorEnabled(!twoFactorEnabled)} />
-            </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${twoFactorEnabled ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-muted/30 text-muted-foreground'}`}>
+                  {twoFactorEnabled ? 'ON' : 'OFF'}
+                </span>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </div>
+            </motion.div>
 
             {/* Active Sessions */}
             <motion.div
@@ -283,7 +307,7 @@ export function AccountSettingsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground">Active Sessions</p>
-                  <p className="text-xs text-muted-foreground">1 active session</p>
+                  <p className="text-xs text-muted-foreground">{sessionCount} active session{sessionCount !== 1 ? 's' : ''}</p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground" />

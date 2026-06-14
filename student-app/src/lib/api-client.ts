@@ -153,6 +153,8 @@ export interface AuthResponse {
     name: string;
     email: string;
     instituteId: number | null;
+    instituteName?: string | null;
+    technologyName?: string | null;
     technology: string | null;
     emailVerified: boolean;
     avatarUrl?: string;
@@ -160,6 +162,9 @@ export interface AuthResponse {
     packages: UserPackage[];
   };
   message?: string;
+  requires2FA?: boolean;
+  pendingToken?: string;
+  method?: string;
 }
 
 export interface UserProfile {
@@ -524,4 +529,52 @@ export const aiSearchApi = {
   },
   searchPost: (query: string) =>
     api.post<AISearchResponse>('/api/ai-search', { query }),
+};
+
+// ─── Session Management ───
+export interface SessionInfo {
+  id: string;
+  device: 'mobile' | 'desktop' | 'tablet';
+  browser: string;
+  location: string;
+  ip: string;
+  lastActive: string;
+  isCurrent: boolean;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export const sessionApi = {
+  list: () =>
+    apiGet<{ sessions: SessionInfo[] }>('/api/student/sessions'),
+  revoke: (id: string) =>
+    api.delete<{ success: boolean }>(`/api/student/sessions/${id}`),
+  revokeAll: () =>
+    api.post<{ success: boolean; revokedCount: number }>('/api/student/sessions/revoke-all', {}),
+};
+
+// ─── Two-Factor Authentication ───
+export interface TwoFAStatus {
+  enabled: boolean;
+  method: string;
+  verified: boolean;
+}
+
+export interface TwoFASetupResponse {
+  secret: string;
+  otpAuthUrl: string;
+  backupCodes: string[];
+}
+
+export const twoFAApi = {
+  status: () =>
+    apiGet<TwoFAStatus>('/api/student/2fa/status'),
+  setup: (password: string) =>
+    api.post<TwoFASetupResponse>('/api/student/2fa/setup', { password }),
+  verifySetup: (code: string) =>
+    api.post<{ success: boolean; enabled: boolean }>('/api/student/2fa/verify-setup', { code }),
+  disable: (password: string) =>
+    api.post<{ success: boolean; enabled: boolean }>('/api/student/2fa/disable', { password }),
+  verifyLogin: (pendingToken: string, totpCode: string) =>
+    api.post<AuthResponse>('/api/auth/2fa/verify', { pendingToken, totpCode }),
 };

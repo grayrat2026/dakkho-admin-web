@@ -1,93 +1,80 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Smartphone, Monitor, Globe, MapPin, Clock, ChevronLeft,
   Shield, Trash2, CheckCircle, AlertTriangle, LogOut, Laptop,
-  Tablet, Chrome,
+  Tablet, Loader2,
 } from 'lucide-react';
 import { useNavigationStore } from '@/lib/store';
+import { sessionApi, type SessionInfo } from '@/lib/api-client';
 import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
 
-interface Session {
-  id: string;
-  device: 'mobile' | 'desktop' | 'tablet';
-  browser: string;
-  location: string;
-  ip: string;
-  lastActive: string;
-  isCurrent: boolean;
-  icon: React.ElementType;
-}
-
-const MOCK_SESSIONS: Session[] = [
-  {
-    id: 's1',
-    device: 'mobile',
-    browser: 'Chrome Mobile',
-    location: 'Dhaka, Bangladesh',
-    ip: '103.48.XX.XX',
-    lastActive: 'Active now',
-    isCurrent: true,
-    icon: Smartphone,
-  },
-  {
-    id: 's2',
-    device: 'desktop',
-    browser: 'Chrome 120',
-    location: 'Dhaka, Bangladesh',
-    ip: '103.48.XX.XX',
-    lastActive: '2 hours ago',
-    isCurrent: false,
-    icon: Monitor,
-  },
-  {
-    id: 's3',
-    device: 'tablet',
-    browser: 'Safari Mobile',
-    location: 'Chittagong, Bangladesh',
-    ip: '45.64.XX.XX',
-    lastActive: '1 day ago',
-    isCurrent: false,
-    icon: Tablet,
-  },
-  {
-    id: 's4',
-    device: 'desktop',
-    browser: 'Firefox 121',
-    location: 'Sylhet, Bangladesh',
-    ip: '37.111.XX.XX',
-    lastActive: '3 days ago',
-    isCurrent: false,
-    icon: Laptop,
-  },
-];
+const deviceIcons: Record<string, React.ElementType> = {
+  mobile: Smartphone,
+  desktop: Monitor,
+  tablet: Tablet,
+};
 
 export function ActiveSessionsPage() {
   const { goBack } = useNavigationStore();
-  const [sessions, setSessions] = useState<Session[]>(MOCK_SESSIONS);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [revokedAll, setRevokedAll] = useState(false);
   const [showConfirmRevokeAll, setShowConfirmRevokeAll] = useState(false);
+
+  // Fetch sessions from API
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await sessionApi.list();
+        if (cancelled) return;
+        setSessions(result.sessions || []);
+      } catch (err: any) {
+        if (cancelled) return;
+        setError(err?.message || 'Failed to load sessions');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const currentSession = sessions.find((s) => s.isCurrent);
   const otherSessions = sessions.filter((s) => !s.isCurrent);
 
   const handleRevoke = async (id: string) => {
     setRevokingId(id);
-    await new Promise((r) => setTimeout(r, 1000));
-    setSessions((prev) => prev.filter((s) => s.id !== id));
-    setRevokingId(null);
+    try {
+      await sessionApi.revoke(id);
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+    } catch (err: any) {
+      setError(err?.message || 'Failed to revoke session');
+    } finally {
+      setRevokingId(null);
+    }
   };
 
   const handleRevokeAll = async () => {
     setShowConfirmRevokeAll(false);
     setRevokedAll(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    setSessions((prev) => prev.filter((s) => s.isCurrent));
+    try {
+      await sessionApi.revokeAll();
+      setSessions((prev) => prev.filter((s) => s.isCurrent));
+    } catch (err: any) {
+      setError(err?.message || 'Failed to revoke sessions');
+    }
     setTimeout(() => setRevokedAll(false), 3000);
+  };
+
+  const DeviceIcon = ({ device }: { device: string }) => {
+    const Icon = deviceIcons[device] || Monitor;
+    return <Icon className="w-5 h-5 text-sky-500" />;
   };
 
   return (
@@ -107,6 +94,20 @@ export function ActiveSessionsPage() {
         </div>
       </motion.div>
 
+      {/* Error message */}
+      {error && (
+        <motion.div
+          className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex items-center gap-2"
+          initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+        >
+          <AlertTriangle className="w-4 h-4 text-red-500" />
+          <p className="text-sm font-semibold text-red-700 dark:text-red-400">{error}</p>
+          <button className="ml-auto text-xs text-red-500 hover:underline" onClick={() => setError(null)}>
+            Dismiss
+          </button>
+        </motion.div>
+      )}
+
       {/* Success message */}
       {revokedAll && (
         <motion.div
@@ -119,110 +120,128 @@ export function ActiveSessionsPage() {
         </motion.div>
       )}
 
-      {/* Current Session */}
-      {currentSession && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-          <GlassCard className="p-5 mb-4">
-            <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2 mb-4">
-              <Shield className="w-4 h-4 text-emerald-500" /> Current Session
-            </h3>
-            <div className="flex items-center gap-4 p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-200/50 dark:border-emerald-800/30">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
-                <currentSession.icon className="w-6 h-6 text-emerald-500" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-bold text-foreground">{currentSession.browser}</p>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500 text-white font-bold">This device</span>
-                </div>
-                <div className="flex items-center gap-3 mt-1">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <MapPin className="w-3 h-3" /> {currentSession.location}
-                  </span>
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> {currentSession.lastActive}
-                  </span>
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5">IP: {currentSession.ip}</p>
-              </div>
-            </div>
-          </GlassCard>
-        </motion.div>
-      )}
-
-      {/* Other Sessions */}
-      {otherSessions.length > 0 && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <GlassCard className="p-5 mb-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                <Globe className="w-4 h-4 text-sky-500" /> Other Sessions ({otherSessions.length})
-              </h3>
-              <motion.button
-                className="text-xs font-semibold text-red-500 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20"
-                onClick={() => setShowConfirmRevokeAll(true)}
-                whileTap={{ scale: 0.95 }}
-              >
-                Revoke All
-              </motion.button>
-            </div>
-
-            <div className="space-y-3">
-              <AnimatePresence>
-                {otherSessions.map((session, i) => (
-                  <motion.div
-                    key={session.id}
-                    className="flex items-center gap-4 p-3 rounded-xl bg-muted/20"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10, height: 0 }}
-                    transition={{ delay: 0.15 + i * 0.05 }}
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-900/20 flex items-center justify-center flex-shrink-0">
-                      <session.icon className="w-5 h-5 text-sky-500" />
+      {/* Loading state */}
+      {loading ? (
+        <GlassCard className="p-8 text-center">
+          <Loader2 className="w-8 h-8 text-sky-500 animate-spin mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Loading sessions...</p>
+        </GlassCard>
+      ) : (
+        <>
+          {/* Current Session */}
+          {currentSession && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+              <GlassCard className="p-5 mb-4">
+                <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2 mb-4">
+                  <Shield className="w-4 h-4 text-emerald-500" /> Current Session
+                </h3>
+                <div className="flex items-center gap-4 p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-200/50 dark:border-emerald-800/30">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
+                    <DeviceIcon device={currentSession.device} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold text-foreground">{currentSession.browser}</p>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500 text-white font-bold">This device</span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-foreground">{session.browser}</p>
-                      <div className="flex items-center gap-3 mt-0.5">
+                    <div className="flex items-center gap-3 mt-1">
+                      {currentSession.location && (
                         <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <MapPin className="w-3 h-3" /> {session.location}
+                          <MapPin className="w-3 h-3" /> {currentSession.location}
                         </span>
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> {session.lastActive}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">IP: {session.ip}</p>
-                    </div>
-                    <motion.button
-                      className="text-xs font-semibold text-red-500 px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 flex items-center gap-1 flex-shrink-0"
-                      onClick={() => handleRevoke(session.id)}
-                      whileTap={{ scale: 0.95 }}
-                      disabled={revokingId === session.id}
-                    >
-                      {revokingId === session.id ? (
-                        <motion.div className="w-3 h-3 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <LogOut className="w-3 h-3" />
                       )}
-                      {revokingId === session.id ? 'Revoking...' : 'Revoke'}
-                    </motion.button>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          </GlassCard>
-        </motion.div>
-      )}
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> {currentSession.lastActive}
+                      </span>
+                    </div>
+                    {currentSession.ip && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">IP: {currentSession.ip}</p>
+                    )}
+                  </div>
+                </div>
+              </GlassCard>
+            </motion.div>
+          )}
 
-      {/* No other sessions */}
-      {otherSessions.length === 0 && !revokedAll && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <GlassCard className="p-8 text-center">
-            <Shield className="w-12 h-12 text-sky-500 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-foreground mb-1">Only This Device</h3>
-            <p className="text-xs text-muted-foreground">You are only logged in on this device. No other active sessions found.</p>
-          </GlassCard>
-        </motion.div>
+          {/* Other Sessions */}
+          {otherSessions.length > 0 && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <GlassCard className="p-5 mb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-sky-500" /> Other Sessions ({otherSessions.length})
+                  </h3>
+                  <motion.button
+                    className="text-xs font-semibold text-red-500 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20"
+                    onClick={() => setShowConfirmRevokeAll(true)}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    Revoke All
+                  </motion.button>
+                </div>
+
+                <div className="space-y-3">
+                  <AnimatePresence>
+                    {otherSessions.map((session, i) => (
+                      <motion.div
+                        key={session.id}
+                        className="flex items-center gap-4 p-3 rounded-xl bg-muted/20"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10, height: 0 }}
+                        transition={{ delay: 0.15 + i * 0.05 }}
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-900/20 flex items-center justify-center flex-shrink-0">
+                          <DeviceIcon device={session.device} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-foreground">{session.browser}</p>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            {session.location && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <MapPin className="w-3 h-3" /> {session.location}
+                              </span>
+                            )}
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> {session.lastActive}
+                            </span>
+                          </div>
+                          {session.ip && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">IP: {session.ip}</p>
+                          )}
+                        </div>
+                        <motion.button
+                          className="text-xs font-semibold text-red-500 px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 flex items-center gap-1 flex-shrink-0"
+                          onClick={() => handleRevoke(session.id)}
+                          whileTap={{ scale: 0.95 }}
+                          disabled={revokingId === session.id}
+                        >
+                          {revokingId === session.id ? (
+                            <motion.div className="w-3 h-3 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <LogOut className="w-3 h-3" />
+                          )}
+                          {revokingId === session.id ? 'Revoking...' : 'Revoke'}
+                        </motion.button>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              </GlassCard>
+            </motion.div>
+          )}
+
+          {/* No other sessions */}
+          {otherSessions.length === 0 && !revokedAll && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <GlassCard className="p-8 text-center">
+                <Shield className="w-12 h-12 text-sky-500 mx-auto mb-3" />
+                <h3 className="text-base font-bold text-foreground mb-1">Only This Device</h3>
+                <p className="text-xs text-muted-foreground">You are only logged in on this device. No other active sessions found.</p>
+              </GlassCard>
+            </motion.div>
+          )}
+        </>
       )}
 
       {/* Revoke All Confirmation Modal */}

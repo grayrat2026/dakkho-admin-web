@@ -109,6 +109,8 @@ import { VideoQualityPage } from './settings/VideoQualityPage';
 import { NetworkDataPage } from './settings/NetworkDataPage';
 import { ContentProtectionSettingsPage } from './settings/ContentProtectionSettingsPage';
 import { ActiveSessionsPage } from './settings/ActiveSessionsPage';
+import { TwoFactorSetupPage } from './settings/TwoFactorSetupPage';
+import { TwoFactorDisablePage } from './settings/TwoFactorDisablePage';
 
 // Help sub-pages
 import { FAQPage } from './help/FAQPage';
@@ -235,6 +237,8 @@ function PageRouter() {
     'settings-network-data': <NetworkDataPage />,
     'settings-content-protection': <ContentProtectionSettingsPage />,
     'settings-sessions': <ActiveSessionsPage />,
+    '2fa-setup': <TwoFactorSetupPage />,
+    '2fa-disable': <TwoFactorDisablePage />,
     // Help sub-pages
     faq: <FAQPage />,
     'contact-support': <ContactSupportPage />,

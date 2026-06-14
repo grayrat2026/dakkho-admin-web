@@ -31,6 +31,7 @@ export type Page =
   | 'settings-account' | 'settings-notifications' | 'settings-privacy'
   | 'settings-language' | 'settings-theme' | 'settings-downloads' | 'settings-content-protection' | 'settings-sessions'
   | 'settings-video-quality' | 'settings-download-settings' | 'settings-network-data'
+  | '2fa-setup' | '2fa-disable'
   // Help sub-pages
   | 'faq' | 'contact-support' | 'report-issue' | 'terms-of-service' | 'privacy-policy' | 'refund-policy'
   // Exam pages
@@ -130,6 +131,8 @@ const pageToPath: Record<string, string> = {
   'settings-network-data': '/settings/network-data',
   'settings-content-protection': '/settings/content-protection',
   'settings-sessions': '/settings/sessions',
+  '2fa-setup': '/settings/2fa/setup',
+  '2fa-disable': '/settings/2fa/disable',
   'faq': '/help/faq',
   'contact-support': '/help/contact-support',
   'report-issue': '/help/report-issue',
