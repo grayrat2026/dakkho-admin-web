@@ -146,7 +146,7 @@ npx wrangler pages deploy out --project-name dakkho-student
 
 ## 📋 Recent Changes (June 2026)
 
-- **Trending course cards — Amazon Prime Video style**: Poster image with metadata alongside (category, title, instructor, rating/students/duration); desktop hover shows image zoom + play button; mobile shows compact info
+- **Trending course cards**: Full-poster image cards with title overlay; desktop hover shows image zoom + play button + staggered metadata reveal (category, instructor, rating, students, duration); mobile shows minimal title overlay
 - **2FA login fix**: Fixed `a.getState(...).set is not a function` — replaced broken `getState().set()` with `setState()` in login and 2FA verify flows
 - **Nunito font fix**: Removed broken @font-face declarations (404 on gstatic), now loading exclusively via Google Fonts CDN
 - **Google Noto Animated Emoji System**: Auto-detects emojis in text, replaces with animated GIF (inline) or Lottie (featured) from Google CDN with graceful fallback (`EmojiText`, `AnimatedEmoji`, `notoEmoji.ts`)
