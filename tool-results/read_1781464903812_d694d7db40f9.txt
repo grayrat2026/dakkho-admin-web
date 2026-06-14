@@ -1,0 +1,1611 @@
+     1→<div align="center">
+     2→
+     3→# 📱 DAKKHO — Android App Plan
+     4→
+     5→**Capacitor JS-powered Native Android Application for DAKKHO Student Platform**
+     6→
+     7→[![Capacitor](https://img.shields.io/badge/Capacitor-6-119EFF?style=for-the-badge&logo=capacitor&logoColor=white)](https://capacitorjs.com/)
+     8→[![Android](https://img.shields.io/badge/Android-14+-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com/)
+     9→[![Next.js 16](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+    10→
+    11→</div>
+    12→
+    13→---
+    14→
+    15→## 📋 Table of Contents
+    16→
+    17→1. [Project Overview](#-project-overview)
+    18→2. [Architecture Overview](#-architecture-overview)
+    19→3. [Tech Stack](#-tech-stack)
+    20→4. [Single Device Binding (Device Lock)](#-single-device-binding-device-lock)
+    21→5. [Aggressive Caching Strategy](#-aggressive-caching-strategy)
+    22→6. [Video Download & Encryption System](#-video-download--encryption-system)
+    23→7. [Widevine L1 DRM — Deep Dive](#-widevine-l1-drm--deep-dive)
+    24→8. [Skeleton Loader — Conditional Strategy](#-skeleton-loader--conditional-strategy)
+    25→9. [Mobile Web → App Forced Redirect](#-mobile-web--app-forced-redirect)
+    26→10. [Framer Motion Preservation](#-framer-motion-preservation)
+    27→11. [App Size Optimization](#-app-size-optimization)
+    28→12. [Service Worker & Offline Shell](#-service-worker--offline-shell)
+    29→13. [Capacitor Plugin Architecture](#-capacitor-plugin-architecture)
+    30→14. [Project Structure](#-project-structure)
+    31→15. [Build & Release Pipeline](#-build--release-pipeline)
+    32→16. [Security Checklist](#-security-checklist)
+    33→17. [Phased Implementation Roadmap](#-phased-implementation-roadmap)
+    34→18. [GitHub Repositories](#-github-repositories)
+    35→
+    36→---
+    37→
+    38→## 🎯 Project Overview
+    39→
+    40→The DAKKHO Android App wraps the existing Next.js 16 Student App into a native Android experience using **Capacitor JS 6**. The goal is simple: **the user should NEVER feel like they're using a web app**. Every interaction, every animation, every screen transition must feel 100% native. Framer Motion animations remain intact, the UI is identical to the web version, and additional native capabilities (encrypted downloads, device binding, DRM) are layered on top.
+    41→
+    42→### Core Principles
+    43→
+    44→| Principle | Implementation |
+    45→|---|---|
+    46→| **Zero "Offline" Visibility** | No "Offline" badge, label, or indicator anywhere in the UI. Period. |
+    47→| **Single Device Binding** | One user = one Android device. New device = instant deactivation. |
+    48→| **Military-Grade Download Security** | AES-256-GCM encrypted, 30-day TTL, destroyed on logout. |
+    49→| **App-Only Downloads** | Video download button visible ONLY in installed app, hidden on website. |
+    50→| **Native Feel** | Same Framer Motion UI, same design system, zero compromise. |
+    51→| **Aggressive Caching** | Default cache everything feasible to reduce DB/API load. |
+    52→| **Smart Skeleton Loading** | Skeletons only on slow network (3G/low), direct load on good network. |
+    53→| **Forced App Redirect** | Mobile web visitors are redirected to install/open the Android app. |
+    54→
+    55→---
+    56→
+    57→## 🏗 Architecture Overview
+    58→
+    59→```
+    60→┌─────────────────────────────────────────────────────────────┐
+    61→│                    ANDROID APK (Capacitor)                   │
+    62→│                                                             │
+    63→│  ┌───────────────────────────────────────────────────────┐  │
+    64→│  │              Next.js 16 Static Export                  │  │
+    65→│  │  ┌─────────┐  ┌──────────┐  ┌─────────────────────┐  │  │
+    66→│  │  │ React   │  │ Framer   │  │ Zustand Stores      │  │  │
+    67→│  │  │ Router  │  │ Motion   │  │ (auth,nav,download)  │  │  │
+    68→│  │  └─────────┘  └──────────┘  └─────────────────────┘  │  │
+    69→│  └───────────────────────────────────────────────────────┘  │
+    70→│                                                             │
+    71→│  ┌───────────────────────────────────────────────────────┐  │
+    72→│  │              Capacitor Native Bridge                   │  │
+    73→│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ │  │
+    74→│  │  │ Download │ │ Device   │ │ Crypto   │ │ Network │ │  │
+    75→│  │  │ Manager  │ │ Bind     │ │ (AES)    │ │ Info    │ │  │
+    76→│  │  └──────────┘ └──────────┘ └──────────┘ └─────────┘ │  │
+    77→│  └───────────────────────────────────────────────────────┘  │
+    78→│                                                             │
+    79→│  ┌───────────────────────────────────────────────────────┐  │
+    80→│  │              Android Native Layer                      │  │
+    81→│  │  ┌──────────┐ ┌──────────┐ ┌──────────────────────┐  │  │
+    82→│  │  │ WebView  │ │ ExoPlayer│ │ Widevine L1 DRM      │  │  │
+    83→│  │  │ (Chromium│ │ (Video   │ │ (Hardware-backed     │  │  │
+    84→│  │  │  M125+)  │ │  Player) │ │  Content Protection) │  │  │
+    85→│  │  └──────────┘ └──────────┘ └──────────────────────┘  │  │
+    86→│  └───────────────────────────────────────────────────────┘  │
+    87→└─────────────────────────────────────────────────────────────┘
+    88→         │                          │
+    89→         ▼                          ▼
+    90→┌──────────────────┐    ┌────────────────────────┐
+    91→│  Cloudflare D1   │    │  Cloudflare Workers    │
+    92→│  (Database)      │    │  (Hono API)            │
+    93→└──────────────────┘    └────────────────────────┘
+    94→```
+    95→
+    96→---
+    97→
+    98→## 🛠 Tech Stack
+    99→
+   100→| Layer | Technology | Purpose |
+   101→|---|---|---|
+   102→| **Web Framework** | Next.js 16 (static export) | Core SPA — same codebase as web |
+   103→| **Animations** | Framer Motion 11+ | All UI animations preserved as-is |
+   104→| **State** | Zustand | Auth, navigation, download queue, cache |
+   105→| **Styling** | Tailwind CSS 4 + Glassmorphism | Identical to web version |
+   106→| **Native Shell** | Capacitor 6 | Android WebView + native bridge |
+   107→| **Video Player** | ExoPlayer 2.19+ (via capacitor plugin) | Native video with DRM support |
+   108→| **DRM** | Widevine L1 | Hardware-backed content protection |
+   109→| **Encryption** | AES-256-GCM (Android Keystore) | Downloaded video file encryption |
+   110→| **Caching** | Service Worker (Workbox) + IndexedDB | Aggressive cache-first strategy |
+   111→| **Deep Linking** | Capacitor App / Custom URL Scheme | `dakkho://` scheme for redirects |
+   112→| **Push** | OneSignal (Capacitor plugin) | Push notifications |
+   113→| **Build** | Gradle + Android SDK 34 | APK/AAB generation |
+   114→
+   115→---
+   116→
+   117→## 🔒 Single Device Binding (Device Lock)
+   118→
+   119→### How It Works
+   120→
+   121→Every user account can be active on **exactly ONE Android device** at a time. Attempting to log in on a new device instantly deactivates the previous device binding. The user cannot use multiple devices simultaneously — this is by design to prevent account sharing and content piracy.
+   122→
+   123→### Implementation Flow
+   124→
+   125→```
+   126→┌──────────────┐     ┌──────────────┐     ┌──────────────────┐
+   127→│  User Logs In │────▶│  Generate    │────▶│  Register Device  │
+   128→│  (Email+OTP)  │     │  Device      │     │  Binding on API   │
+   129→│               │     │  Fingerprint │     │  (D1: device_bind)│
+   130→└──────────────┘     └──────────────┘     └──────────────────┘
+   131→                                                   │
+   132→                           ┌───────────────────────▶│
+   133→                           │                        ▼
+   134→                    ┌──────────────┐     ┌──────────────────┐
+   135→                    │  Previous    │◀────│  API Checks:     │
+   136→                    │  Device Gets │     │  Is this device  │
+   137→                    │  DEACTIVATED │     │  already bound?  │
+   138→                    │  Instantly   │     │  Yes→Deactivate  │
+   139→                    └──────────────┘     │  old, bind new   │
+   140→                                         └──────────────────┘
+   141→```
+   142→
+   143→### Device Fingerprint Components
+   144→
+   145→The device fingerprint is generated from multiple hardware identifiers to prevent spoofing:
+   146→
+   147→| Component | Source | Why |
+   148→|---|---|---|
+   149→| **ANDROID_ID** | `Settings.Secure.ANDROID_ID` | Unique per app-signing-key per device |
+   150→| **Device Model** | `Build.MODEL` | Hardware model identifier |
+   151→| **Manufacturer** | `Build.MANUFACTURER` | Samsung, Xiaomi, etc. |
+   152→| **OS Version** | `Build.VERSION.SDK_INT` | Android API level |
+   153→| **Security Patch** | `Build.VERSION.SECURITY_PATCH` | Patch level for integrity |
+   154→| **Screen Fingerprint** | Display metrics hash | Resolution + density combo |
+   155→| **CPU Info** | `Build.CPU_ABI + Build.CPU_ABI2` | Architecture |
+   156→| **Combined Hash** | SHA-256 of all above | Final fingerprint |
+   157→
+   158→### API Schema (D1)
+   159→
+   160→```sql
+   161→CREATE TABLE device_bindings (
+   162→    id INTEGER PRIMARY KEY AUTOINCREMENT,
+   163→    student_id INTEGER NOT NULL,
+   164→    device_fingerprint TEXT NOT NULL,     -- SHA-256 hash
+   165→    device_name TEXT,                      -- "Samsung Galaxy S24 Ultra"
+   166→    android_id TEXT NOT NULL,
+   167→    bound_at INTEGER NOT NULL,             -- Unix timestamp
+   168→    last_seen_at INTEGER NOT NULL,         -- Updated on each API call
+   169→    is_active INTEGER DEFAULT 1,           -- 1 = active, 0 = deactivated
+   170→    deactivated_at INTEGER,                -- When it was deactivated
+   171→    deactivated_reason TEXT,               -- "new_device_login", "manual", "security"
+   172→    FOREIGN KEY (student_id) REFERENCES students(id)
+   173→);
+   174→
+   175→CREATE INDEX idx_device_bindings_student ON device_bindings(student_id, is_active);
+   176→CREATE UNIQUE INDEX idx_device_bindings_active ON device_bindings(student_id, is_active) WHERE is_active = 1;
+   177→```
+   178→
+   179→### Worker API Endpoints
+   180→
+   181→| Endpoint | Method | Purpose |
+   182→|---|---|---|
+   183→| `/api/device/bind` | POST | Register/switch device binding |
+   184→| `/api/device/verify` | POST | Verify current device is active (called on app start + periodically) |
+   185→| `/api/device/status` | GET | Get current device binding status |
+   186→| `/api/device/deactivate` | POST | Admin/manual deactivation |
+   187→
+   188→### Enforcement Rules
+   189→
+   190→1. **On Login**: API checks if device fingerprint matches active binding. If different → old device deactivated, new device bound.
+   191→2. **On App Start**: Capacitor plugin sends `/api/device/verify` with stored fingerprint. If `is_active = 0` → force logout, clear all local data, destroy downloads, show "Contact Support" screen.
+   192→3. **Periodic Check**: Every 30 minutes, silently verify device binding. If deactivated mid-session → same force-logout flow.
+   193→4. **No "Deactivated" Message**: When deactivated, the user sees a generic "Session expired — contact support" message. Never show "Your device was deactivated" or "Another device logged in" — this prevents the user from knowing someone else used their account.
+   194→5. **Download Destruction**: On deactivation detection, ALL encrypted downloads are immediately wiped from private app storage using secure delete (overwrite + delete).
+   195→
+   196→### Deactivation Contact Support Screen
+   197→
+   198→```
+   199→┌─────────────────────────────┐
+   200→│                             │
+   201→│    ⚠️ Session Expired        │
+   202→│                             │
+   203→│  Your session is no longer  │
+   204→│  active on this device.     │
+   205→│                             │
+   206→│  Please contact support to  │
+   207→│  reactivate your account.   │
+   208→│                             │
+   209→│  📧 support@dakkho.com      │
+   210→│  💬 Telegram: @dakkhosupport │
+   211→│                             │
+   212→│  ┌─────────────────────┐    │
+   213→│  │  Contact Support     │    │
+   214→│  └─────────────────────┘    │
+   215→│                             │
+   216→└─────────────────────────────┘
+   217→```
+   218→
+   219→---
+   220→
+   221→## 💾 Aggressive Caching Strategy
+   222→
+   223→### Philosophy
+   224→
+   225→**Cache everything feasible by default.** The primary goal is to minimize database queries and API calls. The D1 database and Worker API should only be hit when absolutely necessary — fresh data is fetched only when the user explicitly requests it (pull-to-refresh) or when data is time-sensitive.
+   226→
+   227→### Cache Layers
+   228→
+   229→```
+   230→┌─────────────────────────────────────────┐
+   231→│           CACHE HIERARCHY                │
+   232→│                                         │
+   233→│  L1: In-Memory (Zustand Store)          │  ← Instant, session-scoped
+   234→│  ├── Auth state, User profile           │
+   235→│  ├── Navigation state                   │
+   236→│  └── UI preferences (theme, lang)       │
+   237→│                                         │
+   238→│  L2: IndexedDB (via idb-keyval)         │  ← Persistent, structured
+   239→│  ├── Course catalog (full)              │
+   240→│  ├── Department & semester lists        │
+   241→│  ├── Instructor profiles                │
+   242→│  ├── Category trees                     │
+   243→│  ├── Exam tips & announcements          │
+   244→│  ├── Enrollment data                    │
+   245→│  ├── Certificates                       │
+   246→│  ├── Search index (pre-built)           │
+   247→│  └── Thumbnail/poster image URLs        │
+   248→│                                         │
+   249→│  L3: Service Worker Cache (Workbox)     │  ← HTTP-level, automatic
+   250→│  ├── Static assets (JS, CSS, fonts)     │
+   251→│  ├── API responses (stale-while-        │
+   252→│  │   revalidate)                        │
+   253→│  ├── Images (posters, avatars)          │
+   254→│  └── Page shells (HTML)                 │
+   255→│                                         │
+   256→│  L4: HTTP Cache Headers (CDN)           │  ← Cloudflare edge
+   257→│  ├── Immutable static assets            │
+   258→│  └── API with Cache-Control             │
+   259→└─────────────────────────────────────────┘
+   260→```
+   261→
+   262→### What Gets Cached by Default
+   263→
+   264→| Data Type | Cache Layer | TTL | Stale Strategy |
+   265→|---|---|---|---|
+   266→| **User Profile** | L1 (Zustand) + L2 (IndexedDB) | Session + 24h | Serve cached, refresh silently |
+   267→| **Course Catalog** | L2 (IndexedDB) + L3 (SW) | 1 hour | Stale-while-revalidate |
+   268→| **Course Detail** | L2 (IndexedDB) | 30 min | Serve cached, bg refresh |
+   269→| **Department List** | L2 (IndexedDB) | 24 hours | Cache-first, bg update |
+   270→| **Semester List** | L2 (IndexedDB) | 24 hours | Cache-first, bg update |
+   271→| **Category Tree** | L2 (IndexedDB) | 24 hours | Cache-first, bg update |
+   272→| **Instructor Profiles** | L2 (IndexedDB) | 2 hours | Stale-while-revalidate |
+   273→| **Enrollments** | L2 (IndexedDB) | 15 min | Stale-while-revalidate |
+   274→| **Certificates** | L2 (IndexedDB) | 1 hour | Cache-first |
+   275→| **Exam Tips** | L2 (IndexedDB) | 2 hours | Cache-first, bg update |
+   276→| **Search Results** | L1 (Zustand) only | Session | No persistent cache |
+   277→| **Notifications** | L1 (Zustand) only | Never | Always fresh |
+   278→| **Payment Status** | Never cached | — | Always API call |
+   279→| **Video Progress** | L1 (Zustand) + batched API | 5 min | Local-first, sync on interval |
+   280→| **Thumbnails/Posters** | L3 (SW Cache) | 7 days | Cache-first |
+   281→| **Instructor Avatars** | L3 (SW Cache) | 7 days | Cache-first |
+   282→| **Static Assets (JS/CSS)** | L3 (SW Cache) | 365 days | Cache-first (immutable) |
+   283→
+   284→### Cache Implementation (Workbox)
+   285→
+   286→```javascript
+   287→// workbox-config.js (Service Worker)
+   288→
+   289→// 1. Static assets — cache forever
+   290→registerRoute(
+   291→  ({url}) => url.pathname.startsWith('/_next/static/'),
+   292→  new CacheFirst({ cacheName: 'static-assets' })
+   293→);
+   294→
+   295→// 2. API calls — stale-while-revalidate
+   296→registerRoute(
+   297→  ({url}) => url.pathname.startsWith('/api/'),
+   298→  new StaleWhileRevalidate({
+   299→    cacheName: 'api-cache',
+   300→    plugins: [
+   301→      new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 }),  // 1 hour
+   302→      new CacheableResponsePlugin({ statuses: [0, 200] })
+   303→    ]
+   304→  })
+   305→);
+   306→
+   307→// 3. Images — cache-first with 7-day expiry
+   308→registerRoute(
+   309→  ({request}) => request.destination === 'image',
+   310→  new CacheFirst({
+   311→    cacheName: 'images',
+   312→    plugins: [
+   313→      new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 7 * 24 * 60 * 60 })
+   314→    ]
+   315→  })
+   316→);
+   317→
+   318→// 4. Google Fonts — cache-first
+   319→registerRoute(
+   320→  ({url}) => url.origin === 'https://fonts.googleapis.com' ||
+   321→             url.origin === 'https://fonts.gstatic.com',
+   322→  new CacheFirst({ cacheName: 'google-fonts' })
+   323→);
+   324→```
+   325→
+   326→### IndexedDB Cache Layer (Custom)
+   327→
+   328→```typescript
+   329→// src/lib/cache-manager.ts
+   330→
+   331→interface CacheEntry<T> {
+   332→  data: T;
+   333→  cachedAt: number;      // Unix timestamp
+   334→  ttl: number;           // TTL in seconds
+   335→  etag?: string;         // For conditional requests
+   336→}
+   337→
+   338→class CacheManager {
+   339→  // Get from cache, return null if expired
+   340→  async get<T>(key: string): Promise<T | null> {
+   341→    const entry = await idbKeyval.get<CacheEntry<T>>(key);
+   342→    if (!entry) return null;
+   343→    if (Date.now() / 1000 - entry.cachedAt > entry.ttl) {
+   344→      // Expired — return stale data but trigger bg refresh
+   345→      this.backgroundRefresh(key);
+   346→      return entry.data; // Serve stale while refreshing
+   347→    }
+   348→    return entry.data;
+   349→  }
+   350→
+   351→  // Set cache entry
+   352→  async set<T>(key: string, data: T, ttl: number): Promise<void> {
+   353→    await idbKeyval.set<CacheEntry<T>>(key, {
+   354→      data,
+   355→      cachedAt: Date.now() / 1000,
+   356→      ttl
+   357→    });
+   358→  }
+   359→
+   360→  // Background refresh — doesn't block UI
+   361→  private async backgroundRefresh(key: string): Promise<void> {
+   362→    // Fetch fresh data, update cache silently
+   363→  }
+   364→}
+   365→```
+   366→
+   367→### DB Load Reduction Estimates
+   368→
+   369→| Before Caching | After Caching | Reduction |
+   370→|---|---|---|
+   371→| Every page load = 3-5 API calls | Most pages = 0-1 API calls | **~80% fewer API hits** |
+   372→| Course catalog fetched on every visit | Fetched once per hour | **~95% reduction** |
+   373→| Department list fetched on every sidebar load | Fetched once per day | **~99% reduction** |
+   374→| Instructor profiles on every course card | Cached in IndexedDB | **~90% reduction** |
+   375→| Image requests on every scroll | Cached by Service Worker | **~85% reduction** |
+   376→
+   377→---
+   378→
+   379→## 📥 Video Download & Encryption System
+   380→
+   381→### Architecture
+   382→
+   383→Video downloads are available **ONLY in the installed Android app**. The website will not show any download button. Downloaded videos are encrypted with AES-256-GCM using keys stored in Android Keystore (hardware-backed), have a 30-day TTL, and are destroyed on logout.
+   384→
+   385→```
+   386→┌──────────────────────────────────────────────────────────┐
+   387→│                  DOWNLOAD PIPELINE                        │
+   388→│                                                          │
+   389→│  1. User taps "Download" (only visible in app)           │
+   390→│     │                                                    │
+   391→│     ▼                                                    │
+   392→│  2. Capacitor Plugin → Check storage space               │
+   393→│     │                                                    │
+   394→│     ▼                                                    │
+   395→│  3. Fetch HLS segments from CDN (tokenized URL)          │
+   396→│     │                                                    │
+   397→│     ▼                                                    │
+   398→│  4. Native layer → Merge segments into single file       │
+   399→│     │                                                    │
+   400→│     ▼                                                    │
+   401→│  5. Generate AES-256-GCM key in Android Keystore         │
+   402→│     │                                                    │
+   403→│     ▼                                                    │
+   404→│  6. Encrypt file: plaintext → AES-256-GCM → ciphertext  │
+   405→│     │  (Key from Keystore, random IV per file)           │
+   406→│     ▼                                                    │
+   407→│  7. Save encrypted file to:                               │
+   408→│     /data/data/com.dakkho.app/files/downloads/           │
+   409→│     {video_id}_{timestamp}.enc                           │
+   410→│     │                                                    │
+   411→│     ▼                                                    │
+   412→│  8. Save metadata to encrypted SQLite DB:                │
+   413→│     - video_id, title, duration, TTL expiry              │
+   414→│     - thumbnail_url (cached separately)                  │
+   415→│     - encryption_key_ref (Keystore alias)                │
+   416→│     - download_timestamp, size_bytes                     │
+   417→│     │                                                    │
+   418→│     ▼                                                    │
+   419→│  9. Delete original plaintext file (secure wipe)         │
+   420→│                                                          │
+   421→└──────────────────────────────────────────────────────────┘
+   422→```
+   423→
+   424→### Encryption Details
+   425→
+   426→| Parameter | Value | Why |
+   427→|---|---|---|
+   428→| **Algorithm** | AES-256-GCM | Authenticated encryption — detects tampering |
+   429→| **Key Size** | 256 bits | Military-grade, brute-force infeasible |
+   430→| **Key Storage** | Android Keystore (hardware-backed) | Key never leaves secure hardware |
+   431→| **IV** | 12 bytes, random per file | Prevents IV reuse attacks |
+   432→| **Tag Length** | 128 bits | GCM authentication tag |
+   433→| **File Extension** | `.enc` | Encrypted container |
+   434→
+   435→### AES-256-GCM vs Other Algorithms
+   436→
+   437→| Feature | AES-256-GCM | AES-256-CBC | ChaCha20-Poly1305 |
+   438→|---|---|---|---|
+   439→| **Authenticated** | ✅ Yes (built-in) | ❌ No (needs HMAC) | ✅ Yes |
+   440→| **Hardware Accel** | ✅ AES-NI / ARMv8 | ✅ AES-NI | ❌ Software only |
+   441→| **Tamper Detection** | ✅ Built-in | ❌ Separate | ✅ Built-in |
+   442→| **Android Support** | ✅ Native Keystore | ✅ Native | ⚠️ API 28+ |
+   443→| **Key Extraction** | ❌ Impossible (Keystore) | ❌ Impossible | ❌ Impossible |
+   444→| **Performance** | ⚡ Fastest (hardware) | ⚡ Fast | 🐢 Slower (software) |
+   445→
+   446→**Why AES-256-GCM**: It's the only algorithm that combines authentication, hardware acceleration on ARM, and Android Keystore support. Even if someone extracts the encrypted file from the device, they cannot decrypt it without the hardware-bound key.
+   447→
+   448→### 30-Day TTL System
+   449→
+   450→```typescript
+   451→// On each app start + every 6 hours:
+   452→
+   453→async function enforceDownloadTTL() {
+   454→  const downloads = await getDownloadMetadata();
+   455→  const now = Date.now();
+   456→  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+   457→
+   458→  for (const download of downloads) {
+   459→    const age = now - download.downloadTimestamp;
+   460→
+   461→    if (age > THIRTY_DAYS_MS) {
+   462→      // 1. Delete encrypted file
+   463→      await secureDelete(download.filePath);
+   464→
+   465→      // 2. Delete Keystore key
+   466→      await deleteKey(download.keystoreAlias);
+   467→
+   468→      // 3. Remove metadata
+   469→      await removeDownloadMetadata(download.id);
+   470→
+   471→      // 4. Update UI — remove from downloads list
+   472→      // (No "expired" badge shown — just disappears)
+   473→    }
+   474→  }
+   475→}
+   476→```
+   477→
+   478→### Logout → Destroy Everything
+   479→
+   480→```
+   481→User taps "Logout"
+   482→       │
+   483→       ▼
+   484→1. Show confirmation: "All downloaded content will be removed"
+   485→       │
+   486→       ▼
+   487→2. Delete ALL files in /data/data/com.dakkho.app/files/downloads/
+   488→       │  (Secure wipe: overwrite with zeros, then delete)
+   489→       ▼
+   490→3. Delete ALL keys from Android Keystore (dakkho_* aliases)
+   491→       │
+   492→       ▼
+   493→4. Wipe download metadata SQLite DB
+   494→       │
+   495→       ▼
+   496→5. Clear IndexedDB cache
+   497→       │
+   498→       ▼
+   499→6. Clear Service Worker caches
+   500→       │
+   501→       ▼
+   502→7. Clear Zustand stores
+   503→       │
+   504→       ▼
+   505→8. Clear WebView cookies + local storage
+   506→       │
+   507→       ▼
+   508→9. API: Invalidate session token
+   509→       │
+   510→       ▼
+   511→10. Redirect to login screen
+   512→```
+   513→
+   514→### Secure Delete Implementation
+   515→
+   516→```kotlin
+   517→// Android native — secure file deletion
+   518→fun secureDelete(file: File) {
+   519→    val size = file.length()
+   520→    // Overwrite with zeros
+   521→    file.outputStream().use { fos ->
+   522→        val zeros = ByteArray(4096) { 0 }
+   523→        var written = 0L
+   524→        while (written < size) {
+   525→            val toWrite = minOf(zeros.size.toLong(), size - written)
+   526→            fos.write(zeros, 0, toWrite.toInt())
+   527→            written += toWrite
+   528→        }
+   529→        fos.flush()
+   530→    }
+   531→    // Delete the file
+   532→    file.delete()
+   533→    // Force media scanner to forget
+   534→    val intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+   535→    intent.data = Uri.fromFile(file)
+   536→    context.sendBroadcast(intent)
+   537→}
+   538→```
+   539→
+   540→### Download UI Rules
+   541→
+   542→| State | App (Installed) | Website (Browser) |
+   543→|---|---|---|
+   544→| Download Button | ✅ Visible on course video | ❌ Hidden completely |
+   545→| Download List Page | ✅ Accessible | ❌ Not shown |
+   546→| Storage Info | ✅ Shown in settings | ❌ Not shown |
+   547→| "Offline" Badge | ❌ NEVER shown | ❌ NEVER shown |
+   548→| Expired Download | Silently removed from list | N/A |
+   549→
+   550→---
+   551→
+   552→## 🛡 Widevine L1 DRM — Deep Dive
+   553→
+   554→### What is Widevine?
+   555→
+   556→Widevine is Google's **Digital Rights Management (DRM)** system built into Android at the OS/hardware level. It prevents users from recording, capturing, or extracting premium video content. Widevine has three security levels:
+   557→
+   558→| Level | Name | Key Processing | Typical Devices | Security |
+   559→|---|---|---|---|---|
+   560→| **L1** | **Widevine L1** | **In Trusted Execution Environment (TEE)** | Flagship/mid-range Android | 🏆 Highest |
+   561→| **L2** | Widevine L2 | In software (not TEE) | Older/budget Android | ⚠️ Medium |
+   562→| **L3** | Widevine L3 | In software (no hardware) | Emulators, rooted devices | ❌ Lowest |
+   563→
+   564→### How Widevine L1 Works
+   565→
+   566→```
+   567→┌──────────────────────────────────────────────────────────────┐
+   568→│                  WIDEVINE L1 PLAYBACK FLOW                    │
+   569→│                                                              │
+   570→│  1. App requests video from server                           │
+   571→│     │                                                        │
+   572→│     ▼                                                        │
+   573→│  2. Server sends License Request to Widevine Server          │
+   574→│     │  (Includes device-specific challenge)                  │
+   575→│     ▼                                                        │
+   576→│  3. Widevine Server validates device certification           │
+   577→│     │  - Is this a certified Android device?                 │
+   578→│     │  - Is the TEE intact?                                  │
+   579→│     │  - Has the device been compromised?                    │
+   580→│     ▼                                                        │
+   581→│  4. If valid → Server returns encrypted LICENSE KEY          │
+   582→│     │  (Key is wrapped in device-specific encryption)        │
+   583→│     ▼                                                        │
+   584→│  5. License Key enters **Trusted Execution Environment**     │
+   585→│     │  (TEE — separate secure processor inside the SoC)     │
+   586→│     │  Key NEVER touches Android OS or app memory           │
+   587→│     ▼                                                        │
+   588→│  6. Inside TEE: Key decrypts the video stream               │
+   589→│     │                                                        │
+   590→│     ▼                                                        │
+   591→│  7. TEE sends decrypted frames → Display directly           │
+   592→│        (Frames never pass through Android OS)               │
+   593→│        (Cannot be intercepted, recorded, or captured)       │
+   594→│                                                              │
+   595→└──────────────────────────────────────────────────────────────┘
+   596→```
+   597→
+   598→### Why Widevine L1 for DAKKHO
+   599→
+   600→| Threat | Without DRM | With Widevine L1 |
+   601→|---|---|---|
+   602→| **Screen Recording** | ✅ Possible (AZ Recorder, etc.) | ❌ Black screen / blocked |
+   603→| **ADB Screen Capture** | ✅ `adb shell screencap` | ❌ Returns black frame |
+   604→| **Root Access Extraction** | ✅ Can extract video from memory | ❌ Key in TEE, inaccessible |
+   605→| **HLS Stream Download** | ✅ yt-dlp, streamlink | ❌ License required per session |
+   606→| **HDMI Out Capture** | ✅ Capture card recording | ❌ HDCP enforced |
+   607→| **Emulator Playback** | ✅ Works in emulator | ❌ L3 only → blocked |
+   608→
+   609→### Widevine Integration Architecture
+   610→
+   611→```
+   612→┌─────────────────────────────────────────────────┐
+   613→│                VIDEO PLAYBACK                    │
+   614→│                                                 │
+   615→│  User taps "Play"                               │
+   616→│       │                                         │
+   617→│       ▼                                         │
+   618→│  ExoPlayer initialized                          │
+   619→│       │                                         │
+   620→│       ▼                                         │
+   621→│  Load HLS Manifest (m3u8) from CDN              │
+   622→│  (URL is tokenized with HMAC-SHA256)            │
+   623→│       │                                         │
+   624→│       ▼                                         │
+   625→│  ExoPlayer detects #EXT-X-KEY tag               │
+   626→│  (This signals: content is DRM-protected)       │
+   627→│       │                                         │
+   628→│       ▼                                         │
+   629→│  ┌─────────────────────────────────────┐        │
+   630→│  │  Widevine MediaDrm Module           │        │
+   631→│  │  1. Generate license challenge      │        │
+   632→│  │  2. Send to license server          │        │
+   633→│  │  3. Receive license response        │        │
+   634→│  │  4. Feed to TEE for key extraction  │        │
+   635→│  │  5. TEE decrypts video frames       │        │
+   636→│  └─────────────────────────────────────┘        │
+   637→│       │                                         │
+   638→│       ▼                                         │
+   639→│  Video plays with full L1 protection            │
+   640→│  (No capture possible)                          │
+   641→└─────────────────────────────────────────────────┘
+   642→```
+   643→
+   644→### License Server Options
+   645→
+   646→| Option | Description | Cost | Complexity |
+   647→|---|---|---|---|
+   648→| **Google Widevine Cloud** | Google-hosted license service | $0.02-0.05/license | Medium |
+   649→| **Axinom** | Enterprise DRM provider | Custom pricing | High |
+   650→| **PallyCon** | Asian-focused DRM service | $0.03/license | Medium |
+   651→| **Self-hosted (Shaka)** | Open-source license server | Server cost only | Very High |
+   652→| **Mux** | Video platform with built-in DRM | Included in streaming | Low |
+   653→
+   654→**Recommendation**: Start with **PallyCon** — they have good Asian support, reasonable pricing, and easy ExoPlayer integration. Migration path to Google's own Widevine Cloud is available later.
+   655→
+   656→### Widevine + Downloaded Videos
+   657→
+   658→Downloaded (AES-256-GCM encrypted) videos are played back through ExoPlayer with an **offline license**:
+   659→
+   660→```
+   661→Download Flow (with DRM):
+   662→1. Fetch HLS + Widevine license simultaneously
+   663→2. Store offline license (valid for 30 days, matches TTL)
+   664→3. Encrypt downloaded video with AES-256-GCM
+   665→4. On playback: Decrypt → ExoPlayer → Widevine offline license → Play
+   666→
+   667→The offline license is bound to the device's TEE.
+   668→Even if someone extracts the encrypted file + offline license,
+   669→they cannot play it on another device.
+   670→```
+   671→
+   672→### Widevine Security Levels in the Wild
+   673→
+   674→| Device Category | Widevine Level | Can Play DAKKHO HD? |
+   675→|---|---|---|
+   676→| Samsung Galaxy S21+ | L1 | ✅ Yes |
+   677→| Xiaomi Redmi Note 12 | L1 | ✅ Yes |
+   678→| Realme 10 Pro | L1 | ✅ Yes |
+   679→| Oppo A57 | L1 | ✅ Yes |
+   680→| Vivo Y75 | L1 | ✅ Yes |
+   681→| Walton Primo H10 | L3 | ❌ No (fallback to SD) |
+   682→| Emulator (AVD) | L3 | ❌ Blocked |
+   683→| Rooted device (Magisk) | L3 (usually) | ❌ Blocked / SD fallback |
+   684→| Chrome on Desktop | L3 | ❌ Different app context |
+   685→
+   686→**For L3 devices**: Serve video in standard definition (480p) without DRM requirement. The AES-256-GCM encryption on downloads still protects the files. We block screen recording via a separate `FLAG_SECURE` on the activity level.
+   687→
+   688→### FLAG_SECURE (Anti-Screenshot)
+   689→
+   690→Even for L3 devices, we add this Android-level protection:
+   691→
+   692→```kotlin
+   693→// In MainActivity.kt
+   694→override fun onCreate(savedInstanceState: Bundle?) {
+   695→    super.onCreate(savedInstanceState)
+   696→    // Prevent screenshots and screen recording
+   697→    window.setFlags(
+   698→        WindowManager.LayoutParams.FLAG_SECURE,
+   699→        WindowManager.LayoutParams.FLAG_SECURE
+   700→    )
+   701→}
+   702→```
+   703→
+   704→This makes the entire app's window return black on any screenshot or screen recording attempt.
+   705→
+   706→---
+   707→
+   708→## 💀 Skeleton Loader — Conditional Strategy
+   709→
+   710→### The Rule
+   711→
+   712→**Skeleton loaders are ONLY shown on slow networks (3G or lower).** On good networks (4G/5G/WiFi), content loads directly from the website without any skeleton intermediaries. This creates a premium, instant-feel experience on good connections while still providing visual feedback on poor connections.
+   713→
+   714→### Network Detection Logic
+   715→
+   716→```typescript
+   717→// src/lib/network-detector.ts
+   718→
+   719→import { Network } from '@capacitor/network';
+   720→
+   721→type NetworkQuality = 'fast' | 'slow' | 'offline';
+   722→
+   723→class NetworkDetector {
+   724→  private quality: NetworkQuality = 'fast';
+   725→  private listeners: Set<(quality: NetworkQuality) => void> = new Set();
+   726→
+   727→  async init() {
+   728→    const status = await Network.getStatus();
+   729→    this.quality = this.classifyNetwork(status.connectionType, status.downlinkSpeed);
+   730→
+   731→    Network.addListener('networkStatusChange', (status) => {
+   732→      this.quality = this.classifyNetwork(status.connectionType, status.downlinkSpeed);
+   733→      this.notifyListeners();
+   734→    });
+   735→  }
+   736→
+   737→  private classifyNetwork(type: string, speed?: number): NetworkQuality {
+   738→    switch (type) {
+   739→      case 'wifi':
+   740→      case 'cellular-4g':
+   741→      case 'cellular-5g':
+   742→      case 'ethernet':
+   743→        return 'fast';
+   744→      case 'cellular-3g':
+   745→      case 'cellular-2g':
+   746→      case 'cellular':
+   747→      case 'unknown':
+   748→        return 'slow';
+   749→      case 'none':
+   750→        return 'offline';
+   751→      default:
+   752→        return 'slow'; // Default to slow for unknown types
+   753→    }
+   754→  }
+   755→
+   756→  getQuality(): NetworkQuality {
+   757→    return this.quality;
+   758→  }
+   759→
+   760→  shouldShowSkeleton(): boolean {
+   761→    return this.quality === 'slow';
+   762→  }
+   763→}
+   764→
+   765→export const networkDetector = new NetworkDetector();
+   766→```
+   767→
+   768→### SWR Integration (Data Fetching)
+   769→
+   770→```typescript
+   771→// src/lib/data-hooks.ts — Modified for conditional skeleton
+   772→
+   773→function useDataWithConditionalSkeleton<T>(key: string, fetcher: () => Promise<T>) {
+   774→  const showSkeleton = networkDetector.shouldShowSkeleton();
+   775→  const [skeletonVisible, setSkeletonVisible] = useState(showSkeleton);
+   776→
+   777→  const { data, error, isLoading } = useSWR(
+   778→    key,
+   779→    fetcher,
+   780→    {
+   781→      revalidateOnFocus: false,
+   782→      dedupingInterval: 60000,        // 1 min dedupe
+   783→      onSuccess: () => {
+   784→        // Data arrived — hide skeleton immediately
+   785→        setSkeletonVisible(false);
+   786→      }
+   787→    }
+   788→  );
+   789→
+   790→  // On fast network: skip skeleton entirely, show cached data or nothing
+   791→  // On slow network: show skeleton until data arrives
+   792→  return {
+   793→    data,
+   794→    error,
+   795→    isLoading: skeletonVisible && isLoading,
+   796→    showSkeleton: skeletonVisible && isLoading
+   797→  };
+   798→}
+   799→```
+   800→
+   801→### Component Usage
+   802→
+   803→```tsx
+   804→// Example: TrendingCourses component
+   805→
+   806→function TrendingCourses() {
+   807→  const { data: courses, showSkeleton } = useDataWithConditionalSkeleton(
+   808→    'trending-courses',
+   809→    () => apiClient.getTrendingCourses()
+   810→  );
+   811→
+   812→  // Fast network: courses load instantly from cache (L1/L2), no skeleton
+   813→  // Slow network: show skeleton until data arrives
+   814→
+   815→  if (showSkeleton) {
+   816→    return <CourseCardSkeleton count={6} />;
+   817→  }
+   818→
+   819→  return (
+   820→    <div className="flex gap-4 overflow-x-auto">
+   821→      {courses?.map(course => (
+   822→        <CourseCard key={course.id} course={course} variant="poster" />
+   823→      ))}
+   824→    </div>
+   825→  );
+   826→}
+   827→```
+   828→
+   829→### Skeleton Design (Premium Vibe)
+   830→
+   831→When skeletons do appear, they follow the existing `CourseCardSkeleton` design — full-height poster style with shimmer animation:
+   832→
+   833→```
+   834→┌──────────────┐
+   835→│              │  ← Full-card shimmer
+   836→│   ░░░░░░░   │     (pulse animation)
+   837→│   ░░░░░░░   │
+   838→│   ░░░░░░░   │
+   839→│              │
+   840→│ ▓▓▓▓▓▓▓▓▓▓ │  ← Title shimmer bar
+   841→│ ▓▓▓▓▓       │  ← Subtitle shimmer bar
+   842→└──────────────┘
+   843→```
+   844→
+   845→---
+   846→
+   847→## 🔄 Mobile Web → App Forced Redirect
+   848→
+   849→### How It Works
+   850→
+   851→When a user visits `dakkho-student.pages.dev` on a mobile browser (Android), they are automatically redirected to either:
+   852→
+   853→1. **App is installed** → Open in app via deep link
+   854→2. **App not installed** → Redirect to Google Play Store
+   855→
+   856→### Detection & Redirect Flow
+   857→
+   858→```
+   859→┌──────────────────────────────────────────────────────────┐
+   860→│              MOBILE WEB VISITOR FLOW                      │
+   861→│                                                          │
+   862→│  User visits dakkho-student.pages.dev on Android Chrome  │
+   863→│       │                                                  │
+   864→│       ▼                                                  │
+   865→│  JavaScript checks:                                      │
+   866→│  1. Is this a mobile device? (User-Agent)                │
+   867→│  2. Is the app installed? (Intent scheme test)           │
+   868→│       │                                                  │
+   869→│       ├── App Installed ──▶ Try dakkho://deep-link       │
+   870→│       │                       │                           │
+   871→│       │                       ▼                           │
+   872→│       │                    App opens, user continues      │
+   873→│       │                                                  │
+   874→│       └── App Not Installed ──▶ Redirect to Play Store   │
+   875→│                                   │                       │
+   876→│                                   ▼                       │
+   877→│                                Google Play: DAKKHO App    │
+   878→│                                                          │
+   879→└──────────────────────────────────────────────────────────┘
+   880→```
+   881→
+   882→### Implementation (Website Side)
+   883→
+   884→```typescript
+   885→// student-app/src/app/layout.tsx — Add redirect script
+   886→
+   887→// This runs ONLY on the website, NOT in the Capacitor app
+   888→// Capacitor sets window.Capacitor = { isNativePlatform: () => true }
+   889→
+   890→if (typeof window !== 'undefined') {
+   891→  const isNativeApp = window.Capacitor?.isNativePlatform?.();
+   892→  const isAndroid = /Android/i.test(navigator.userAgent);
+   893→
+   894→  if (!isNativeApp && isAndroid) {
+   895→    // Try opening the app via intent
+   896→    const intentUrl = `intent://dakkho.app#Intent;scheme=dakkho;package=com.dakkho.app;end`;
+   897→
+   898→    // Set a timeout — if app doesn't open in 1.5s, redirect to Play Store
+   899→    const timeout = setTimeout(() => {
+   900→      window.location.href = 'https://play.google.com/store/apps/details?id=com.dakkho.app';
+   901→    }, 1500);
+   902→
+   903→    window.location.href = intentUrl;
+   904→
+   905→    // If app opened, the page loses focus → clear timeout
+   906→    window.addEventListener('blur', () => clearTimeout(timeout), { once: true });
+   907→  }
+   908→}
+   909→```
+   910→
+   911→### Capacitor Config (Deep Link)
+   912→
+   913→```typescript
+   914→// capacitor.config.ts
+   915→
+   916→const config: CapacitorConfig = {
+   917→  appId: 'com.dakkho.app',
+   918→  appName: 'DAKKHO',
+   919→  webDir: 'out',            // Next.js static export directory
+   920→  server: {
+   921→    // During development, point to local dev server
+   922→    // url: 'http://localhost:3000',
+   923→    androidScheme: 'https',   // Use https:// scheme in WebView (not file://)
+   924→  },
+   925→  plugins: {
+   926→    AppLauncher: {
+   927→      // Custom URL scheme for deep linking
+   928→      urlScheme: 'dakkho',
+   929→    },
+   930→  },
+   931→};
+   932→```
+   933→
+   934→### Android Intent Filter (AndroidManifest.xml)
+   935→
+   936→```xml
+   937→<!-- android/app/src/main/AndroidManifest.xml -->
+   938→
+   939→<activity android:name=".MainActivity">
+   940→  <!-- Deep link: dakkho:// -->
+   941→  <intent-filter>
+   942→    <action android:name="android.intent.action.VIEW" />
+   943→    <category android:name="android.intent.category.DEFAULT" />
+   944→    <category android:name="android.intent.category.BROWSABLE" />
+   945→    <data android:scheme="dakkho" android:host="app" />
+   946→  </intent-filter>
+   947→
+   948→  <!-- App Links: https://dakkho-student.pages.dev -->
+   949→  <intent-filter android:autoVerify="true">
+   950→    <action android:name="android.intent.action.VIEW" />
+   951→    <category android:name="android.intent.category.DEFAULT" />
+   952→    <category android:name="android.intent.category.BROWSABLE" />
+   953→    <data android:scheme="https" android:host="dakkho-student.pages.dev" />
+   954→  </intent-filter>
+   955→</activity>
+   956→```
+   957→
+   958→---
+   959→
+   960→## 🎨 Framer Motion Preservation
+   961→
+   962→### Strategy
+   963→
+   964→Framer Motion is **fully preserved** in the Android app. Capacitor renders the Next.js app inside a WebView (Chromium M125+), which fully supports all Framer Motion features including:
+   965→
+   966→- `layout` animations
+   967→- `AnimatePresence` for mount/unmount transitions
+   968→- `useMotionValue` and `useTransform`
+   969→- Spring and tween transitions
+   970→- Gesture-driven animations (`whileDrag`, `whileTap`)
+   971→- `useScroll` and `useInView` hooks
+   972→
+   973→### What Changes in Android
+   974→
+   975→| Feature | Web (Browser) | Android (Capacitor) |
+   976→|---|---|---|
+   977→| Layout Animations | ✅ Full support | ✅ Full support |
+   978→| AnimatePresence | ✅ Full support | ✅ Full support |
+   979→| Gesture Animations | ✅ Mouse-based | ✅ Touch-based (natural) |
+   980→| Spring Physics | ✅ 60fps | ✅ 60fps (often smoother) |
+   981→| Scroll Animations | ✅ useScroll | ✅ useScroll |
+   982→| GPU Compositing | ✅ Browser GPU | ✅ WebView GPU |
+   983→| `will-change` | ✅ Works | ✅ Works |
+   984→| CSS `transform` | ✅ Hardware-accelerated | ✅ Hardware-accelerated |
+   985→
+   986→### Performance Optimizations for Mobile
+   987→
+   988→```typescript
+   989→// src/lib/mobile-animations.ts
+   990→
+   991→import { MotionValue, useMotionValue, useTransform, animate } from 'framer-motion';
+   992→import { Capacitor } from '@capacitor/core';
+   993→
+   994→const isNative = Capacitor.isNativePlatform();
+   995→
+   996→// Reduce animation complexity on low-end devices
+   997→export const getAnimationConfig = () => ({
+   998→  // Slightly faster transitions on mobile for snappier feel
+   999→  transition: {
+  1000→    type: 'spring' as const,
+  1001→    stiffness: isNative ? 400 : 300,   // Faster spring on native
+  1002→    damping: isNative ? 30 : 25,       // Less bounce on native
+  1003→    mass: isNative ? 0.8 : 1,
+  1004→  },
+  1005→  // Reduce layout animation complexity
+  1006→  layout: isNative ? 'position' : true,  // Position-only on mobile
+  1007→});
+  1008→
+  1009→// Stagger children with device-appropriate delay
+  1010→export const getStaggerConfig = () => ({
+  1011→  staggerChildren: isNative ? 0.05 : 0.08,
+  1012→  delayChildren: isNative ? 0.05 : 0.1,
+  1013→});
+  1014→```
+  1015→
+  1016→### WebView Performance Flags
+  1017→
+  1018→```kotlin
+  1019→// MainActivity.kt — Enable WebView performance optimizations
+  1020→
+  1021→webView.settings.apply {
+  1022→    // Hardware acceleration
+  1023→    setLayerType(View.LAYER_TYPE_HARDWARE, null)
+  1024→
+  1025→    // JavaScript performance
+  1026→    javaScriptEnabled = true
+  1027→    domStorageEnabled = true
+  1028→
+  1029→    // GPU compositing for Framer Motion
+  1030→    setSupportZoom(false)
+  1031→
+  1032→    // Smooth scrolling
+  1033→    cacheMode = WebSettings.LOAD_DEFAULT
+  1034→}
+  1035→
+  1036→// Enable GPU compositing via Chrome flags
+  1037→webView.setWebChromeClient(object : WebChromeClient() {
+  1038→    override fun onPermissionRequest(request: PermissionRequest) {
+  1039→        request.grant(request.resources)
+  1040→    }
+  1041→})
+  1042→```
+  1043→
+  1044→---
+  1045→
+  1046→## 📦 App Size Optimization
+  1047→
+  1048→### Target: < 15 MB Initial APK
+  1049→
+  1050→| Component | Size | Optimization |
+  1051→|---|---|---|
+  1052→| **WebView Shell (Capacitor)** | ~2 MB | Minimal native code |
+  1053→| **Next.js Static Export** | ~3-5 MB | Brotli compressed JS/CSS |
+  1054→| **Framer Motion** | ~32 KB (gzipped) | Tree-shaken, only used features |
+  1055→| **ExoPlayer** | ~1.5 MB | Only core + HLS + DRM modules |
+  1056→| **Service Worker** | ~50 KB | Workbox runtime |
+  1057→| **Images (App Icons)** | ~500 KB | WebP format, adaptive icons |
+  1058→| **Native Plugins** | ~1 MB | Crypto, Network, Device |
+  1059→| **Total Initial APK** | **~8-10 MB** | Below 15 MB target |
+  1060→
+  1061→### Framer Motion Size Breakdown
+  1062→
+  1063→Framer Motion is surprisingly small because of tree-shaking:
+  1064→
+  1065→```javascript
+  1066→// Only import what you use — tree-shaking removes the rest
+  1067→import { motion, AnimatePresence } from 'framer-motion';
+  1068→// ↑ This imports ONLY motion + AnimatePresence (~15KB gzipped)
+  1069→
+  1070→// DON'T do this:
+  1071→import * as motion from 'framer-motion';
+  1072→// ↑ This imports EVERYTHING (~50KB+ gzipped)
+  1073→```
+  1074→
+  1075→| Import Style | Gzipped Size | Includes |
+  1076→|---|---|---|
+  1077→| `import { motion }` | ~12 KB | Core animation engine |
+  1078→| `import { motion, AnimatePresence }` | ~18 KB | + Mount/unmount transitions |
+  1079→| `import { motion, useScroll }` | ~20 KB | + Scroll-linked animations |
+  1080→| `import * from 'framer-motion'` | ~50 KB+ | Everything (avoid this) |
+  1081→
+  1082→### Size Optimization Techniques
+  1083→
+  1084→1. **Dynamic Imports**: Heavy pages loaded on demand
+  1085→   ```typescript
+  1086→   const CertificatePage = dynamic(() => import('./CertificatePage'));
+  1087→   const DownloadsPage = dynamic(() => import('./DownloadsPage'));
+  1088→   ```
+  1089→
+  1090→2. **Image Optimization**: All thumbnails/posters use WebP via CDN, progressive loading with blur-up
+  1091→
+  1092→3. **Font Subsetting**: Nunito font loaded with `display=swap` and Unicode subsetting (Latin + Bengali only)
+  1093→
+  1094→4. **Service Worker**: Pre-caches only the app shell (HTML + critical CSS/JS). Other assets cached on-demand.
+  1095→
+  1096→5. **APK Split**: Build Android App Bundle (AAB) instead of APK — Google Play delivers only the resources needed for the user's device (saves ~30% download size).
+  1097→
+  1098→6. **Native Libraries**: ExoPlayer split into modules — only include HLS + DRM, not DASH or SmoothStreaming.
+  1099→
+  1100→---
+  1101→
+  1102→## 🌐 Service Worker & Offline Shell
+  1103→
+  1104→### What the Service Worker Does
+  1105→
+  1106→The Service Worker caches the **app shell** (HTML, CSS, JS, fonts) so the app opens instantly even without network. However, **there is NO "Offline" indicator** anywhere in the UI. The app simply works from cache when possible and shows content from the last successful load.
+  1107→
+  1108→### Workbox Configuration
+  1109→
+  1110→```javascript
+  1111→// workbox-config.js
+  1112→
+  1113→module.exports = {
+  1114→  globDirectory: 'out/',
+  1115→  globPatterns: [
+  1116→    '**/*.{html,js,css,woff2}',   // App shell
+  1117→  ],
+  1118→  // Don't pre-cache images — they're cached on-demand
+  1119→  maximumFileSizeToCacheInBytes: 2 * 1024 * 1024,  // 2MB max per file
+  1120→  runtimeCaching: [
+  1121→    {
+  1122→      urlPattern: /^https:\/\/fonts\.googleapis\.com/,
+  1123→      handler: 'CacheFirst',
+  1124→      options: { cacheName: 'google-fonts-stylesheets' }
+  1125→    },
+  1126→    {
+  1127→      urlPattern: /^https:\/\/fonts\.gstatic\.com/,
+  1128→      handler: 'CacheFirst',
+  1129→      options: {
+  1130→        cacheName: 'google-fonts-webfonts',
+  1131→        expiration: { maxEntries: 20, maxAgeSeconds: 365 * 24 * 60 * 60 }
+  1132→      }
+  1133→    },
+  1134→    {
+  1135→      urlPattern: /^https:\/\/.*\.(?:png|jpg|jpeg|svg|webp)/,
+  1136→      handler: 'CacheFirst',
+  1137→      options: {
+  1138→        cacheName: 'images',
+  1139→        expiration: { maxEntries: 500, maxAgeSeconds: 7 * 24 * 60 * 60 }
+  1140→      }
+  1141→    },
+  1142→    {
+  1143→      urlPattern: /\/api\//,
+  1144→      handler: 'StaleWhileRevalidate',
+  1145→      options: {
+  1146→        cacheName: 'api-cache',
+  1147→        expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 }
+  1148→      }
+  1149→    }
+  1150→  ]
+  1151→};
+  1152→```
+  1153→
+  1154→### Offline Behavior (No "Offline" Label)
+  1155→
+  1156→| Scenario | What Happens | User Sees |
+  1157→|---|---|---|
+  1158→| **App shell** | Loaded from SW cache | Normal app, instant open |
+  1159→| **Cached course list** | Shown from IndexedDB | Same as online |
+  1160→| **Cached course detail** | Shown from IndexedDB | Same as online |
+  1161→| **Cached images** | Shown from SW cache | Same as online |
+  1162→| **Downloaded video** | Plays from encrypted local file | Same as online |
+  1163→| **Fresh data needed** | Tries network → shows last cached | Same as online (might be slightly stale) |
+  1164→| **Action requires network** | (e.g., payment, new enrollment) | Error toast: "Connection needed for this action" |
+  1165→| **Never shown** | "Offline mode", "You are offline", "Offline badge" | ❌ NEVER |
+  1166→
+  1167→The philosophy: **The app should feel identical whether online or offline.** The user should never need to know or care about their network state. Only when an action absolutely requires network (payment, new enrollment) do we show a minimal, non-scary toast message.
+  1168→
+  1169→---
+  1170→
+  1171→## 🔌 Capacitor Plugin Architecture
+  1172→
+  1173→### Custom Plugins Required
+  1174→
+  1175→| Plugin | Purpose | Priority |
+  1176→|---|---|---|
+  1177→| `DakkhoDownload` | Video download, encryption, decryption, secure delete | 🔴 Critical |
+  1178→| `DakkhoCrypto` | AES-256-GCM encryption/decryption with Android Keystore | 🔴 Critical |
+  1179→| `DakkhoDevice` | Device fingerprint generation, binding verification | 🔴 Critical |
+  1180→| `DakkhoPlayer` | ExoPlayer integration with Widevine L1 | 🔴 Critical |
+  1181→| `DakkhoStorage` | Private storage management, TTL enforcement | 🟡 High |
+  1182→| `DakkhoNetwork` | Network quality detection (3G/4G/5G/WiFi) | 🟡 High |
+  1183→
+  1184→### Plugin API Design
+  1185→
+  1186→```typescript
+  1187→// src/lib/capacitor-plugins.ts
+  1188→
+  1189→import { registerPlugin } from '@capacitor/core';
+  1190→
+  1191→// Download Plugin
+  1192→export interface DakkhoDownloadPlugin {
+  1193→  startDownload(options: {
+  1194→    videoId: string;
+  1195→    hlsUrl: string;
+  1196→    title: string;
+  1197→    thumbnailUrl: string;
+  1198→    duration: number;
+  1199→  }): Promise<{ downloadId: string }>;
+  1200→
+  1201→  pauseDownload(options: { downloadId: string }): Promise<void>;
+  1202→  resumeDownload(options: { downloadId: string }): Promise<void>;
+  1203→  cancelDownload(options: { downloadId: string }): Promise<void>;
+  1204→
+  1205→  getDownloads(): Promise<DownloadItem[]>;
+  1206→  deleteDownload(options: { downloadId: string }): Promise<void>;
+  1207→  deleteAllDownloads(): Promise<void>;
+  1208→
+  1209→  addListener(
+  1210→    eventName: 'downloadProgress',
+  1211→    listenerFunc: (data: { downloadId: string; progress: number; bytesDownloaded: number; totalBytes: number }) => void
+  1212→  ): void;
+  1213→}
+  1214→
+  1215→// Crypto Plugin
+  1216→export interface DakkhoCryptoPlugin {
+  1217→  encryptFile(options: { inputPath: string; outputPath: string; keyAlias: string }): Promise<{ iv: string; tag: string }>;
+  1218→  decryptFile(options: { inputPath: string; outputPath: string; keyAlias: string; iv: string; tag: string }): Promise<void>;
+  1219→  generateKey(options: { alias: string }): Promise<void>;
+  1220→  deleteKey(options: { alias: string }): Promise<void>;
+  1221→  deleteAllKeys(): Promise<void>;
+  1222→}
+  1223→
+  1224→// Device Plugin
+  1225→export interface DakkhoDevicePlugin {
+  1226→  getFingerprint(): Promise<{ hash: string; components: DeviceComponents }>;
+  1227→  getDeviceInfo(): Promise<{ name: string; model: string; manufacturer: string }>;
+  1228→}
+  1229→
+  1230→// Player Plugin
+  1231→export interface DakkhoPlayerPlugin {
+  1232→  playEncrypted(options: { downloadId: string; keyAlias: string; iv: string; tag: string }): Promise<void>;
+  1233→  playStream(options: { hlsUrl: string; drmLicenseUrl?: string }): Promise<void>;
+  1234→  setPlaybackSpeed(options: { speed: number }): Promise<void>;
+  1235→  seekTo(options: { position: number }): Promise<void>;
+  1236→}
+  1237→
+  1238→// Storage Plugin
+  1239→export interface DakkhoStoragePlugin {
+  1240→  getStorageInfo(): Promise<{
+  1241→    totalSpace: number;
+  1242→    usedSpace: number;
+  1243→    downloadSpace: number;
+  1244→    cacheSpace: number;
+  1245→  }>;
+  1246→  enforceTTL(): Promise<{ deletedCount: number }>;
+  1247→  clearCache(): Promise<void>;
+  1248→  secureWipe(): Promise<void>;
+  1249→}
+  1250→
+  1251→// Network Plugin
+  1252→export interface DakkhoNetworkPlugin {
+  1253→  getQuality(): Promise<{ quality: 'fast' | 'slow' | 'offline'; type: string; speed?: number }>;
+  1254→  addListener(
+  1255→    eventName: 'networkChange',
+  1256→    listenerFunc: (data: { quality: string; type: string }) => void
+  1257→  ): void;
+  1258→}
+  1259→
+  1260→// Register plugins
+  1261→export const DakkhoDownload = registerPlugin<DakkhoDownloadPlugin>('DakkhoDownload');
+  1262→export const DakkhoCrypto = registerPlugin<DakkhoCryptoPlugin>('DakkhoCrypto');
+  1263→export const DakkhoDevice = registerPlugin<DakkhoDevicePlugin>('DakkhoDevice');
+  1264→export const DakkhoPlayer = registerPlugin<DakkhoPlayerPlugin>('DakkhoPlayer');
+  1265→export const DakkhoStorage = registerPlugin<DakkhoStoragePlugin>('DakkhoStorage');
+  1266→export const DakkhoNetwork = registerPlugin<DakkhoNetworkPlugin>('DakkhoNetwork');
+  1267→```
+  1268→
+  1269→### Detecting Native App vs Website
+  1270→
+  1271→```typescript
+  1272→// src/lib/platform.ts
+  1273→
+  1274→import { Capacitor } from '@capacitor/core';
+  1275→
+  1276→export const isNativeApp = Capacitor.isNativePlatform();
+  1277→export const isAndroid = Capacitor.getPlatform() === 'android';
+  1278→export const isWebsite = !isNativeApp;
+  1279→
+  1280→// Use this to conditionally show/hide features
+  1281→// e.g., Download button only shows in app
+  1282→// e.g., Force redirect only happens on website
+  1283→```
+  1284→
+  1285→```tsx
+  1286→// Example: Video download button visibility
+  1287→
+  1288→import { isNativeApp } from '@/lib/platform';
+  1289→
+  1290→function VideoActions({ video }: { video: Video }) {
+  1291→  return (
+  1292→    <div className="flex gap-2">
+  1293→      <button className="play-btn">Play</button>
+  1294→
+  1295→      {isNativeApp && (
+  1296→        <button className="download-btn">
+  1297→          <DownloadIcon /> Download
+  1298→        </button>
+  1299→      )}
+  1300→    </div>
+  1301→  );
+  1302→}
+  1303→```
+  1304→
+  1305→---
+  1306→
+  1307→## 📁 Project Structure
+  1308→
+  1309→```
+  1310→student-app/                          # Existing Next.js project (root)
+  1311→├── src/
+  1312→│   ├── app/
+  1313→│   │   ├── layout.tsx                # + Mobile redirect logic
+  1314→│   │   ├── globals.css               # No changes needed
+  1315→│   │   └── [[...slug]]/page.tsx      # No changes needed
+  1316→│   ├── components/
+  1317→│   │   └── dakkho/
+  1318→│   │       ├── DakkhoApp.tsx         # + Platform detection hooks
+  1319→│   │       ├── course/
+  1320→│   │       │   └── VideoPlayer.tsx   # + ExoPlayer bridge
+  1321→│   │       ├── downloads/            # NEW: Download management page
+  1322→│   │       │   ├── DownloadsPage.tsx
+  1323→│   │       │   ├── DownloadCard.tsx
+  1324→│   │       │   └── StorageInfo.tsx
+  1325→│   │       └── shared/
+  1326→│   │           └── CourseCardGrid.tsx # + Download button (app only)
+  1327→│   ├── lib/
+  1328→│   │   ├── api-client.ts            # No changes
+  1329→│   │   ├── store.ts                 # + Download store, cache store
+  1330→│   │   ├── data-hooks.ts            # + Conditional skeleton logic
+  1331→│   │   ├── cache-manager.ts         # NEW: IndexedDB cache layer
+  1332→│   │   ├── network-detector.ts      # NEW: Network quality detection
+  1333→│   │   ├── platform.ts              # NEW: isNativeApp detection
+  1334→│   │   ├── capacitor-plugins.ts     # NEW: Plugin type definitions
+  1335→│   │   ├── mobile-animations.ts     # NEW: Framer Motion mobile config
+  1336→│   │   └── download-manager.ts      # NEW: Download orchestration
+  1337→│   └── hooks/
+  1338→│       ├── use-piprapay.ts          # No changes
+  1339→│       ├── use-download.ts          # NEW: Download hook
+  1340→│       ├── use-network.ts           # NEW: Network quality hook
+  1341→│       └── use-device-binding.ts    # NEW: Device binding hook
+  1342→├── android/                          # NEW: Capacitor Android project
+  1343→│   ├── app/
+  1344→│   │   ├── src/main/
+  1345→│   │   │   ├── java/com/dakkho/app/
+  1346→│   │   │   │   ├── MainActivity.kt          # FLAG_SECURE + WebView setup
+  1347→│   │   │   │   ├── DakkhoDownloadPlugin.kt  # Download + HLS merge
+  1348→│   │   │   │   ├── DakkhoCryptoPlugin.kt    # AES-256-GCM via Keystore
+  1349→│   │   │   │   ├── DakkhoDevicePlugin.kt    # Device fingerprint
+  1350→│   │   │   │   ├── DakkhoPlayerPlugin.kt    # ExoPlayer + Widevine
+  1351→│   │   │   │   ├── DakkhoStoragePlugin.kt   # TTL enforcement
+  1352→│   │   │   │   └── DakkhoNetworkPlugin.kt   # Network quality
+  1353→│   │   │   ├── AndroidManifest.xml          # Deep links + permissions
+  1354→│   │   │   └── res/
+  1355→│   │   │       ├── mipmap-*/               # App icons (adaptive)
+  1356→│   │   │       └── values/                  # Strings, colors
+  1357→│   │   └── build.gradle                     # ExoPlayer + dependencies
+  1358→│   └── build.gradle                         # Android project config
+  1359→├── public/
+  1360→│   └── sw.js                        # Service Worker (Workbox)
+  1361→├── capacitor.config.ts               # NEW: Capacitor configuration
+  1362→├── workbox-config.js                 # NEW: Workbox configuration
+  1363→├── next.config.ts                    # Updated: static export config
+  1364→└── package.json                      # + Capacitor dependencies
+  1365→```
+  1366→
+  1367→---
+  1368→
+  1369→## 🚀 Build & Release Pipeline
+  1370→
+  1371→### Development Build
+  1372→
+  1373→```bash
+  1374→# 1. Build Next.js static export
+  1375→cd /home/z/my-project/student-app
+  1376→npm run build
+  1377→
+  1378→# 2. Sync with Capacitor
+  1379→npx cap sync android
+  1380→
+  1381→# 3. Open in Android Studio
+  1382→npx cap open android
+  1383→
+  1384→# 4. Run on connected device/emulator
+  1385→# (Via Android Studio Run button)
+  1386→```
+  1387→
+  1388→### Production Build
+  1389→
+  1390→```bash
+  1391→# 1. Build Next.js for production
+  1392→npm run build
+  1393→
+  1394→# 2. Sync
+  1395→npx cap sync android --production
+  1396→
+  1397→# 3. Build APK/AAB
+  1398→cd android
+  1399→./gradlew assembleRelease     # APK (for testing)
+  1400→./gradlew bundleRelease       # AAB (for Play Store)
+  1401→
+  1402→# 4. Sign with keystore
+  1403→jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+  1404→  -keystore dakkho-release.keystore \
+  1405→  app/build/outputs/apk/release/app-release.apk \
+  1406→  dakkho
+  1407→
+  1408→# 5. Verify
+  1409→apksigner verify app/build/outputs/apk/release/app-release.apk
+  1410→```
+  1411→
+  1412→### CI/CD Pipeline (GitHub Actions)
+  1413→
+  1414→```yaml
+  1415→# .github/workflows/android-build.yml
+  1416→
+  1417→name: Android Build
+  1418→on:
+  1419→  push:
+  1420→    tags: ['v*']
+  1421→
+  1422→jobs:
+  1423→  build:
+  1424→    runs-on: ubuntu-latest
+  1425→    steps:
+  1426→      - uses: actions/checkout@v4
+  1427→      - uses: actions/setup-node@v4
+  1428→        with: { node-version: '20' }
+  1429→      - uses: actions/setup-java@v4
+  1430→        with:
+  1431→          distribution: 'zulu'
+  1432→          java-version: '17'
+  1433→
+  1434→      - run: npm ci
+  1435→      - run: npm run build
+  1436→      - run: npx cap sync android
+  1437→
+  1438→      - name: Build AAB
+  1439→        working-directory: android
+  1440→        run: ./gradlew bundleRelease
+  1441→
+  1442→      - name: Upload to Play Store
+  1443→        uses: r0adkll/upload-google-play@v1
+  1444→        with:
+  1445→          serviceAccountJson: ${{ secrets.PLAY_SERVICE_ACCOUNT }}
+  1446→          packageName: com.dakkho.app
+  1447→          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+  1448→          track: production
+  1449→```
+  1450→
+  1451→### Versioning
+  1452→
+  1453→| Channel | Version Format | Example |
+  1454→|---|---|---|
+  1455→| **Production** | `MAJOR.MINOR.PATCH` | `1.0.0`, `1.1.0` |
+  1456→| **Beta** | `MAJOR.MINOR.PATCH-beta.N` | `1.1.0-beta.1` |
+  1457→| **Alpha** | `MAJOR.MINOR.PATCH-alpha.N` | `1.2.0-alpha.3` |
+  1458→
+  1459→---
+  1460→
+  1461→## 🔐 Security Checklist
+  1462→
+  1463→| # | Security Measure | Status | Details |
+  1464→|---|---|---|---|
+  1465→| 1 | **AES-256-GCM encryption** for downloads | ✅ Planned | Hardware-backed keys via Android Keystore |
+  1466→| 2 | **Widevine L1 DRM** for streaming | ✅ Planned | TEE-based key management, screen capture blocked |
+  1467→| 3 | **FLAG_SECURE** on MainActivity | ✅ Planned | Blocks screenshots & screen recording |
+  1468→| 4 | **30-day download TTL** | ✅ Planned | Auto-delete expired content silently |
+  1469→| 5 | **Logout → destroy all** | ✅ Planned | Secure wipe downloads + keys + cache |
+  1470→| 6 | **Single device binding** | ✅ Planned | One active device per account |
+  1471→| 7 | **Device fingerprint** | ✅ Planned | Multi-component SHA-256 hash |
+  1472→| 8 | **Tokenized HLS URLs** | ✅ Existing | HMAC-SHA256 signed, already implemented |
+  1473→| 9 | **Android Keystore** | ✅ Planned | Keys never leave secure hardware |
+  1474→| 10 | **No root detection bypass** | ✅ Planned | Block access on rooted devices |
+  1475→| 11 | **Certificate pinning** | ✅ Planned | Pin API certificate in OkHttp |
+  1476→| 12 | **Intent hijack protection** | ✅ Planned | Verified App Links (autoVerify=true) |
+  1477→| 13 | **WebView security** | ✅ Planned | Disable file:// access, enable HTTPS-only |
+  1478→| 14 | **ProGuard/R8** | ✅ Planned | Code obfuscation for native layer |
+  1479→| 15 | **No "Offline" exposure** | ✅ Planned | Zero offline indicators in UI |
+  1480→
+  1481→### Root Detection
+  1482→
+  1483→```kotlin
+  1484→// SecurityUtils.kt
+  1485→
+  1486→fun isDeviceRooted(): Boolean {
+  1487→    val checks = listOf(
+  1488→        // Check for su binary
+  1489→        File("/system/bin/su").exists(),
+  1490→        File("/system/xbin/su").exists(),
+  1491→        File("/sbin/su").exists(),
+  1492→
+  1493→        // Check for Magisk
+  1494→        File("/system/app/Magisk.apk").exists(),
+  1495→        File("/data/adb/magisk").exists(),
+  1496→
+  1497→        // Check for Superuser.apk
+  1498→        File("/system/app/Superuser.apk").exists(),
+  1499→
+  1500→        // Check for busybox (often installed with root)
+  1501→        File("/system/xbin/busybox").exists(),
+  1502→
+  1503→        // Check for custom recovery
+  1504→        "1" == getprop("ro.debuggable"),
+  1505→        "1" == getprop("ro.secure"),
+  1506→
+  1507→        // Check SafetyNet (via Play Services)
+  1508→        // This would be done asynchronously
+  1509→    )
+  1510→
+  1511→    return checks.any { it }
+  1512→}
+  1513→
+  1514→// On app start:
+  1515→if (isDeviceRooted()) {
+  1516→    // Show "This device is not supported" screen
+  1517→    // Do NOT allow login or content access
+  1518→}
+  1519→```
+  1520→
+  1521→---
+  1522→
+  1523→## 📅 Phased Implementation Roadmap
+  1524→
+  1525→### Phase 1: Foundation (Week 1-2)
+  1526→
+  1527→| Task | Description | Priority |
+  1528→|---|---|---|
+  1529→| Capacitor Setup | Install Capacitor 6, create Android project, configure WebView | 🔴 |
+  1530→| Static Export Test | Verify `npm run build` + `npx cap sync` works correctly | 🔴 |
+  1531→| Platform Detection | `isNativeApp` utility, conditional UI rendering | 🔴 |
+  1532→| Device Fingerprint | Generate and register device fingerprint on login | 🔴 |
+  1533→| API: Device Binding | Create `/api/device/bind` and `/api/device/verify` endpoints | 🔴 |
+  1534→| App Shell | Basic app opens, loads website in WebView, same UI | 🔴 |
+  1535→| FLAG_SECURE | Prevent screenshots and screen recording | 🔴 |
+  1536→
+  1537→### Phase 2: Caching & Network (Week 3-4)
+  1538→
+  1539→| Task | Description | Priority |
+  1540→|---|---|---|
+  1541→| Service Worker | Workbox setup, app shell caching, image caching | 🟡 |
+  1542→| IndexedDB Cache | Cache manager with TTL, background refresh | 🟡 |
+  1543→| Network Detection | Quality classification (fast/slow/offline) | 🟡 |
+  1544→| Conditional Skeleton | Show skeleton only on slow network | 🟡 |
+  1545→| Aggressive Caching | Course catalog, departments, instructors → IndexedDB | 🟡 |
+  1546→| Cache-aware Hooks | Modified SWR hooks with cache-first strategy | 🟡 |
+  1547→
+  1548→### Phase 3: Downloads & Encryption (Week 5-7)
+  1549→
+  1550→| Task | Description | Priority |
+  1551→|---|---|---|
+  1552→| Download Plugin | HLS segment download, merge, progress tracking | 🔴 |
+  1553→| AES-256-GCM Encryption | Encrypt/decrypt with Android Keystore keys | 🔴 |
+  1554→| Download UI | Downloads page, download cards, storage info | 🔴 |
+  1555→| TTL Enforcement | 30-day expiry check, auto-deletion | 🔴 |
+  1556→| Logout Destruction | Secure wipe all downloads + keys on logout | 🔴 |
+  1557→| ExoPlayer Integration | Native video player with encrypted file playback | 🔴 |
+  1558→
+  1559→### Phase 4: DRM & Security (Week 8-9)
+  1560→
+  1561→| Task | Description | Priority |
+  1562→|---|---|---|
+  1563→| Widevine L1 | Integrate with license server, configure ExoPlayer DRM | 🔴 |
+  1564→| Offline Licenses | Download Widevine offline licenses with video | 🔴 |
+  1565→| Root Detection | Block app on rooted devices | 🟡 |
+  1566→| Certificate Pinning | Pin API certificate in OkHttp | 🟡 |
+  1567→| ProGuard/R8 | Code obfuscation | 🟡 |
+  1568→
+  1569→### Phase 5: App Redirect & Polish (Week 10-11)
+  1570→
+  1571→| Task | Description | Priority |
+  1572→|---|---|---|
+  1573→| Mobile Web Redirect | Force Android visitors to app/Play Store | 🟡 |
+  1574→| Deep Links | `dakkho://` scheme + App Links | 🟡 |
+  1575→| Push Notifications | OneSignal integration for Capacitor | 🟢 |
+  1576→| App Icons | Adaptive icons, splash screen | 🟢 |
+  1577→| Performance Audit | Lighthouse + Android Profiler optimization | 🟢 |
+  1578→
+  1579→### Phase 6: Testing & Release (Week 12-13)
+  1580→
+  1581→| Task | Description | Priority |
+  1582→|---|---|---|
+  1583→| Device Testing | Test on Samsung, Xiaomi, Realme, Oppo, Vivo | 🔴 |
+  1584→| Security Testing | Penetration test, root bypass attempt | 🔴 |
+  1585→| Play Store Submission | AAB upload, store listing, screenshots | 🔴 |
+  1586→| Beta Testing | Internal testing track → Open beta | 🟡 |
+  1587→| Production Release | Staged rollout (10% → 50% → 100%) | 🟡 |
+  1588→
+  1589→---
+  1590→
+  1591→## 🔗 GitHub Repositories
+  1592→
+  1593→| Repository | Description | Live URL |
+  1594→|---|---|---|
+  1595→| [dakkho-student-app](https://github.com/grayrat2026/dakkho-student-app) | Student-facing Next.js 16 SPA (this project) | [dakkho-student.pages.dev](https://dakkho-student.pages.dev) |
+  1596→| [dakkho-worker](https://github.com/grayrat2026/dakkho-worker) | Backend API (Hono + Cloudflare Workers + D1) | [dakkho-admin-api.dakkho-admin.workers.dev](https://dakkho-admin-api.dakkho-admin.workers.dev) |
+  1597→| [dakkho-instructor](https://github.com/grayrat2026/dakkho-instructor) | Instructor-facing Next.js 16 SPA | [dakkho-instructor.pages.dev](https://dakkho-instructor.pages.dev) |
+  1598→| [dakkho-admin-web](https://github.com/grayrat2026/dakkho-admin-web) | Admin panel Next.js 16 SPA | [dakkho-admin.pages.dev](https://dakkho-admin.pages.dev) |
+  1599→| [dakkho-admin-src](https://github.com/grayrat2026/dakkho-admin-src) *(private)* | Admin panel source (build artifact repo) | — |
+  1600→| [dakkho-types](https://github.com/grayrat2026/dakkho-types) *(private)* | Shared TypeScript type definitions | — |
+  1601→
+  1602→---
+  1603→
+  1604→<div align="center">
+  1605→
+  1606→**Built with ❤️ for the DAKKHO Platform**
+  1607→
+  1608→*This is a planning document. No implementation work has been started.*
+  1609→
+  1610→</div>
+  1611→
