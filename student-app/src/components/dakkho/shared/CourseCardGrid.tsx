@@ -54,11 +54,11 @@ export function CourseCard({ course, showProgress = false, progress = 0, index =
       >
         <GlassCard
           hover
-          className="overflow-hidden cursor-pointer group"
+          className="overflow-hidden cursor-pointer group h-full flex flex-col"
           onClick={() => navigate('course-detail', { courseId: course.id })}
         >
           {/* Poster-style Thumbnail (portrait) */}
-          <div className="relative aspect-[3/4] overflow-hidden">
+          <div className="relative flex-1 min-h-0 overflow-hidden">
             <ProgressiveImage
               src={course.thumbnailUrl}
               alt={course.title}
@@ -113,7 +113,7 @@ export function CourseCard({ course, showProgress = false, progress = 0, index =
           </div>
 
           {/* Content */}
-          <div className="p-3 space-y-1.5">
+          <div className="p-3 space-y-1.5 flex-shrink-0">
             {category && (
               <span className="text-[10px] font-semibold text-sky-500 uppercase tracking-wider">
                 {category.name}

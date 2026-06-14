@@ -36,9 +36,9 @@ export function LoadingSkeleton({ className, count = 1, type = 'card' }: Loading
 
 export function CourseCardSkeleton() {
   return (
-    <div className="glass-card p-0 overflow-hidden">
-      <div className="aspect-video bg-muted/50 animate-pulse" />
-      <div className="p-4 space-y-3">
+    <div className="glass-card p-0 overflow-hidden h-full flex flex-col">
+      <div className="flex-1 bg-muted/50 animate-pulse" />
+      <div className="p-4 space-y-3 flex-shrink-0">
         <div className="h-4 bg-muted/50 animate-pulse rounded w-3/4" />
         <div className="h-3 bg-muted/50 animate-pulse rounded w-1/2" />
         <div className="flex items-center gap-2">

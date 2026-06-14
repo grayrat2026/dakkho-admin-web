@@ -30,7 +30,7 @@ export function TrendingCourses() {
         </div>
         <div className="flex gap-4 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex-shrink-0 w-48">
+            <div key={i} className="flex-shrink-0 w-48 sm:w-52 h-[340px] sm:h-[360px]">
               <CourseCardSkeleton />
             </div>
           ))}
@@ -74,7 +74,7 @@ export function TrendingCourses() {
         style={{ scrollbarWidth: 'none' }}
       >
         {courses.map((course, i) => (
-          <div key={course.id} className="flex-shrink-0 w-48 sm:w-52">
+          <div key={course.id} className="flex-shrink-0 w-48 sm:w-52 h-[340px] sm:h-[360px]">
             <CourseCard
               course={course}
               index={i}
