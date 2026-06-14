@@ -1,60 +1,44 @@
 ---
 Task ID: 1
 Agent: Main Agent
-Task: Fix Instructor Site issues - Live Page, Course Creation, Curriculum modals, CourseDetail, VideoManager, Profile
+Task: Fix instructor app curriculum page — add lesson attachment/PDF upload, video search by title, fix icon visibility + Fix student app Piprapay payment routing
 
 Work Log:
-- Read full codebase: CourseLive, CourseNew, CourseCurriculum, Profile, VideoManager, CourseDetail, CourseSettings
-- Fixed CourseLive.tsx: Added missing AnimatePresence import that caused the Schedule Class dialog to crash
-- Fixed CourseNew.tsx: Removed double `/instructor` prefix in apiUpload call for thumbnail (was `/instructor/instructor/courses/...`)
-- Fixed CourseSettings.tsx: Same double-prefix bug in thumbnail upload
-- Rewrote CourseCurriculum.tsx: Replaced cramped inline popups with proper fullscreen modals (Modal component) for Add Subject, Add Chapter, Edit Chapter, Add Lesson
-- Fixed CourseDetail.tsx: Added safe defaults for course data (tags can be string or array, isPublished can be number or boolean), added error boundary with user-friendly error display
-- Fixed VideoManager.tsx: Improved dialog alignment (max-w-xl, consistent padding, better sticky header)
-- Fixed CourseLive.tsx: Consistent modal styling across all dialogs
-- Improved CourseNew.tsx: Better courseId extraction from API response with fallback navigation
+- Read CourseSubject.tsx, CourseCurriculum.tsx, SubscriptionPage.tsx, PaymentResultPage.tsx
+- Read worker API routes for videos/search and payments/create
+- Read student app store.ts for page routing configuration
+
+Instructor App Changes:
+- Added attachment/note/PDF upload to CourseCurriculum.tsx lesson creation form
+  - Added state: lessonDocument, lessonDocumentName, uploadingDocument, fileInputRef
+  - Added document upload UI with drag/drop zone, file validation (50MB limit)
+  - Added document upload logic in handleCreateLesson using apiUpload
+  - Added document URL indicator (PDF badge) in lesson rows
+- Added video search by title to CourseCurriculum.tsx lesson creation form
+  - Added state: videoSearchQuery, videoSearchResults, searchingVideos, selectedExistingVideo, showVideoSearch
+  - Added video search UI with search input, results list, video selection
+  - Videos searchable across all instructor's courses via /videos/search API
+  - Added selectedExistingVideo integration in handleCreateLesson
+- Fixed chapter/lesson action icons visibility
+  - Changed from opacity-0 group-hover:opacity-100 to opacity-40 group-hover:opacity-100
+  - Icons now always visible with reduced opacity, full opacity on hover
+  - Works on both desktop and touch/mobile devices
+- Added imports: Upload, Search, Paperclip, File, Check from lucide-react
+- Added import: apiGet, apiUpload from api-client
+- Added import: useRef from react
+
+Student App Changes:
+- Added 'payment-result' and 'payment-cancel' to Page type union in store.ts
+- Added 'payment-result': '/payment-result' and 'payment-cancel': '/payment-cancel' to pageToPath mapping
+- Added PaymentCancelPage import to DakkhoApp.tsx
+- Added 'payment-cancel': <PaymentCancelPage /> to pageMap in DakkhoApp.tsx
+- This fixes PipraPay natural redirect flow: when payment completes, user is redirected to /payment-result?pp_id=xxx which is now properly routed
+
+Deployments:
+- Instructor app built and deployed to dakkho-instructor.pages.dev ✅
+- Student app built and deployed to dakkho-student.pages.dev ✅
 
 Stage Summary:
-- All major bugs fixed and deployed
-- Course creation with thumbnail upload now works (was broken due to double API path prefix)
-- Live page dialog now works (was missing AnimatePresence import)
-- Curriculum page has proper modals instead of cramped inline forms
-- CourseDetail page no longer crashes on course data with mixed types
-- VideoManager popup properly aligned
-- Pushed to GitHub: grayrat2026/dakkho-instructor
-- Deployed to Cloudflare Pages: https://dakkho-instructor.pages.dev/
----
-Task ID: 1
-Agent: Main Agent
-Task: Fix Instructor Site - curriculum, live page, course creation, subject management, replace popups with pages
-
-Work Log:
-- Read all source code to understand current architecture
-- Explored backend API endpoints to understand data structures
-- Added new PageName types: course-subject, course-add-subject, course-add-video
-- Updated store.ts with new route parsing and URL building for new pages
-- Added new API hooks for thumbnail upload, lesson video upload, subject chapters
-- Completely rebuilt CourseCurriculum.tsx - clean subject list with stats and drill-down
-- Created CourseSubject.tsx - full subject detail with chapters, lessons, reviews/reply
-- Created CourseAddSubject.tsx - proper grid selection page instead of popup
-- Created CourseAddVideo.tsx - full page with upload/link/youtube/document tabs
-- Rebuilt VideoManager.tsx as clean list page without popup
-- Fixed CourseLive.tsx - proper data filtering, course sub-nav, empty states
-- Fixed CourseNew.tsx - added error boundary, better error handling for thumbnail upload
-- Updated InstructorApp.tsx with all new page components
-- Fixed CourseDetail.tsx - tags.map crash when tags is string not array
-- Fixed backend instructor.ts - removed non-existent instructor_id column from INSERT
-- Fixed backend instructor.ts - changed course_subjects.instructor_id to course_instructors
-- Fixed subject data mapping - use subjectName field, handle UUID subject IDs
-- Built, deployed to Cloudflare Pages multiple times
-- Committed and pushed to GitHub
-
-Stage Summary:
-- All popups replaced with proper separate pages
-- Subject management now works: add, view, drill down
-- Course creation works with error boundary
-- Live page works properly
-- Backend subject persistence fixed (instructor_id column issue)
-- Tags crash fixed
-- Site deployed at https://dakkho-instructor.pages.dev/
-- Source code at https://github.com/grayrat2026/dakkho-instructor
+- Instructor curriculum page now has attachment/PDF upload, video search, and visible action icons
+- Student app now properly routes PipraPay payment result and cancel pages
+- Both apps pushed to GitHub (grayrat2026/dakkho-instructor-web, grayrat2026/dakkho-student-app)

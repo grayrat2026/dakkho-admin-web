@@ -31,6 +31,7 @@ import {
 import { useNavigationStore, useWatchProgressStore } from '@/lib/store';
 import { formatDuration } from '@/lib/mock-data';
 import { courseApi, videoApi, instructorApi, watchHistoryApi } from '@/lib/api-client';
+import { UniversalVideoPlayer, type StreamData } from './UniversalVideoPlayer';
 import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
 import { ProgressBar } from '../shared/ProgressBar';
@@ -129,9 +130,23 @@ export function VideoPlayerPage() {
   const { pageParams, navigate, goBack } = useNavigationStore();
   const { updateProgress, getProgress } = useWatchProgressStore();
 
-  // --- Route params ---
-  const videoId = pageParams.videoId as string;
-  const courseId = pageParams.courseId as string;
+  // --- Route params (fallback to URL path when store is empty after refresh) ---
+  const [resolvedIds, setResolvedIds] = useState<{ videoId: string; courseId: string }>({ videoId: '', courseId: '' });
+
+  useEffect(() => {
+    const parts = window.location.pathname.split('/'); // ['', 'video', 'play', courseId, videoId]
+    const fromUrl = {
+      courseId: parts[3] || '',
+      videoId: parts[4] || '',
+    };
+    setResolvedIds({
+      videoId: (pageParams.videoId as string) || fromUrl.videoId || '',
+      courseId: (pageParams.courseId as string) || fromUrl.courseId || '',
+    });
+  }, [pageParams.videoId, pageParams.courseId]);
+
+  const videoId = resolvedIds.videoId;
+  const courseId = resolvedIds.courseId;
 
   // --- API-fetched data ---
   const [course, setCourse] = useState<any>(null);
@@ -208,8 +223,7 @@ export function VideoPlayerPage() {
   // --- Fetch course + videos + instructor on mount ---
   useEffect(() => {
     if (!courseId) {
-      setDataError('No course ID provided.');
-      setDataLoading(false);
+      // Still resolving from URL — keep loading, don't error yet
       return;
     }
 
@@ -669,38 +683,26 @@ export function VideoPlayerPage() {
                   }
                 }}
               >
-                {/* Real video element when stream URL is available */}
+                {/* Real video player when stream URL is available — uses UniversalVideoPlayer for HLS support */}
                 {streamUrl && (
-                  <video
-                    ref={(el) => {
-                      if (el && streamUrl) {
-                        el.src = streamUrl;
-                        if (isPlaying) {
-                          el.play().catch(() => {});
-                        } else {
-                          el.pause();
-                        }
-                        el.currentTime = currentTime;
-                        el.volume = effectiveVolume / 100;
-                        el.playbackRate = playbackSpeed;
-                      }
+                  <UniversalVideoPlayer
+                    streamData={{
+                      type: 'hls',
+                      url: streamUrl,
+                      title: currentVideo?.title || 'Video',
                     }}
-                    className="absolute inset-0 w-full h-full object-contain"
-                    playsInline
-                    onTimeUpdate={(e) => {
-                      const video = e.target as HTMLVideoElement;
-                      setCurrentTime(video.currentTime);
-                      setBuffered(Math.min(video.buffered.length > 0 ? video.buffered.end(video.buffered.length - 1) : 0, videoDuration));
+                    onProgress={(p) => {
+                      setCurrentTime(p.currentTime);
+                      setBuffered(Math.min(p.currentTime + 30, videoDuration));
                     }}
-                    onEnded={() => {
+                    onComplete={() => {
                       if (nextVideo) {
                         setShowNextEpisode(true);
                         setNextEpisodeCountdown(5);
                       }
                     }}
-                    onLoadedMetadata={(e) => {
-                      // Video loaded, update duration if needed
-                    }}
+                    initialTime={initialPosition}
+                    autoplay={isPlaying}
                   />
                 )}
 

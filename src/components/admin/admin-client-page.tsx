@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiPost, assetUrl } from '@/lib/api-client';
 import ErrorBoundary from '@/components/admin/error-boundary';
 import { motion } from 'framer-motion';
@@ -71,32 +71,64 @@ export default function AdminClientPage({ currentPage: initialPage }: { currentP
   const { adminUser, setAdminUser, sidebarCollapsed } = useAdminStore();
   const [checking, setChecking] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
-  const [currentPage, setCurrentPage] = useState(initialPage);
+  const [mounted, setMounted] = useState(false);
 
-  const getPageFromPath = (pathname: string): string => {
+  const getPageFromPath = useCallback((pathname: string): string => {
     const clean = pathname.replace(/^\/+|\/+$/g, '');
     const segments = clean.split('/');
     const twoSegment = segments.length >= 2 ? `${segments[0]}-${segments[1]}` : '';
     if (validPages.includes(twoSegment)) return twoSegment;
     const firstSegment = segments[0] || 'dashboard';
     return validPages.includes(firstSegment) ? firstSegment : 'dashboard';
-  };
-
-  useEffect(() => {
-    setCurrentPage(validPages.includes(initialPage) ? initialPage : 'dashboard');
-  }, [initialPage]);
-
-  useEffect(() => {
-    const handlePopState = () => {
-      setCurrentPage(getPageFromPath(window.location.pathname));
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  useEffect(() => {
+  // Track the real current page from URL (source of truth)
+  const [currentPage, setCurrentPage] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return getPageFromPath(window.location.pathname);
+    }
+    return validPages.includes(initialPage) ? initialPage : 'dashboard';
+  });
+
+  // Track URL changes for SPA routing (pushState + popstate + replaceState)
+  const syncPageFromUrl = useCallback(() => {
     setCurrentPage(getPageFromPath(window.location.pathname));
-  }, []);
+  }, [getPageFromPath]);
+
+  // Mark as mounted (client-side only)
+  useEffect(() => {
+    setMounted(true);
+    // Immediately sync from URL on mount - URL is ALWAYS the source of truth
+    syncPageFromUrl();
+  }, [syncPageFromUrl]);
+
+  // Also sync whenever the initialPage prop changes
+  useEffect(() => {
+    syncPageFromUrl();
+  }, [initialPage, syncPageFromUrl]);
+
+  useEffect(() => {
+    // Listen for popstate (back/forward navigation)
+    window.addEventListener('popstate', syncPageFromUrl);
+
+    // Patch pushState and replaceState to detect programmatic navigation
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+    history.pushState = function (...args) {
+      originalPushState.apply(this, args);
+      syncPageFromUrl();
+    };
+    history.replaceState = function (...args) {
+      originalReplaceState.apply(this, args);
+      syncPageFromUrl();
+    };
+
+    return () => {
+      window.removeEventListener('popstate', syncPageFromUrl);
+      history.pushState = originalPushState;
+      history.replaceState = originalReplaceState;
+    };
+  }, [syncPageFromUrl]);
 
   useEffect(() => {
     checkAuth();

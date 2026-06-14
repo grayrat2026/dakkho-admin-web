@@ -1,0 +1,1123 @@
+     1→import { create } from 'zustand';
+     2→
+     3→// ============ PAGE TYPES ============
+     4→export type Page =
+     5→  // Auth
+     6→  | 'login' | 'signup' | 'forgot-password'
+     7→  // Main
+     8→  | 'home' | 'explore' | 'search' | 'notifications' | 'profile'
+     9→  // Course
+    10→  | 'course-detail' | 'video-player'
+    11→  | 'course-curriculum' | 'course-reviews' | 'course-qa' | 'course-announcements'
+    12→  | 'course-resources' | 'course-notes' | 'course-quizzes' | 'course-progress'
+    13→  // Instructor
+    14→  | 'instructors' | 'instructor-profile'
+    15→  | 'instructor-courses' | 'instructor-reviews' | 'instructor-schedule' | 'instructor-contact'
+    16→  // User pages
+    17→  | 'my-courses' | 'bookmarks' | 'settings' | 'help'
+    18→  | 'watch-history' | 'downloads' | 'certificates' | 'live-sessions'
+    19→  | 'achievements' | 'assignment' | 'discussion' | 'about'
+    20→  // Department pages
+    21→  | 'dept-cse' | 'dept-ete' | 'dept-eee' | 'dept-me' | 'dept-ce'
+    22→  | 'dept-architecture' | 'dept-textile' | 'dept-chemical' | 'dept-automobile' | 'dept-rac'
+    23→  | 'dept-glass-ceramic' | 'dept-printing' | 'dept-surveying' | 'dept-mechatronics' | 'dept-mining'
+    24→  | 'dept-metallurgical' | 'dept-power' | 'dept-instrumentation' | 'dept-food' | 'dept-leather'
+    25→  // Semester pages
+    26→  | 'semester-1' | 'semester-2' | 'semester-3' | 'semester-4'
+    27→  | 'semester-5' | 'semester-6' | 'semester-7' | 'semester-8'
+    28→  // Profile sub-pages
+    29→  | 'edit-profile' | 'change-password' | 'learning-stats' | 'subscription' | 'referral' | 'delete-account'
+    30→  // Settings sub-pages
+    31→  | 'settings-account' | 'settings-notifications' | 'settings-privacy'
+    32→  | 'settings-language' | 'settings-theme' | 'settings-downloads' | 'settings-content-protection' | 'settings-sessions'
+    33→  | 'settings-video-quality' | 'settings-download-settings' | 'settings-network-data'
+    34→  // Help sub-pages
+    35→  | 'faq' | 'contact-support' | 'report-issue' | 'terms-of-service' | 'privacy-policy' | 'refund-policy'
+    36→  // Exam pages
+    37→  | 'exam-prep' | 'exam-schedule' | 'exam-results' | 'exam-practice' | 'exam-tips'
+    38→  // Social/Community pages
+    39→  | 'leaderboard' | 'study-groups' | 'peer-connections' | 'community' | 'feedback' | 'roadmap'
+    40→  // Category
+    41→  | 'category'
+    42→  // Misc pages
+    43→  | 'pricing' | 'changelog' | 'maintenance' | 'terms' | 'privacy'
+    44→  // Payment pages
+    45→  | 'payment-result' | 'payment-cancel'
+    46→  // Error pages
+    47→  | 'error-404' | 'error-500';
+    48→
+    49→// ============ URL MAPPING ============
+    50→// Maps page names to URL paths and vice versa
+    51→const pageToPath: Record<string, string> = {
+    52→  'home': '/',
+    53→  'login': '/login',
+    54→  'signup': '/signup',
+    55→  'forgot-password': '/forgot-password',
+    56→  'explore': '/explore',
+    57→  'search': '/search',
+    58→  'notifications': '/notifications',
+    59→  'profile': '/profile',
+    60→  'course-detail': '/course/detail',
+    61→  'video-player': '/video/play',
+    62→  'course-curriculum': '/course/curriculum',
+    63→  'course-reviews': '/course/reviews',
+    64→  'course-qa': '/course/qa',
+    65→  'course-announcements': '/course/announcements',
+    66→  'course-resources': '/course/resources',
+    67→  'course-notes': '/course/notes',
+    68→  'course-quizzes': '/course/quizzes',
+    69→  'course-progress': '/course/progress',
+    70→  'instructors': '/instructors',
+    71→  'instructor-profile': '/instructor/profile',
+    72→  'instructor-courses': '/instructor/courses',
+    73→  'instructor-reviews': '/instructor/reviews',
+    74→  'instructor-schedule': '/instructor/schedule',
+    75→  'instructor-contact': '/instructor/contact',
+    76→  'my-courses': '/my-courses',
+    77→  'bookmarks': '/bookmarks',
+    78→  'settings': '/settings',
+    79→  'help': '/help',
+    80→  'watch-history': '/watch-history',
+    81→  'downloads': '/downloads',
+    82→  'certificates': '/certificates',
+    83→  'live-sessions': '/live-sessions',
+    84→  'achievements': '/achievements',
+    85→  'assignment': '/assignment',
+    86→  'discussion': '/discussion',
+    87→  'about': '/about',
+    88→  'dept-cse': '/department/cse',
+    89→  'dept-ete': '/department/ete',
+    90→  'dept-eee': '/department/eee',
+    91→  'dept-me': '/department/me',
+    92→  'dept-ce': '/department/ce',
+    93→  'dept-architecture': '/department/architecture',
+    94→  'dept-textile': '/department/textile',
+    95→  'dept-chemical': '/department/chemical',
+    96→  'dept-automobile': '/department/automobile',
+    97→  'dept-rac': '/department/rac',
+    98→  'dept-glass-ceramic': '/department/glass-ceramic',
+    99→  'dept-printing': '/department/printing',
+   100→  'dept-surveying': '/department/surveying',
+   101→  'dept-mechatronics': '/department/mechatronics',
+   102→  'dept-mining': '/department/mining',
+   103→  'dept-metallurgical': '/department/metallurgical',
+   104→  'dept-power': '/department/power',
+   105→  'dept-instrumentation': '/department/instrumentation',
+   106→  'dept-food': '/department/food',
+   107→  'dept-leather': '/department/leather',
+   108→  'semester-1': '/semester/1',
+   109→  'semester-2': '/semester/2',
+   110→  'semester-3': '/semester/3',
+   111→  'semester-4': '/semester/4',
+   112→  'semester-5': '/semester/5',
+   113→  'semester-6': '/semester/6',
+   114→  'semester-7': '/semester/7',
+   115→  'semester-8': '/semester/8',
+   116→  'edit-profile': '/profile/edit',
+   117→  'change-password': '/profile/change-password',
+   118→  'learning-stats': '/profile/learning-stats',
+   119→  'subscription': '/profile/subscription',
+   120→  'referral': '/profile/referral',
+   121→  'delete-account': '/profile/delete-account',
+   122→  'settings-account': '/settings/account',
+   123→  'settings-notifications': '/settings/notifications',
+   124→  'settings-privacy': '/settings/privacy',
+   125→  'settings-language': '/settings/language',
+   126→  'settings-theme': '/settings/theme',
+   127→  'settings-downloads': '/settings/downloads',
+   128→  'settings-video-quality': '/settings/video-quality',
+   129→  'settings-download-settings': '/settings/download-settings',
+   130→  'settings-network-data': '/settings/network-data',
+   131→  'settings-content-protection': '/settings/content-protection',
+   132→  'settings-sessions': '/settings/sessions',
+   133→  'faq': '/help/faq',
+   134→  'contact-support': '/help/contact-support',
+   135→  'report-issue': '/help/report-issue',
+   136→  'terms-of-service': '/help/terms-of-service',
+   137→  'privacy-policy': '/help/privacy-policy',
+   138→  'refund-policy': '/help/refund-policy',
+   139→  'exam-prep': '/exam/prep',
+   140→  'exam-schedule': '/exam/schedule',
+   141→  'exam-results': '/exam/results',
+   142→  'exam-practice': '/exam/practice',
+   143→  'exam-tips': '/exam/tips',
+   144→  'leaderboard': '/community/leaderboard',
+   145→  'study-groups': '/community/study-groups',
+   146→  'peer-connections': '/community/peer-connections',
+   147→  'community': '/community',
+   148→  'feedback': '/community/feedback',
+   149→  'roadmap': '/community/roadmap',
+   150→  'category': '/category',
+   151→  'pricing': '/pricing',
+   152→  'changelog': '/changelog',
+   153→  'maintenance': '/maintenance',
+   154→  'terms': '/terms',
+   155→  'privacy': '/privacy',
+   156→  'payment-result': '/payment-result',
+   157→  'payment-cancel': '/payment-cancel',
+   158→  'error-404': '/error/404',
+   159→  'error-500': '/error/500',
+   160→};
+   161→
+   162→// Reverse mapping: path → page name
+   163→const pathToPage: Record<string, string> = {};
+   164→for (const [page, path] of Object.entries(pageToPath)) {
+   165→  pathToPage[path] = page;
+   166→}
+   167→
+   168→/** Convert a page name to a URL path, including dynamic params */
+   169→export function pageToUrl(page: string, params?: Record<string, unknown>): string {
+   170→  let path = pageToPath[page] || `/${page}`;
+   171→
+   172→  // Append dynamic params as URL segments
+   173→  if (params) {
+   174→    const extraSegments: string[] = [];
+   175→    if (params.courseId) extraSegments.push(String(params.courseId));
+   176→    if (params.videoId) extraSegments.push(String(params.videoId));
+   177→    if (params.instructorId) extraSegments.push(String(params.instructorId));
+   178→    if (params.query) extraSegments.push(encodeURIComponent(String(params.query)));
+   179→    if (params.userId) extraSegments.push(String(params.userId));
+   180→    if (extraSegments.length > 0) {
+   181→      path += '/' + extraSegments.join('/');
+   182→    }
+   183→  }
+   184→
+   185→  return path;
+   186→}
+   187→
+   188→/** Convert a URL path back to a page name and params */
+   189→export function urlToPage(urlPath: string): { page: string; params: Record<string, string> } {
+   190→  // Normalize: remove trailing slash
+   191→  const normalized = urlPath.replace(/\/+$/, '') || '/';
+   192→
+   193→  // Try exact match first
+   194→  const exactMatch = pathToPage[normalized];
+   195→  if (exactMatch) {
+   196→    return { page: exactMatch, params: {} };
+   197→  }
+   198→
+   199→  // Try matching with dynamic segments
+   200→  // e.g., /course/detail/c1 → { page: 'course-detail', params: { courseId: 'c1' } }
+   201→  // e.g., /search/web%20dev → { page: 'search', params: { query: 'web dev' } }
+   202→  // e.g., /instructor/profile/ins1 → { page: 'instructor-profile', params: { instructorId: 'ins1' } }
+   203→
+   204→  const segments = normalized.split('/').filter(Boolean);
+   205→
+   206→  // Try progressively shorter paths
+   207→  for (let i = segments.length; i >= 1; i--) {
+   208→    const prefix = '/' + segments.slice(0, i).join('/');
+   209→    const match = pathToPage[prefix];
+   210→    if (match) {
+   211→      const extraSegments = segments.slice(i);
+   212→      const params: Record<string, string> = {};
+   213→
+   214→      // Assign extra segments to known param keys based on page type
+   215→      if (match === 'course-detail' && extraSegments[0]) params.courseId = extraSegments[0];
+   216→      else if (match === 'video-player' && extraSegments[0]) params.videoId = extraSegments[0];
+   217→      else if (match === 'instructor-profile' && extraSegments[0]) params.instructorId = extraSegments[0];
+   218→      else if (match === 'search' && extraSegments[0]) params.query = decodeURIComponent(extraSegments[0]);
+   219→      else if (match === 'profile' && extraSegments[0]) params.userId = extraSegments[0];
+   220→      else {
+   221→        // Generic: store as param0, param1, etc.
+   222→        extraSegments.forEach((seg, idx) => {
+   223→          params[`param${idx}`] = seg;
+   224→        });
+   225→      }
+   226→
+   227→      return { page: match, params };
+   228→    }
+   229→  }
+   230→
+   231→  // No match found → 404
+   232→  return { page: 'error-404', params: {} };
+   233→}
+   234→
+   235→// ============ NAVIGATION STORE ============
+   236→interface NavigationState {
+   237→  currentPage: Page;
+   238→  pageParams: Record<string, unknown>;
+   239→  navigate: (page: Page, params?: Record<string, unknown>) => void;
+   240→  goBack: () => void;
+   241→  history: Array<{ page: Page; params: Record<string, unknown> }>;
+   242→  sidebarOpen: boolean;
+   243→  toggleSidebar: () => void;
+   244→  setSidebarOpen: (open: boolean) => void;
+   245→  syncFromUrl: (urlPath: string) => void;
+   246→}
+   247→
+   248→let isNavigatingProgrammatically = false;
+   249→
+   250→export const useNavigationStore = create<NavigationState>((set, get) => ({
+   251→  currentPage: 'home',
+   252→  pageParams: {},
+   253→  history: [],
+   254→  sidebarOpen: false,
+   255→  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+   256→  setSidebarOpen: (open) => set({ sidebarOpen: open }),
+   257→  navigate: (page, params = {}) => {
+   258→    const state = get();
+   259→    const url = pageToUrl(page, params);
+   260→
+   261→    // Update browser URL
+   262→    if (typeof window !== 'undefined') {
+   263→      isNavigatingProgrammatically = true;
+   264→      window.history.pushState({ page, params }, '', url);
+   265→      // Reset the flag after a microtask
+   266→      queueMicrotask(() => { isNavigatingProgrammatically = false; });
+   267→    }
+   268→
+   269→    set({
+   270→      currentPage: page,
+   271→      pageParams: params,
+   272→      history: [...state.history, { page: state.currentPage, params: state.pageParams }],
+   273→    });
+   274→  },
+   275→  goBack: () => {
+   276→    const state = get();
+   277→    if (typeof window !== 'undefined') {
+   278→      window.history.back();
+   279→    }
+   280→    if (state.history.length > 0) {
+   281→      const prev = state.history[state.history.length - 1];
+   282→      set({
+   283→        currentPage: prev.page,
+   284→        pageParams: prev.params,
+   285→        history: state.history.slice(0, -1),
+   286→      });
+   287→    }
+   288→  },
+   289→  syncFromUrl: (urlPath: string) => {
+   290→    const { page, params } = urlToPage(urlPath);
+   291→    if (page !== get().currentPage || JSON.stringify(params) !== JSON.stringify(get().pageParams)) {
+   292→      set({
+   293→        currentPage: page as Page,
+   294→        pageParams: params,
+   295→      });
+   296→    }
+   297→  },
+   298→}));
+   299→
+   300→// ============ AUTH STORE ============
+   301→import { authApi, setAuthToken, clearAuthToken, getAuthToken } from './api-client';
+   302→import { technologyApi, instituteApi, watchHistoryApi, studentNotificationsApi } from './api-client';
+   303→
+   304→export interface User {
+   305→  id: string;
+   306→  fullName: string;
+   307→  email: string;
+   308→  institute?: string;
+   309→  instituteId?: number;
+   310→  technology?: string;
+   311→  avatarUrl?: string;
+   312→  role: string;
+   313→  isNewUser?: boolean;
+   314→  enrolledCourseIds?: string[];
+   315→  emailVerified?: boolean;
+   316→}
+   317→
+   318→interface AuthState {
+   319→  user: User | null;
+   320→  isAuthenticated: boolean;
+   321→  isSignupPending: boolean;  // true after signup, before OTP verification
+   322→  isHydrated: boolean;  // true once we've read localStorage on the client
+   323→  isLoading: boolean;
+   324→  login: (email: string, password: string) => Promise<void>;
+   325→  signup: (data: { fullName: string; email: string; password: string; instituteId?: number; technology?: string }) => Promise<{ token: string; userId: string }>;
+   326→  logout: () => Promise<void>;
+   327→  forgotPassword: (email: string) => Promise<void>;
+   328→  resetPassword: (email: string, otp: string, newPassword: string) => Promise<boolean>;
+   329→  verifyOTP: (email: string, otp: string) => Promise<boolean>;
+   330→  resendOTP: (email: string) => Promise<void>;
+   331→  setUser: (user: User | null) => void;
+   332→  hydrateAuth: () => void;  // read localStorage and set isHydrated
+   333→  refreshUser: () => Promise<void>;
+   334→}
+   335→
+   336→// ============ AUTH PERSISTENCE ============
+   337→const AUTH_STORAGE_KEY = 'dakkho-auth-session';
+   338→
+   339→const loadAuthSession = (): { user: User | null; isAuthenticated: boolean; isSignupPending: boolean } => {
+   340→  if (typeof window === 'undefined') return { user: null, isAuthenticated: false, isSignupPending: false };
+   341→  try {
+   342→    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+   343→    const token = localStorage.getItem('dakkho_student_token');
+   344→    if (stored && token) {
+   345→      const parsed = JSON.parse(stored);
+   346→      if (parsed.expiresAt && Date.now() < parsed.expiresAt) {
+   347→        return { user: parsed.user, isAuthenticated: parsed.isAuthenticated, isSignupPending: parsed.isSignupPending || false };
+   348→      }
+   349→      localStorage.removeItem(AUTH_STORAGE_KEY);
+   350→      localStorage.removeItem('dakkho_student_token');
+   351→    }
+   352→  } catch {}
+   353→  return { user: null, isAuthenticated: false, isSignupPending: false };
+   354→};
+   355→
+   356→const saveAuthSession = (user: User | null, isAuthenticated: boolean, isSignupPending: boolean = false) => {
+   357→  if (typeof window === 'undefined') return;
+   358→  try {
+   359→    if ((isAuthenticated || isSignupPending) && user) {
+   360→      const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000;
+   361→      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, isAuthenticated, isSignupPending, expiresAt }));
+   362→    } else {
+   363→      localStorage.removeItem(AUTH_STORAGE_KEY);
+   364→    }
+   365→  } catch {}
+   366→};
+   367→
+   368→// IMPORTANT: Always initialise as unauthenticated so that the first
+   369→// client render matches the server render (SSR always renders as
+   370→// unauthenticated).  The real session is loaded in a useEffect via
+   371→// hydrateAuth() which runs AFTER hydration, avoiding a mismatch.
+   372→export const useAuthStore = create<AuthState>((set, get) => ({
+   373→  user: null,
+   374→  isAuthenticated: false,
+   375→  isSignupPending: false,
+   376→  isHydrated: false,
+   377→  isLoading: false,
+   378→  login: async (email, password) => {
+   379→    set({ isLoading: true });
+   380→    try {
+   381→      const res = await authApi.login({ email, password });
+   382→      if (res.success && res.token) {
+   383→        setAuthToken(res.token);
+   384→        const user: User = {
+   385→          id: res.user?.id || '',
+   386→          fullName: res.user?.name || '',
+   387→          email: res.user?.email || email,
+   388→          instituteId: res.user?.instituteId || undefined,
+   389→          technology: res.user?.technology || undefined,
+   390→          emailVerified: res.user?.emailVerified || false,
+   391→          avatarUrl: res.user?.avatarUrl || '',
+   392→          role: res.user?.role || 'student',
+   393→          isNewUser: false,
+   394→          enrolledCourseIds: [],
+   395→        };
+   396→        set({ user, isAuthenticated: true, isLoading: false });
+   397→        saveAuthSession(user, true);
+   398→
+   399→        if (user.instituteId) {
+   400→          try {
+   401→            const instRes = await instituteApi.list({ limit: 100 });
+   402→            const inst = instRes.institutes?.find((i: any) => i.id === user.instituteId);
+   403→            if (inst) {
+   404→              user.institute = inst.name;
+   405→              set({ user });
+   406→              saveAuthSession(user, true);
+   407→            }
+   408→          } catch {}
+   409→        }
+   410→
+   411→        // Apply theme preference from D1 (persisted on server)
+   412→        const themeModeFromServer = res.user?.themeMode;
+   413→        if (themeModeFromServer && typeof window !== 'undefined') {
+   414→          localStorage.setItem('dakkho_theme_mode', themeModeFromServer);
+   415→          const effectiveTheme = themeModeFromServer === 'system'
+   416→            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+   417→            : themeModeFromServer;
+   418→          if (effectiveTheme === 'dark') {
+   419→            document.documentElement.classList.add('dark');
+   420→          } else {
+   421→            document.documentElement.classList.remove('dark');
+   422→          }
+   423→        }
+   424→      } else {
+   425→        throw new Error(res.message || 'Login failed');
+   426→      }
+   427→    } catch (err: any) {
+   428→      set({ isLoading: false });
+   429→      throw new Error(err.message || 'Invalid email or password');
+   430→    }
+   431→  },
+   432→  signup: async (data) => {
+   433→    set({ isLoading: true });
+   434→    try {
+   435→      const res = await authApi.signup({
+   436→        fullName: data.fullName,
+   437→        email: data.email,
+   438→        password: data.password,
+   439→        instituteId: data.instituteId,
+   440→        technology: data.technology,
+   441→      });
+   442→      if (res.success && res.token) {
+   443→        setAuthToken(res.token);
+   444→        const user: User = {
+   445→          id: res.userId || '',
+   446→          fullName: data.fullName,
+   447→          email: data.email,
+   448→          instituteId: data.instituteId,
+   449→          technology: data.technology,
+   450→          avatarUrl: res.user?.avatarUrl || '',
+   451→          role: 'student',
+   452→          isNewUser: true,
+   453→          emailVerified: false,
+   454→          enrolledCourseIds: [],
+   455→        };
+   456→        set({ user, isSignupPending: true, isAuthenticated: false, isLoading: false });
+   457→        saveAuthSession(user, false, true);
+   458→        return { token: res.token, userId: res.userId || '' };
+   459→      } else {
+   460→        throw new Error(res.message || 'Signup failed');
+   461→      }
+   462→    } catch (err: any) {
+   463→      set({ isLoading: false });
+   464→      throw new Error(err.message || 'Signup failed. Please try again.');
+   465→    }
+   466→  },
+   467→  logout: async () => {
+   468→    try {
+   469→      await authApi.logout();
+   470→    } catch {}
+   471→    clearAuthToken();
+   472→    set({ user: null, isAuthenticated: false, isSignupPending: false });
+   473→    saveAuthSession(null, false, false);
+   474→  },
+   475→  forgotPassword: async (email) => {
+   476→    set({ isLoading: true });
+   477→    try {
+   478→      await authApi.forgotPassword({ email });
+   479→    } catch (err: any) {
+   480→      throw new Error(err.message || 'Failed to send reset email');
+   481→    } finally {
+   482→      set({ isLoading: false });
+   483→    }
+   484→  },
+   485→  resetPassword: async (email, otp, newPassword) => {
+   486→    set({ isLoading: true });
+   487→    try {
+   488→      const res = await authApi.resetPassword({ email, otp, newPassword });
+   489→      if (res.success) {
+   490→        return true;
+   491→      }
+   492→      throw new Error(res.message || 'Password reset failed');
+   493→    } catch (err: any) {
+   494→      throw new Error(err.message || 'Password reset failed');
+   495→    } finally {
+   496→      set({ isLoading: false });
+   497→    }
+   498→  },
+   499→  verifyOTP: async (email, otp) => {
+   500→    try {
+   501→      const res = await authApi.verifyOTP({ email, otp });
+   502→      if (res.success) {
+   503→        const user = get().user;
+   504→        if (user) {
+   505→          const updatedUser = { ...user, emailVerified: true };
+   506→          set({ user: updatedUser, isSignupPending: false, isAuthenticated: true });
+   507→          saveAuthSession(updatedUser, true, false);
+   508→        }
+   509→        return true;
+   510→      }
+   511→      return false;
+   512→    } catch {
+   513→      return false;
+   514→    }
+   515→  },
+   516→  resendOTP: async (email) => {
+   517→    try {
+   518→      await authApi.resendOTP({ email });
+   519→    } catch {}
+   520→  },
+   521→  setUser: (user) => {
+   522→    set({ user, isAuthenticated: !!user });
+   523→    saveAuthSession(user, !!user);
+   524→  },
+   525→  hydrateAuth: () => {
+   526→    const session = loadAuthSession();
+   527→    set({
+   528→      user: session.user,
+   529→      isAuthenticated: session.isAuthenticated,
+   530→      isSignupPending: session.isSignupPending,
+   531→      isHydrated: true,
+   532→    });
+   533→  },
+   534→  refreshUser: async () => {
+   535→    try {
+   536→      const token = getAuthToken();
+   537→      if (!token) return;
+   538→      const res = await authApi.me();
+   539→      if (res.user) {
+   540→        const user: User = {
+   541→          id: res.user.id,
+   542→          fullName: res.user.name,
+   543→          email: res.user.email,
+   544→          instituteId: res.user.instituteId || undefined,
+   545→          technology: res.user.technology || undefined,
+   546→          emailVerified: res.user.emailVerified,
+   547→          avatarUrl: res.user?.avatarUrl || '',
+   548→          role: res.user?.role || 'student',
+   549→        };
+   550→        set({ user });
+   551→        saveAuthSession(user, true);
+   552→
+   553→        // Resolve institute name from ID
+   554→        if (user.instituteId) {
+   555→          try {
+   556→            const instRes = await instituteApi.list({ limit: 100 });
+   557→            const inst = instRes.institutes?.find((i: any) => i.id === user.instituteId);
+   558→            if (inst) {
+   559→              user.institute = inst.name;
+   560→              set({ user });
+   561→              saveAuthSession(user, true);
+   562→            }
+   563→          } catch {}
+   564→        }
+   565→
+   566→        // Apply theme preference from D1 (persisted on server)
+   567→        const themeModeFromServer = res.user.themeMode;
+   568→        if (themeModeFromServer && typeof window !== 'undefined') {
+   569→          localStorage.setItem('dakkho_theme_mode', themeModeFromServer);
+   570→          const effectiveTheme = themeModeFromServer === 'system'
+   571→            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+   572→            : themeModeFromServer;
+   573→          if (effectiveTheme === 'dark') {
+   574→            document.documentElement.classList.add('dark');
+   575→          } else {
+   576→            document.documentElement.classList.remove('dark');
+   577→          }
+   578→        }
+   579→      }
+   580→    } catch {}
+   581→  },
+   582→}));
+   583→
+   584→// ============ THEME STORE ============
+   585→interface ThemeState {
+   586→  theme: 'light' | 'dark';
+   587→  themeMode: 'light' | 'dark' | 'system';
+   588→  setThemeMode: (mode: 'light' | 'dark' | 'system') => void;
+   589→  toggleTheme: () => void;
+   590→  loadFromPreferences: (mode: 'light' | 'dark' | 'system') => void;
+   591→}
+   592→
+   593→const THEME_STORAGE_KEY = 'dakkho_theme_mode';
+   594→
+   595→const loadStoredThemeMode = (): 'light' | 'dark' | 'system' => {
+   596→  if (typeof window === 'undefined') return 'system';
+   597→  try {
+   598→    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+   599→    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
+   600→  } catch {}
+   601→  return 'system';
+   602→};
+   603→
+   604→const applyThemeMode = (mode: 'light' | 'dark' | 'system'): 'light' | 'dark' => {
+   605→  let effectiveTheme: 'light' | 'dark';
+   606→  if (mode === 'system') {
+   607→    effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+   608→  } else {
+   609→    effectiveTheme = mode;
+   610→  }
+   611→  if (effectiveTheme === 'dark') {
+   612→    document.documentElement.classList.add('dark');
+   613→  } else {
+   614→    document.documentElement.classList.remove('dark');
+   615→  }
+   616→  return effectiveTheme;
+   617→};
+   618→
+   619→export const useThemeStore = create<ThemeState>((set, get) => ({
+   620→  theme: 'light',
+   621→  themeMode: loadStoredThemeMode(),
+   622→  setThemeMode: (mode) => {
+   623→    if (typeof window !== 'undefined') {
+   624→      localStorage.setItem(THEME_STORAGE_KEY, mode);
+   625→      const effectiveTheme = applyThemeMode(mode);
+   626→      set({ themeMode: mode, theme: effectiveTheme });
+   627→    }
+   628→  },
+   629→  toggleTheme: () => {
+   630→    const next = get().theme === 'light' ? 'dark' : 'light';
+   631→    set({ theme: next, themeMode: next });
+   632→    if (typeof window !== 'undefined') {
+   633→      localStorage.setItem(THEME_STORAGE_KEY, next);
+   634→    }
+   635→    if (next === 'dark') {
+   636→      document.documentElement.classList.add('dark');
+   637→    } else {
+   638→      document.documentElement.classList.remove('dark');
+   639→    }
+   640→  },
+   641→  loadFromPreferences: (mode) => {
+   642→    if (typeof window !== 'undefined') {
+   643→      localStorage.setItem(THEME_STORAGE_KEY, mode);
+   644→      const effectiveTheme = applyThemeMode(mode);
+   645→      set({ themeMode: mode, theme: effectiveTheme });
+   646→    }
+   647→  },
+   648→}));
+   649→
+   650→// ============ WATCH PROGRESS STORE ============
+   651→export interface WatchProgress {
+   652→  videoId: string;
+   653→  courseId: string;
+   654→  lastPosition: number;
+   655→  progress: number;
+   656→  completed: boolean;
+   657→  lastWatched: number;
+   658→}
+   659→
+   660→interface WatchProgressState {
+   661→  progress: Record<string, WatchProgress>;
+   662→  updateProgress: (videoId: string, data: Partial<WatchProgress>) => void;
+   663→  getProgress: (videoId: string) => WatchProgress | undefined;
+   664→  syncToServer: (videoId: string) => Promise<void>;
+   665→}
+   666→
+   667→const loadProgress = (): Record<string, WatchProgress> => {
+   668→  if (typeof window === 'undefined') return {};
+   669→  try {
+   670→    const stored = localStorage.getItem('dakkho-watch-progress');
+   671→    return stored ? JSON.parse(stored) : {};
+   672→  } catch {
+   673→    return {};
+   674→  }
+   675→};
+   676→
+   677→const saveProgress = (progress: Record<string, WatchProgress>) => {
+   678→  if (typeof window === 'undefined') return;
+   679→  try {
+   680→    localStorage.setItem('dakkho-watch-progress', JSON.stringify(progress));
+   681→  } catch {}
+   682→};
+   683→
+   684→export const useWatchProgressStore = create<WatchProgressState>((set, get) => ({
+   685→  progress: loadProgress(),
+   686→  updateProgress: (videoId, data) => {
+   687→    const current = get().progress;
+   688→    const updated = {
+   689→      ...current,
+   690→      [videoId]: { ...current[videoId], videoId, ...data, lastWatched: Date.now() } as WatchProgress,
+   691→    };
+   692→    set({ progress: updated });
+   693→    saveProgress(updated);
+   694→
+   695→    // Debounced server sync — sync after a short delay
+   696→    setTimeout(() => get().syncToServer(videoId), 2000);
+   697→  },
+   698→  getProgress: (videoId) => get().progress[videoId],
+   699→  syncToServer: async (videoId) => {
+   700→    const entry = get().progress[videoId];
+   701→    if (!entry) return;
+   702→    try {
+   703→      await watchHistoryApi.upsert({
+   704→        videoId: entry.videoId,
+   705→        courseId: entry.courseId,
+   706→        progress: entry.progress,
+   707→        lastPosition: entry.lastPosition,
+   708→      });
+   709→    } catch (err) {
+   710→      // Silent fail — local state is preserved
+   711→      console.warn('Failed to sync watch progress to server:', err);
+   712→    }
+   713→  },
+   714→}));
+   715→
+   716→// ============ BOOKMARK STORE ============
+   717→interface BookmarkState {
+   718→  bookmarks: string[];
+   719→  toggleBookmark: (courseId: string) => void;
+   720→  isBookmarked: (courseId: string) => boolean;
+   721→}
+   722→
+   723→const loadBookmarks = (): string[] => {
+   724→  if (typeof window === 'undefined') return [];
+   725→  try {
+   726→    const stored = localStorage.getItem('dakkho-bookmarks');
+   727→    return stored ? JSON.parse(stored) : [];
+   728→  } catch {
+   729→    return [];
+   730→  }
+   731→};
+   732→
+   733→const saveBookmarks = (bookmarks: string[]) => {
+   734→  if (typeof window === 'undefined') return;
+   735→  try {
+   736→    localStorage.setItem('dakkho-bookmarks', JSON.stringify(bookmarks));
+   737→  } catch {}
+   738→};
+   739→
+   740→export const useBookmarkStore = create<BookmarkState>((set, get) => ({
+   741→  bookmarks: loadBookmarks(),
+   742→  toggleBookmark: (courseId) => {
+   743→    const current = get().bookmarks;
+   744→    const updated = current.includes(courseId)
+   745→      ? current.filter((id) => id !== courseId)
+   746→      : [...current, courseId];
+   747→    set({ bookmarks: updated });
+   748→    saveBookmarks(updated);
+   749→  },
+   750→  isBookmarked: (courseId) => get().bookmarks.includes(courseId),
+   751→}));
+   752→
+   753→// ============ NOTIFICATION STORE ============
+   754→export interface AppNotification {
+   755→  id: string;
+   756→  title: string;
+   757→  message: string;
+   758→  type: 'info' | 'success' | 'warning' | 'error' | 'announcement' | 'course-update';
+   759→  isRead: boolean;
+   760→  createdAt: string;
+   761→  actionUrl?: string;
+   762→}
+   763→
+   764→// ── localStorage persistence helpers ──
+   765→const NOTIF_STORAGE_KEY = 'dakkho_notifications';
+   766→
+   767→const saveNotifToStorage = (notifs: AppNotification[]) => {
+   768→  if (typeof window === 'undefined') return;
+   769→  try {
+   770→    localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifs));
+   771→  } catch {}
+   772→};
+   773→
+   774→const loadNotifFromStorage = (): AppNotification[] => {
+   775→  if (typeof window === 'undefined') return [];
+   776→  try {
+   777→    const stored = localStorage.getItem(NOTIF_STORAGE_KEY);
+   778→    return stored ? JSON.parse(stored) : [];
+   779→  } catch { return []; }
+   780→};
+   781→
+   782→interface NotificationState {
+   783→  notifications: AppNotification[];
+   784→  isLoading: boolean;
+   785→  markAsRead: (id: string) => void;
+   786→  markAllAsRead: () => void;
+   787→  unreadCount: () => number;
+   788→  addNotification: (notification: AppNotification) => void;
+   789→  addNotifications: (notifications: AppNotification[]) => void;
+   790→  removeNotification: (id: string) => void;
+   791→  hydrateFromStorage: () => void;
+   792→  fetchFromServer: () => Promise<void>;
+   793→}
+   794→
+   795→// Map server notification to AppNotification format
+   796→function mapServerNotification(n: any): AppNotification {
+   797→  return {
+   798→    id: String(n.id || n.$id || ''),
+   799→    title: n.title || n.type || 'Notification',
+   800→    message: n.message || n.body || '',
+   801→    type: n.type || 'info',
+   802→    isRead: !!(n.read || n.isRead),
+   803→    createdAt: n.created_at || n.createdAt || n.$createdAt || new Date().toISOString(),
+   804→    actionUrl: n.action_url || n.actionUrl || n.data?.url || undefined,
+   805→  };
+   806→}
+   807→
+   808→export const useNotificationStore = create<NotificationState>((set, get) => ({
+   809→  notifications: loadNotifFromStorage(),
+   810→  isLoading: false,
+   811→  markAsRead: (id) => {
+   812→    set((s) => {
+   813→      const updated = s.notifications.map((n) =>
+   814→        n.id === id ? { ...n, isRead: true } : n
+   815→      );
+   816→      saveNotifToStorage(updated);
+   817→      return { notifications: updated };
+   818→    });
+   819→    // Sync to server in background
+   820→    studentNotificationsApi.markRead(id).catch(() => {});
+   821→  },
+   822→  markAllAsRead: () => {
+   823→    set((s) => {
+   824→      const updated = s.notifications.map((n) => ({ ...n, isRead: true }));
+   825→      saveNotifToStorage(updated);
+   826→      return { notifications: updated };
+   827→    });
+   828→    // Sync to server in background
+   829→    studentNotificationsApi.markAllRead().catch(() => {});
+   830→  },
+   831→  unreadCount: () => get().notifications.filter((n) => !n.isRead).length,
+   832→  addNotification: (notification) => {
+   833→    set((s) => {
+   834→      if (s.notifications.some((n) => n.id === notification.id)) {
+   835→        return s;
+   836→      }
+   837→      const updated = [notification, ...s.notifications];
+   838→      saveNotifToStorage(updated);
+   839→      return { notifications: updated };
+   840→    });
+   841→  },
+   842→  addNotifications: (newNotifs) => {
+   843→    set((s) => {
+   844→      const existingIds = new Set(s.notifications.map((n) => n.id));
+   845→      const unique = newNotifs.filter((n) => !existingIds.has(n.id));
+   846→      if (unique.length === 0) return s;
+   847→      const updated = [...unique, ...s.notifications];
+   848→      saveNotifToStorage(updated);
+   849→      return { notifications: updated };
+   850→    });
+   851→  },
+   852→  removeNotification: (id) => {
+   853→    set((s) => {
+   854→      const updated = s.notifications.filter((n) => n.id !== id);
+   855→      saveNotifToStorage(updated);
+   856→      return { notifications: updated };
+   857→    });
+   858→  },
+   859→  hydrateFromStorage: () => {
+   860→    const stored = loadNotifFromStorage();
+   861→    if (stored.length > 0) {
+   862→      set({ notifications: stored });
+   863→    }
+   864→  },
+   865→  fetchFromServer: async () => {
+   866→    set({ isLoading: true });
+   867→    try {
+   868→      const res = await studentNotificationsApi.list({ limit: 50 });
+   869→      const serverNotifs = (res.notifications || []).map(mapServerNotification);
+   870→      set({ notifications: serverNotifs, isLoading: false });
+   871→      saveNotifToStorage(serverNotifs);
+   872→    } catch (err) {
+   873→      console.warn('Failed to fetch notifications from server:', err);
+   874→      set({ isLoading: false });
+   875→    }
+   876→  },
+   877→}));
+   878→
+   879→// ============ SEARCH STORE ============
+   880→interface SearchState {
+   881→  query: string;
+   882→  recentSearches: string[];
+   883→  setQuery: (q: string) => void;
+   884→  addRecentSearch: (q: string) => void;
+   885→  clearRecentSearches: () => void;
+   886→}
+   887→
+   888→const loadRecent = (): string[] => {
+   889→  if (typeof window === 'undefined') return [];
+   890→  try {
+   891→    const stored = localStorage.getItem('dakkho-recent-searches');
+   892→    return stored ? JSON.parse(stored) : [];
+   893→  } catch {
+   894→    return [];
+   895→  }
+   896→};
+   897→
+   898→const saveRecent = (searches: string[]) => {
+   899→  if (typeof window === 'undefined') return;
+   900→  try {
+   901→    localStorage.setItem('dakkho-recent-searches', JSON.stringify(searches));
+   902→  } catch {}
+   903→};
+   904→
+   905→export const useSearchStore = create<SearchState>((set, get) => ({
+   906→  query: '',
+   907→  recentSearches: loadRecent(),
+   908→  setQuery: (q) => set({ query: q }),
+   909→  addRecentSearch: (q) => {
+   910→    if (!q.trim()) return;
+   911→    const current = get().recentSearches.filter((s) => s !== q);
+   912→    const updated = [q, ...current].slice(0, 10);
+   913→    set({ recentSearches: updated });
+   914→    saveRecent(updated);
+   915→  },
+   916→  clearRecentSearches: () => {
+   917→    set({ recentSearches: [] });
+   918→    saveRecent([]);
+   919→  },
+   920→}));
+   921→
+   922→// ============ CONTENT PROTECTION STORE ============
+   923→interface ContentProtectionState {
+   924→  enabled: boolean;
+   925→  noCopy: boolean;
+   926→  noRightClick: boolean;
+   927→  noScreenshot: boolean;
+   928→  noPrint: boolean;
+   929→  customContextMenu: boolean;
+   930→  watermark: boolean;
+   931→  dragProtection: boolean;
+   932→  setEnabled: (v: boolean) => void;
+   933→  setNoCopy: (v: boolean) => void;
+   934→  setNoRightClick: (v: boolean) => void;
+   935→  setNoScreenshot: (v: boolean) => void;
+   936→  setNoPrint: (v: boolean) => void;
+   937→  setCustomContextMenu: (v: boolean) => void;
+   938→  setWatermark: (v: boolean) => void;
+   939→  setDragProtection: (v: boolean) => void;
+   940→}
+   941→
+   942→export const useContentProtectionStore = create<ContentProtectionState>((set) => ({
+   943→  enabled: true,
+   944→  noCopy: false,
+   945→  noRightClick: false,
+   946→  noScreenshot: false,
+   947→  noPrint: true,
+   948→  customContextMenu: true,
+   949→  watermark: false,
+   950→  dragProtection: true,
+   951→  setEnabled: (v) => set({ enabled: v }),
+   952→  setNoCopy: (v) => set({ noCopy: v }),
+   953→  setNoRightClick: (v) => set({ noRightClick: v }),
+   954→  setNoScreenshot: (v) => set({ noScreenshot: v }),
+   955→  setNoPrint: (v) => set({ noPrint: v }),
+   956→  setCustomContextMenu: (v) => set({ customContextMenu: v }),
+   957→  setWatermark: (v) => set({ watermark: v }),
+   958→  setDragProtection: (v) => set({ dragProtection: v }),
+   959→}));
+   960→
+   961→// ============ SERVER CONFIG STORE ============
+   962→// This type must match the Worker's transformConfigForStudent() output exactly.
+   963→// Worker transforms its internal ServerConfig before sending to students.
+   964→
+   965→export interface ContentProtectionConfig {
+   966→  enabled: boolean;
+   967→  noCopy: boolean;
+   968→  noRightClick: boolean;
+   969→  noScreenshot: boolean;
+   970→  noPrint: boolean;
+   971→  customContextMenu: boolean;
+   972→  watermark: boolean;
+   973→  dragProtection: boolean;
+   974→}
+   975→
+   976→export interface FeatureToggles {
+   977→  downloads: boolean;
+   978→  bookmarks: boolean;
+   979→  certificates: boolean;
+   980→  liveSessions: boolean;
+   981→  achievements: boolean;
+   982→  assignments: boolean;
+   983→  discussions: boolean;
+   984→  community: boolean;
+   985→  leaderboard: boolean;
+   986→  studyGroups: boolean;
+   987→  peerConnections: boolean;
+   988→  feedback: boolean;
+   989→  pricing: boolean;
+   990→  referral: boolean;
+   991→}
+   992→
+   993→export interface SidebarVisibility {
+   994→  menu: boolean;
+   995→  departments: boolean;
+   996→  semesters: boolean;
+   997→  exams: boolean;
+   998→  community: boolean;
+   999→  general: boolean;
+  1000→}
+  1001→
+  1002→export interface TopBarElements {
+  1003→  search: boolean;
+  1004→  notifications: boolean;
+  1005→  avatar: boolean;
+  1006→  hamburger: boolean;
+  1007→}
+  1008→
+  1009→export interface ServerConfig {
+  1010→  featureToggles: FeatureToggles;
+  1011→  homePageSections: string[];
+  1012→  sidebarVisibility: SidebarVisibility;
+  1013→  bottomNavTabs: string[];
+  1014→  topBarElements: TopBarElements;
+  1015→  cardStyle: 'glass' | 'flat' | 'rounded';
+  1016→  contentProtection: ContentProtectionConfig;
+  1017→}
+  1018→
+  1019→interface ServerConfigState {
+  1020→  config: ServerConfig | null;
+  1021→  isLoading: boolean;
+  1022→  error: string | null;
+  1023→  fetchConfig: () => Promise<void>;
+  1024→  isFeatureEnabled: (feature: string) => boolean;
+  1025→  isHomeSectionVisible: (section: string) => boolean;
+  1026→  isSidebarSectionVisible: (section: string) => boolean;
+  1027→  isBottomNavTabVisible: (tab: string) => boolean;
+  1028→  isTopBarElementVisible: (element: string) => boolean;
+  1029→  getCardStyle: () => 'glass' | 'flat' | 'rounded';
+  1030→}
+  1031→
+  1032→const DEFAULT_CONFIG: ServerConfig = {
+  1033→  featureToggles: {
+  1034→    downloads: true, bookmarks: true, certificates: true,
+  1035→    liveSessions: true, achievements: true, assignments: true,
+  1036→    discussions: true, community: true, leaderboard: true,
+  1037→    studyGroups: true, peerConnections: true, feedback: true,
+  1038→    pricing: true, referral: true,
+  1039→  },
+  1040→  homePageSections: ['hero', 'continue-watching', 'categories', 'new-releases', 'live', 'trending', 'instructors', 'leaderboard', 'recommended'],
+  1041→  sidebarVisibility: { menu: true, departments: true, semesters: true, exams: true, community: true, general: true },
+  1042→  bottomNavTabs: ['home', 'explore', 'my-courses', 'watch-history', 'profile'],
+  1043→  topBarElements: { search: true, notifications: true, avatar: true, hamburger: true },
+  1044→  cardStyle: 'glass',
+  1045→  contentProtection: {
+  1046→    enabled: true, noCopy: true, noRightClick: true,
+  1047→    noScreenshot: true, noPrint: true, customContextMenu: true,
+  1048→    watermark: false, dragProtection: true,
+  1049→  },
+  1050→};
+  1051→
+  1052→export const useServerConfigStore = create<ServerConfigState>((set, get) => ({
+  1053→  config: null,
+  1054→  isLoading: false,
+  1055→  error: null,
+  1056→
+  1057→  fetchConfig: async () => {
+  1058→    set({ isLoading: true, error: null });
+  1059→    try {
+  1060→      const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://dakkho-admin-api.dakkho-admin.workers.dev';
+  1061→      const res = await fetch(`${API_BASE}/api/config`);
+  1062→      if (!res.ok) throw new Error('Failed to fetch config');
+  1063→      const data = await res.json();
+  1064→      const raw = data.config || data;
+  1065→      // The API may return a transformed format with nested "ui" object.
+  1066→      // Map it back to the flat ServerConfig shape this store expects.
+  1067→      const config: ServerConfig = {
+  1068→        featureToggles: raw.featureToggles || raw.features || DEFAULT_CONFIG.featureToggles,
+  1069→        homePageSections: raw.homePageSections || raw.ui?.homeSections || DEFAULT_CONFIG.homePageSections,
+  1070→        sidebarVisibility: raw.sidebarVisibility || raw.ui?.sidebarSections || DEFAULT_CONFIG.sidebarVisibility,
+  1071→        bottomNavTabs: raw.bottomNavTabs || raw.ui?.bottomNavTabs || DEFAULT_CONFIG.bottomNavTabs,
+  1072→        topBarElements: raw.topBarElements || raw.ui?.topBarElements || DEFAULT_CONFIG.topBarElements,
+  1073→        cardStyle: raw.cardStyle || raw.ui?.cardStyle || DEFAULT_CONFIG.cardStyle,
+  1074→        contentProtection: raw.contentProtection || DEFAULT_CONFIG.contentProtection,
+  1075→      };
+  1076→      set({ config, isLoading: false });
+  1077→    } catch (error: any) {
+  1078→      console.error('Failed to fetch server config:', error);
+  1079→      set({ config: DEFAULT_CONFIG, isLoading: false, error: error.message });
+  1080→    }
+  1081→  },
+  1082→
+  1083→  isFeatureEnabled: (feature: string) => {
+  1084→    const config = get().config || DEFAULT_CONFIG;
+  1085→    const ft = config.featureToggles;
+  1086→    if (!ft) return true;
+  1087→    return (ft as unknown as Record<string, boolean>)[feature] ?? true;
+  1088→  },
+  1089→
+  1090→  isHomeSectionVisible: (section: string) => {
+  1091→    const config = get().config || DEFAULT_CONFIG;
+  1092→    const sections = config.homePageSections;
+  1093→    if (!Array.isArray(sections)) return true;
+  1094→    return sections.includes(section);
+  1095→  },
+  1096→
+  1097→  isSidebarSectionVisible: (section: string) => {
+  1098→    const config = get().config || DEFAULT_CONFIG;
+  1099→    const sv = config.sidebarVisibility;
+  1100→    if (!sv) return true;
+  1101→    return (sv as unknown as Record<string, boolean>)[section] ?? true;
+  1102→  },
+  1103→
+  1104→  isBottomNavTabVisible: (tab: string) => {
+  1105→    const config = get().config || DEFAULT_CONFIG;
+  1106→    const tabs = config.bottomNavTabs;
+  1107→    if (!Array.isArray(tabs)) return true;
+  1108→    return tabs.includes(tab);
+  1109→  },
+  1110→
+  1111→  isTopBarElementVisible: (element: string) => {
+  1112→    const config = get().config || DEFAULT_CONFIG;
+  1113→    const tb = config.topBarElements;
+  1114→    if (!tb) return true;
+  1115→    return (tb as unknown as Record<string, boolean>)[element] ?? true;
+  1116→  },
+  1117→
+  1118→  getCardStyle: () => {
+  1119→    const config = get().config || DEFAULT_CONFIG;
+  1120→    return config.cardStyle;
+  1121→  },
+  1122→}));
+  1123→

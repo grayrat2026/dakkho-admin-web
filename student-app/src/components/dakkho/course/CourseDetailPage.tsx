@@ -6,7 +6,7 @@ import { Star, Users, Clock, BookOpen, Play, ChevronLeft, Heart, Share2, Award, 
 import { useNavigationStore, useBookmarkStore, useAuthStore } from '@/lib/store';
 import { useCourse, useCategories, useCourseVideos, useCourses } from '@/lib/data-hooks';
 import { formatDuration, getLevelColor } from '@/lib/mock-data';
-import { packageApi, paymentApi, couponApi, userLookupApi } from '@/lib/api-client';
+import { packageApi, paymentApi, couponApi, userLookupApi, enrollmentApi } from '@/lib/api-client';
 import type { CoursePackage, PaymentConfig } from '@/lib/api-client';
 import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
@@ -66,6 +66,8 @@ export function CourseDetailPage() {
   const [duoLookupLoading, setDuoLookupLoading] = useState(false);
   const [duoLookupError, setDuoLookupError] = useState('');
   const [enrollmentStep, setEnrollmentStep] = useState<'package' | 'details' | 'payment'>('package');
+  const [isEnrolled, setIsEnrolled] = useState(false);
+  const [enrollmentChecked, setEnrollmentChecked] = useState(false);
 
   const courseId = pageParams.courseId as string;
   const { data: course, instructors: courseInstructors, loading: courseLoading, error: courseError } = useCourse(courseId);
@@ -73,6 +75,20 @@ export function CourseDetailPage() {
   const { data: videos = [] } = useCourseVideos(courseId);
   const { data: allCourses = [] } = useCourses();
   const bookmarked = course ? isBookmarked(course.id) : false;
+
+  // Check enrollment status when course is loaded
+  useEffect(() => {
+    if (course && isAuthenticated && !enrollmentChecked) {
+      enrollmentApi.check(course.id).then((res) => {
+        setIsEnrolled(res.enrolled);
+        setEnrollmentChecked(true);
+      }).catch(() => {
+        setEnrollmentChecked(true);
+      });
+    } else if (!isAuthenticated) {
+      setEnrollmentChecked(true);
+    }
+  }, [course, isAuthenticated, enrollmentChecked]);
 
   // Category from categories list
   const category = course ? categories.find((c) => c.id === course.categoryId) : undefined;
@@ -158,14 +174,14 @@ export function CourseDetailPage() {
   };
 
   const getDiscountedPrice = (): number => {
-    if (!selectedPackage || !coupon.valid || !coupon.coupon) return selectedPackage?.price || 0;
+    if (!selectedPackage || !coupon.valid || !coupon.coupon) return Math.round(selectedPackage?.price || 0);
     if (coupon.coupon.discount_type === 'percentage') {
-      return Math.max(0, selectedPackage.price - (selectedPackage.price * coupon.coupon.discount_value / 100));
+      return Math.round(Math.max(0, selectedPackage.price - (selectedPackage.price * coupon.coupon.discount_value / 100)));
     }
     if (coupon.coupon.discount_type === 'flat') {
-      return Math.max(0, selectedPackage.price - coupon.coupon.discount_value);
+      return Math.round(Math.max(0, selectedPackage.price - coupon.coupon.discount_value));
     }
-    return selectedPackage?.price || 0;
+    return Math.round(selectedPackage?.price || 0);
   };
 
   // Lookup duo member by email
@@ -609,7 +625,9 @@ export function CourseDetailPage() {
         <div>
           <GlassCard className="p-6 sticky top-20 space-y-4">
             <div className="flex items-center justify-between">
-              {course.price > 0 ? (
+              {isEnrolled ? (
+                <span className="text-lg font-extrabold text-emerald-500">Enrolled ✓</span>
+              ) : course.price > 0 ? (
                 <span className="text-2xl font-extrabold text-foreground">&#2547;{course.price}</span>
               ) : (
                 <span className="text-2xl font-extrabold text-emerald-500">Free</span>
@@ -632,14 +650,16 @@ export function CourseDetailPage() {
             </div>
 
             <GradientButton className="w-full" size="lg" onClick={() => {
-              if (course.price > 0) {
+              if (isEnrolled) {
+                navigate('video-player', { videoId: videos[0]?.id, courseId: course.id });
+              } else if (course.price > 0) {
                 handleEnrollClick();
               } else {
                 navigate('video-player', { videoId: videos[0]?.id, courseId: course.id });
               }
             }}>
               <Play className="w-4 h-4" />
-              {course.price > 0 ? `Enroll Now — ৳${course.price}` : 'Start Learning'}
+              {isEnrolled ? 'Continue Learning' : (course.price > 0 ? `Enroll Now — ৳${course.price}` : 'Start Learning')}
             </GradientButton>
 
             <div className="space-y-3 text-sm pt-2">
@@ -682,7 +702,9 @@ export function CourseDetailPage() {
           className="w-full"
           size="lg"
           onClick={() => {
-            if (course.price > 0) {
+            if (isEnrolled) {
+              navigate('video-player', { videoId: videos[0]?.id, courseId: course.id });
+            } else if (course.price > 0) {
               handleEnrollClick();
             } else {
               navigate('video-player', { videoId: videos[0]?.id, courseId: course.id });
@@ -690,7 +712,7 @@ export function CourseDetailPage() {
           }}
         >
           <Play className="w-4 h-4" />
-          {course.price > 0 ? `Enroll Now — ৳${course.price}` : 'Continue Learning'}
+          {isEnrolled ? 'Continue Learning' : (course.price > 0 ? `Enroll Now — ৳${course.price}` : 'Start Learning')}
         </GradientButton>
       </div>
 
@@ -813,7 +835,7 @@ export function CourseDetailPage() {
 
                             {/* Price */}
                             <div className="text-right ml-4 flex-shrink-0">
-                              <p className="text-2xl font-extrabold text-foreground">&#2547;{pkg.price}</p>
+                              <p className="text-2xl font-extrabold text-foreground">&#2547;{Math.round(pkg.price)}</p>
                               <p className="text-[10px] text-muted-foreground">per package</p>
                             </div>
                           </div>
@@ -918,11 +940,11 @@ export function CourseDetailPage() {
                         <div className="text-right flex-shrink-0">
                           {coupon.valid && coupon.coupon ? (
                             <>
-                              <p className="text-xs text-muted-foreground line-through">&#2547;{selectedPackage.price}</p>
+                              <p className="text-xs text-muted-foreground line-through">&#2547;{Math.round(selectedPackage.price)}</p>
                               <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">&#2547;{getDiscountedPrice()}</p>
                             </>
                           ) : (
-                            <p className="text-lg font-extrabold text-foreground">&#2547;{selectedPackage.price}</p>
+                            <p className="text-lg font-extrabold text-foreground">&#2547;{Math.round(selectedPackage.price)}</p>
                           )}
                         </div>
                       </div>
@@ -1008,7 +1030,7 @@ export function CourseDetailPage() {
                           loading={isSubmitting}
                         >
                           <Wallet className="w-4 h-4" />
-                          Pay &#2547;{coupon.valid && coupon.coupon ? getDiscountedPrice() : selectedPackage.price} Now
+                          Pay &#2547;{coupon.valid && coupon.coupon ? getDiscountedPrice() : Math.round(selectedPackage.price)} Now
                         </GradientButton>
                         <div className="flex items-center gap-1 text-[10px] text-sky-500 justify-center">
                           <Shield className="w-3 h-3" />

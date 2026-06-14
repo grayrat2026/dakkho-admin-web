@@ -2912,6 +2912,109 @@ studentAuthenticated.put('/preferences', async (c) => {
   }
 });
 
+// GET /student/learning-stats — Learning stats for the current student
+studentAuthenticated.get('/student/learning-stats', async (c) => {
+  try {
+    const userId = c.get('userId') as string;
+    const range = c.req.query('range') || '30d';
+
+    // Calculate date range
+    const days = range === '7d' ? 7 : range === '90d' ? 90 : 30;
+
+    // Get daily activity data
+    const dailyData: Array<{ date: string; videos: number; activities: number }> = [];
+    try {
+      const rows = await c.env.DB.prepare(`
+        SELECT DATE(created_at) as day,
+               COUNT(CASE WHEN activity_type = 'video_watch' THEN 1 END) as videos,
+               COUNT(*) as activities
+        FROM student_activity
+        WHERE user_id = ? AND created_at >= datetime('now', '-${days} days')
+        GROUP BY DATE(created_at)
+        ORDER BY day ASC
+      `).bind(userId).all();
+      for (const row of (rows.results || []) as any[]) {
+        dailyData.push({ date: row.day, videos: row.videos || 0, activities: row.activities || 0 });
+      }
+    } catch {}
+
+    // Get subject progress from enrollments
+    const subjectProgress: Array<{ subject: string; progress: number }> = [];
+    try {
+      const rows = await c.env.DB.prepare(`
+        SELECT t.name as technology, e.progress
+        FROM enrollments e
+        INNER JOIN courses c ON e.course_id = c.id
+        LEFT JOIN technologies t ON c.technology_id = t.id
+        WHERE e.user_id = ?
+      `).bind(userId).all();
+      for (const row of (rows.results || []) as any[]) {
+        subjectProgress.push({ subject: row.technology || 'General', progress: row.progress || 0 });
+      }
+    } catch {}
+
+    // Get overview stats
+    let hoursWatched = 0;
+    let coursesEnrolled = 0;
+    let certificates = 0;
+    let currentStreak = 0;
+
+    try {
+      const watchStats = await c.env.DB.prepare(
+        "SELECT SUM(CASE WHEN metadata LIKE '%watchMinutes%' THEN CAST(json_extract(metadata, '$.watchMinutes') AS REAL) ELSE 0 END) as total_minutes FROM student_activity WHERE user_id = ? AND activity_type = 'video_watch'"
+      ).bind(userId).first<{ total_minutes: number }>();
+      hoursWatched = Math.round((watchStats?.total_minutes || 0) / 60 * 10) / 10;
+    } catch {}
+
+    try {
+      const enrollCount = await c.env.DB.prepare(
+        'SELECT COUNT(*) as total FROM enrollments WHERE user_id = ?'
+      ).bind(userId).first<{ total: number }>();
+      coursesEnrolled = enrollCount?.total || 0;
+    } catch {}
+
+    try {
+      const certCount = await c.env.DB.prepare(
+        "SELECT COUNT(*) as total FROM certificates WHERE user_id = ? AND status = 'issued'"
+      ).bind(userId).first<{ total: number }>();
+      certificates = certCount?.total || 0;
+    } catch {}
+
+    try {
+      const streakRows = await c.env.DB.prepare(
+        "SELECT DATE(created_at) as day FROM student_activity WHERE user_id = ? GROUP BY DATE(created_at) ORDER BY day DESC LIMIT 30"
+      ).bind(userId).all();
+      const activeDays = (streakRows.results || []).map((r: any) => r.day);
+      const today = new Date().toISOString().split('T')[0];
+      let streak = 0;
+      let checkDate = new Date();
+      // If no activity today, start checking from yesterday
+      if (!activeDays.includes(today)) {
+        checkDate.setDate(checkDate.getDate() - 1);
+      }
+      for (let i = 0; i < 60; i++) {
+        const dateStr = checkDate.toISOString().split('T')[0];
+        if (activeDays.includes(dateStr)) {
+          streak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+      currentStreak = streak;
+    } catch {}
+
+    return c.json({
+      dailyData,
+      subjectProgress,
+      overview: { hoursWatched, coursesEnrolled, certificates, currentStreak },
+      range,
+    });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
 // Mount authenticated routes
 studentApiRoutes.route('/', studentAuthenticated);
 
@@ -3379,6 +3482,89 @@ studentApiRoutes.post('/student/upload-avatar', studentAuthMiddleware, async (c)
     ).bind(avatarUrl, new Date().toISOString(), userId).run();
 
     return c.json({ success: true, avatarUrl });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// POST /student/change-password — Change student password (requires current password)
+studentApiRoutes.post('/student/change-password', studentAuthMiddleware, async (c) => {
+  try {
+    const userId = c.get('studentId');
+    const { currentPassword, newPassword } = await c.req.json();
+
+    if (!currentPassword || !newPassword) {
+      return c.json({ error: 'currentPassword and newPassword are required' }, 400);
+    }
+
+    if (newPassword.length < 8) {
+      return c.json({ error: 'New password must be at least 8 characters' }, 400);
+    }
+
+    // Get current password hash
+    const user = await c.env.DB.prepare(
+      'SELECT password_hash FROM users WHERE id = ?'
+    ).bind(userId).first<{ password_hash: string }>();
+
+    if (!user?.password_hash) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    // Verify current password
+    const validPassword = await verifyPassword(currentPassword, user.password_hash);
+    if (!validPassword) {
+      return c.json({ error: 'Current password is incorrect' }, 401);
+    }
+
+    // Hash and save new password
+    const newHash = await hashPassword(newPassword);
+    await c.env.DB.prepare(
+      'UPDATE users SET password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?'
+    ).bind(newHash, userId).run();
+
+    return c.json({ success: true });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// POST /student/delete-account — Delete student account (requires password verification)
+studentApiRoutes.post('/student/delete-account', studentAuthMiddleware, async (c) => {
+  try {
+    const userId = c.get('studentId');
+    const { password, reason, feedback } = await c.req.json();
+
+    if (!password) {
+      return c.json({ error: 'Password is required to delete your account' }, 400);
+    }
+
+    // Verify password
+    const user = await c.env.DB.prepare(
+      'SELECT password_hash FROM users WHERE id = ?'
+    ).bind(userId).first<{ password_hash: string }>();
+
+    if (!user?.password_hash) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    const validPassword = await verifyPassword(password, user.password_hash);
+    if (!validPassword) {
+      return c.json({ error: 'Password is incorrect' }, 401);
+    }
+
+    // Delete user and related data
+    // Delete enrollments first
+    await c.env.DB.prepare('DELETE FROM enrollments WHERE user_id = ?').bind(userId).run();
+    // Delete watch history
+    await c.env.DB.prepare('DELETE FROM watch_history WHERE user_id = ?').bind(userId).run();
+    // Delete student sessions
+    await c.env.DB.prepare('DELETE FROM student_sessions WHERE user_id = ?').bind(userId).run();
+    // Delete notification tokens
+    await c.env.DB.prepare('DELETE FROM notification_tokens WHERE user_id = ?').bind(userId).run();
+    // Finally delete the user
+    await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
+
+    return c.json({ success: true });
   } catch (error) {
     return c.json({ error: getErrorMessage(error) }, 500);
   }

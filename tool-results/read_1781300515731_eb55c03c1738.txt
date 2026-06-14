@@ -1,0 +1,1122 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+     4→     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→     5→import {
+     6→     6→  Video, VideoOff, Mic, MicOff, Monitor, MonitorOff,
+     7→     7→  PhoneOff, MessageSquare, Users, Settings, Maximize2,
+     8→     8→  Minimize2, ArrowLeft, Loader2, AlertCircle, Wifi,
+     9→     9→  WifiOff, Hand, RaiseHand, Radio, RadioIcon,
+    10→    10→  BarChart3, Smile, Send, X, Copy, Check,
+    11→    11→  Clock, UserCheck, UserX, Crown, Eye, GraduationCap,
+    12→    12→  ChevronDown, ChevronUp, MoreVertical, Trash2, StopCircle,
+    13→    13→  AlertTriangle, RefreshCw, Zap,
+    14→    14→} from 'lucide-react';
+    15→    15→import {
+    16→    16→  LiveKitRoom,
+    17→    17→  VideoConference,
+    18→    18→  RoomAudioRenderer,
+    19→    19→  ControlBar,
+    20→    20→  GridLayout,
+    21→    21→  ParticipantTile,
+    22→    22→  useTracks,
+    23→    23→  useRoomContext,
+    24→    24→  useParticipants,
+    25→    25→  useLocalParticipant,
+    26→    26→  useDataChannel,
+    27→    27→  ConnectionState,
+    28→    28→  DisconnectButton,
+    29→    29→  TrackToggle,
+    30→    30→  Chat,
+    31→    31→  FocusLayout,
+    32→    32→  FocusLayoutContainer,
+    33→    33→  ParticipantName,
+    34→    34→  TrackRefContext,
+    35→    35→} from '@livekit/components-react';
+    36→    36→import {
+    37→    37→  RoomEvent, Track, ConnectionState as ConnectionStateEnum,
+    38→    38→  RemoteParticipant, LocalParticipant, ParticipantEvent,
+    39→    39→  DataPacket_Kind, ConnectionQuality,
+    40→    40→} from 'livekit-client';
+    41→    41→import { GradientButton } from '@/components/shared/GradientButton';
+    42→    42→import { GlassCard } from '@/components/shared/GlassCard';
+    43→    43→import { useLiveKitRoleToken, useLiveKitConfig, useCallsFallback, useLiveKitHealth } from '@/lib/api-hooks';
+    44→    44→import { useNavigationStore, useAuthStore } from '@/lib/store';
+    45→    45→import { LIVEKIT_URL } from '@/lib/constants';
+    46→    46→import { REACTION_TYPES, type EmojiReaction, getReactionEmoji } from '@/lib/reactions';
+    47→    47→import type { RoomType, ParticipantRole, ChatMessage, PollQuestion, PollResponse } from '@/lib/types';
+    48→    48→import '@livekit/components-styles';
+    49→    49→
+    50→    50→// ─── Types ────────────────────────────────────────────────────
+    51→    51→
+    52→    52→interface ConferenceRoomProps {
+    53→    53→  roomName: string;
+    54→    54→  courseName?: string;
+    55→    55→  roomType?: RoomType;
+    56→    56→  onLeave?: () => void;
+    57→    57→}
+    58→    58→
+    59→    59→interface RaiseHandState {
+    60→    60→  [identity: string]: boolean;
+    61→    61→}
+    62→    62→
+    63→    63→interface ReactionState {
+    64→    64→  id: string;
+    65→    65→  emoji: string;
+    66→    66→  x: number;
+    67→    67→  y: number;
+    68→    68→  timestamp: number;
+    69→    69→}
+    70→    70→
+    71→    71→// ─── Data Channel Message Types ───────────────────────────────
+    72→    72→
+    73→    73→interface DataMessage {
+    74→    74→  type: 'chat' | 'reaction' | 'raise-hand' | 'poll' | 'poll-response' | 'system' | 'hand-lower';
+    75→    75→  payload: any;
+    76→    76→  sender: string;
+    77→    77→  senderName: string;
+    78→    78→  timestamp: number;
+    79→    79→}
+    80→    80→
+    81→    81→// ─── Animated Reaction Overlay ─────────────────────────────────
+    82→    82→
+    83→    83→function ReactionOverlay({ reactions }: { reactions: ReactionState[] }) {
+    84→    84→  return (
+    85→    85→    <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
+    86→    86→      <AnimatePresence>
+    87→    87→        {reactions.map((r) => (
+    88→    88→          <motion.div
+    89→    89→            key={r.id}
+    90→    90→            className="absolute text-3xl"
+    91→    91→            initial={{ opacity: 1, y: 0, scale: 0.5 }}
+    92→    92→            animate={{ opacity: 0, y: -120, scale: 1.5 }}
+    93→    93→            exit={{ opacity: 0 }}
+    94→    94→            transition={{ duration: 2, ease: 'easeOut' }}
+    95→    95→            style={{ left: r.x, top: r.y }}
+    96→    96→          >
+    97→    97→            {r.emoji}
+    98→    98→          </motion.div>
+    99→    99→        ))}
+   100→   100→      </AnimatePresence>
+   101→   101→    </div>
+   102→   102→  );
+   103→   103→}
+   104→   104→
+   105→   105→// ─── Chat Panel with Polls & Reactions ─────────────────────────
+   106→   106→
+   107→   107→function ConferenceChatPanel({
+   108→   108→  isOpen,
+   109→   109→  onClose,
+   110→   110→  roomType,
+   111→   111→  isHost,
+   112→   112→}: {
+   113→   113→  isOpen: boolean;
+   114→   114→  onClose: () => void;
+   115→   115→  roomType: RoomType;
+   116→   116→  isHost: boolean;
+   117→   117→}) {
+   118→   118→  const [messages, setMessages] = useState<ChatMessage[]>([]);
+   119→   119→  const [inputValue, setInputValue] = useState('');
+   120→   120→  const [activeTab, setActiveTab] = useState<'chat' | 'polls'>('chat');
+   121→   121→  const [polls, setPolls] = useState<PollQuestion[]>([]);
+   122→   122→  const [newPollQuestion, setNewPollQuestion] = useState('');
+   123→   123→  const [newPollOptions, setNewPollOptions] = useState(['', '']);
+   124→   124→  const [isQuiz, setIsQuiz] = useState(false);
+   125→   125→  const [correctIndex, setCorrectIndex] = useState(0);
+   126→   126→  const messagesEndRef = useRef<HTMLDivElement>(null);
+   127→   127→  const encoder = new TextEncoder();
+   128→   128→
+   129→   129→  // Data channel for real-time messaging
+   130→   130→  const onMessage = useCallback((msg: any) => {
+   131→   131→    try {
+   132→   132→      const data: DataMessage = JSON.parse(new TextDecoder().decode(msg.payload as Uint8Array));
+   133→   133→      if (data.type === 'chat') {
+   134→   134→        setMessages(prev => [...prev, {
+   135→   135→          id: `${data.timestamp}-${data.sender}`,
+   136→   136→          identity: data.sender,
+   137→   137→          name: data.senderName,
+   138→   138→          message: data.payload,
+   139→   139→          timestamp: data.timestamp,
+   140→   140→          isSystem: false,
+   141→   141→        }]);
+   142→   142→      } else if (data.type === 'poll') {
+   143→   143→        setPolls(prev => [...prev, data.payload]);
+   144→   144→      } else if (data.type === 'poll-response') {
+   145→   145→        setPolls(prev => prev.map(p =>
+   146→   146→          p.id === data.payload.pollId
+   147→   147→            ? { ...p, responses: [...p.responses, data.payload] }
+   148→   148→            : p
+   149→   149→        ));
+   150→   150→      } else if (data.type === 'system') {
+   151→   151→        setMessages(prev => [...prev, {
+   152→   152→          id: `${data.timestamp}-system`,
+   153→   153→          identity: 'system',
+   154→   154→          name: 'System',
+   155→   155→          message: data.payload,
+   156→   156→          timestamp: data.timestamp,
+   157→   157→          isSystem: true,
+   158→   158→        }]);
+   159→   159→      }
+   160→   160→    } catch {}
+   161→   161→  }, []);
+   162→   162→
+   163→   163→  useDataChannel(onMessage);
+   164→   164→
+   165→   165→  // Send chat message via data channel
+   166→   166→  const room = useRoomContext();
+   167→   167→  const sendMessage = useCallback(() => {
+   168→   168→    if (!inputValue.trim()) return;
+   169→   169→    const data: DataMessage = {
+   170→   170→      type: 'chat',
+   171→   171→      payload: inputValue.trim(),
+   172→   172→      sender: room.localParticipant.identity,
+   173→   173→      senderName: room.localParticipant.name || room.localParticipant.identity,
+   174→   174→      timestamp: Date.now(),
+   175→   175→    };
+   176→   176→    room.localParticipant.publishData(
+   177→   177→      encoder.encode(JSON.stringify(data)),
+   178→   178→      { reliable: true }
+   179→   179→    );
+   180→   180→    setInputValue('');
+   181→   181→  }, [inputValue, room]);
+   182→   182→
+   183→   183→  // Create a poll
+   184→   184→  const createPoll = useCallback(() => {
+   185→   185→    if (!newPollQuestion.trim() || newPollOptions.filter(o => o.trim()).length < 2) return;
+   186→   186→    const poll: PollQuestion = {
+   187→   187→      id: `poll-${Date.now()}`,
+   188→   188→      question: newPollQuestion.trim(),
+   189→   189→      options: newPollOptions.filter(o => o.trim()),
+   190→   190→      correctIndex: isQuiz ? correctIndex : undefined,
+   191→   191→      isQuiz,
+   192→   192→      createdAt: new Date().toISOString(),
+   193→   193→      responses: [],
+   194→   194→    };
+   195→   195→    const data: DataMessage = {
+   196→   196→      type: 'poll',
+   197→   197→      payload: poll,
+   198→   198→      sender: room.localParticipant.identity,
+   199→   199→      senderName: room.localParticipant.name || room.localParticipant.identity,
+   200→   200→      timestamp: Date.now(),
+   201→   201→    };
+   202→   202→    room.localParticipant.publishData(
+   203→   203→      encoder.encode(JSON.stringify(data)),
+   204→   204→      { reliable: true }
+   205→   205→    );
+   206→   206→    setPolls(prev => [...prev, poll]);
+   207→   207→    setNewPollQuestion('');
+   208→   208→    setNewPollOptions(['', '']);
+   209→   209→    setIsQuiz(false);
+   210→   210→  }, [newPollQuestion, newPollOptions, isQuiz, correctIndex, room]);
+   211→   211→
+   212→   212→  // Respond to a poll
+   213→   213→  const respondToPoll = useCallback((pollId: string, selectedIndex: number) => {
+   214→   214→    const response: PollResponse = {
+   215→   215→      participantIdentity: room.localParticipant.identity,
+   216→   216→      participantName: room.localParticipant.name || room.localParticipant.identity,
+   217→   217→      selectedIndex,
+   218→   218→      respondedAt: new Date().toISOString(),
+   219→   219→    };
+   220→   220→    const data: DataMessage = {
+   221→   221→      type: 'poll-response',
+   222→   222→      payload: { pollId, ...response },
+   223→   223→      sender: room.localParticipant.identity,
+   224→   224→      senderName: room.localParticipant.name || room.localParticipant.identity,
+   225→   225→      timestamp: Date.now(),
+   226→   226→    };
+   227→   227→    room.localParticipant.publishData(
+   228→   228→      encoder.encode(JSON.stringify(data)),
+   229→   229→      { reliable: true }
+   230→   230→    );
+   231→   231→    setPolls(prev => prev.map(p =>
+   232→   232→      p.id === pollId
+   233→   233→        ? { ...p, responses: [...p.responses, response] }
+   234→   234→        : p
+   235→   235→    ));
+   236→   236→  }, [room]);
+   237→   237→
+   238→   238→  // Auto-scroll to bottom
+   239→   239→  useEffect(() => {
+   240→   240→    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+   241→   241→  }, [messages]);
+   242→   242→
+   243→   243→  if (!isOpen) return null;
+   244→   244→
+   245→   245→  return (
+   246→   246→    <motion.div
+   247→   247→      initial={{ x: 320 }}
+   248→   248→      animate={{ x: 0 }}
+   249→   249→      exit={{ x: 320 }}
+   250→   250→      className="w-80 bg-gray-900 border-l border-white/10 flex flex-col h-full"
+   251→   251→    >
+   252→   252→      {/* Tab header */}
+   253→   253→      <div className="p-3 border-b border-white/10">
+   254→   254→        <div className="flex items-center justify-between mb-2">
+   255→   255→          <div className="flex gap-1">
+   256→   256→            <button
+   257→   257→              onClick={() => setActiveTab('chat')}
+   258→   258→              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+   259→   259→                activeTab === 'chat' ? 'bg-white/20 text-white' : 'text-white/60 hover:text-white'
+   260→   260→              }`}
+   261→   261→            >
+   262→   262→              Chat
+   263→   263→            </button>
+   264→   264→            <button
+   265→   265→              onClick={() => setActiveTab('polls')}
+   266→   266→              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+   267→   267→                activeTab === 'polls' ? 'bg-white/20 text-white' : 'text-white/60 hover:text-white'
+   268→   268→              }`}
+   269→   269→            >
+   270→   270→              Polls
+   271→   271→            </button>
+   272→   272→          </div>
+   273→   273→          <button onClick={onClose} className="text-white/60 hover:text-white p-1">
+   274→   274→            <X className="w-4 h-4" />
+   275→   275→          </button>
+   276→   276→        </div>
+   277→   277→      </div>
+   278→   278→
+   279→   279→      {activeTab === 'chat' ? (
+   280→   280→        <>
+   281→   281→          {/* Messages */}
+   282→   282→          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+   283→   283→            {messages.map((msg) => (
+   284→   284→              <div
+   285→   285→                key={msg.id}
+   286→   286→                className={`text-sm ${msg.isSystem ? 'text-center text-white/40 text-xs' : ''}`}
+   287→   287→              >
+   288→   288→                {msg.isSystem ? (
+   289→   289→                  <span>{msg.message}</span>
+   290→   290→                ) : (
+   291→   291→                  <div>
+   292→   292→                    <span className="text-blue-400 font-semibold text-xs">{msg.name}</span>
+   293→   293→                    <span className="text-white/80 ml-2">{msg.message}</span>
+   294→   294→                  </div>
+   295→   295→                )}
+   296→   296→              </div>
+   297→   297→            ))}
+   298→   298→            <div ref={messagesEndRef} />
+   299→   299→          </div>
+   300→   300→
+   301→   301→          {/* Input */}
+   302→   302→          <div className="p-3 border-t border-white/10">
+   303→   303→            <div className="flex gap-2">
+   304→   304→              <input
+   305→   305→                type="text"
+   306→   306→                value={inputValue}
+   307→   307→                onChange={(e) => setInputValue(e.target.value)}
+   308→   308→                onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+   309→   309→                placeholder="Type a message..."
+   310→   310→                className="flex-1 bg-white/10 text-white text-sm rounded-lg px-3 py-2 outline-none placeholder:text-white/40 focus:ring-1 focus:ring-white/30"
+   311→   311→              />
+   312→   312→              <button
+   313→   313→                onClick={sendMessage}
+   314→   314→                className="p-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition-colors"
+   315→   315→              >
+   316→   316→                <Send className="w-4 h-4 text-white" />
+   317→   317→              </button>
+   318→   318→            </div>
+   319→   319→          </div>
+   320→   320→        </>
+   321→   321→      ) : (
+   322→   322→        <>
+   323→   323→          {/* Polls */}
+   324→   324→          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+   325→   325→            {/* Create new poll (host only) */}
+   326→   326→            {isHost && (
+   327→   327→              <div className="bg-white/5 rounded-lg p-3 space-y-2">
+   328→   328→                <input
+   329→   329→                  type="text"
+   330→   330→                  value={newPollQuestion}
+   331→   331→                  onChange={(e) => setNewPollQuestion(e.target.value)}
+   332→   332→                  placeholder="Ask a question..."
+   333→   333→                  className="w-full bg-white/10 text-white text-sm rounded-lg px-3 py-2 outline-none placeholder:text-white/40"
+   334→   334→                />
+   335→   335→                {newPollOptions.map((opt, i) => (
+   336→   336→                  <div key={i} className="flex gap-2">
+   337→   337→                    <input
+   338→   338→                      type="text"
+   339→   339→                      value={opt}
+   340→   340→                      onChange={(e) => {
+   341→   341→                        const newOpts = [...newPollOptions];
+   342→   342→                        newOpts[i] = e.target.value;
+   343→   343→                        setNewPollOptions(newOpts);
+   344→   344→                      }}
+   345→   345→                      placeholder={`Option ${i + 1}`}
+   346→   346→                      className="flex-1 bg-white/10 text-white text-sm rounded-lg px-3 py-1.5 outline-none placeholder:text-white/40"
+   347→   347→                    />
+   348→   348→                    {isQuiz && (
+   349→   349→                      <button
+   350→   350→                        onClick={() => setCorrectIndex(i)}
+   351→   351→                        className={`p-1.5 rounded-lg text-xs ${correctIndex === i ? 'bg-green-600 text-white' : 'bg-white/10 text-white/40'}`}
+   352→   352→                      >
+   353→   353→                        <Check className="w-3 h-3" />
+   354→   354→                      </button>
+   355→   355→                    )}
+   356→   356→                  </div>
+   357→   357→                ))}
+   358→   358→                <div className="flex items-center gap-2">
+   359→   359→                  <button
+   360→   360→                    onClick={() => setNewPollOptions([...newPollOptions, ''])}
+   361→   361→                    className="text-xs text-blue-400 hover:text-blue-300"
+   362→   362→                  >
+   363→   363→                    + Add option
+   364→   364→                  </button>
+   365→   365→                  <label className="flex items-center gap-1 text-xs text-white/60 cursor-pointer">
+   366→   366→                    <input
+   367→   367→                      type="checkbox"
+   368→   368→                      checked={isQuiz}
+   369→   369→                      onChange={(e) => setIsQuiz(e.target.checked)}
+   370→   370→                      className="rounded"
+   371→   371→                    />
+   372→   372→                    Quiz mode
+   373→   373→                  </label>
+   374→   374→                </div>
+   375→   375→                <button
+   376→   376→                  onClick={createPoll}
+   377→   377→                  disabled={!newPollQuestion.trim() || newPollOptions.filter(o => o.trim()).length < 2}
+   378→   378→                  className="w-full py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+   379→   379→                >
+   380→   380→                  Create Poll
+   381→   381→                </button>
+   382→   382→              </div>
+   383→   383→            )}
+   384→   384→
+   385→   385→            {/* Existing polls */}
+   386→   386→            {polls.map((poll) => {
+   387→   387→              const totalResponses = poll.responses.length;
+   388→   388→              const optionCounts = poll.options.map((_, i) =>
+   389→   389→                poll.responses.filter(r => r.selectedIndex === i).length
+   390→   390→              );
+   391→   391→
+   392→   392→              return (
+   393→   393→                <div key={poll.id} className="bg-white/5 rounded-lg p-3">
+   394→   394→                  <div className="flex items-center gap-2 mb-2">
+   395→   395→                    <BarChart3 className="w-4 h-4 text-blue-400" />
+   396→   396→                    <span className="text-white text-sm font-semibold">{poll.question}</span>
+   397→   397→                    {poll.isQuiz && (
+   398→   398→                      <span className="text-[10px] px-1.5 py-0.5 bg-purple-600 text-white rounded-full">QUIZ</span>
+   399→   399→                    )}
+   400→   400→                  </div>
+   401→   401→                  <div className="space-y-1.5">
+   402→   402→                    {poll.options.map((opt, i) => {
+   403→   403→                      const count = optionCounts[i];
+   404→   404→                      const percentage = totalResponses > 0 ? (count / totalResponses) * 100 : 0;
+   405→   405→                      const hasResponded = poll.responses.some(
+   406→   406→                        r => r.participantIdentity === room.localParticipant.identity
+   407→   407→                      );
+   408→   408→
+   409→   409→                      return (
+   410→   410→                        <button
+   411→   411→                          key={i}
+   412→   412→                          onClick={() => !hasResponded && respondToPoll(poll.id, i)}
+   413→   413→                          disabled={hasResponded}
+   414→   414→                          className="w-full text-left relative overflow-hidden rounded-lg bg-white/10 hover:bg-white/20 disabled:cursor-default transition-colors"
+   415→   415→                        >
+   416→   416→                          <div
+   417→   417→                            className="absolute inset-y-0 left-0 bg-blue-600/30 rounded-lg transition-all"
+   418→   418→                            style={{ width: `${percentage}%` }}
+   419→   419→                          />
+   420→   420→                          <div className="relative flex items-center justify-between px-3 py-1.5">
+   421→   421→                            <span className="text-white text-xs">
+   422→   422→                              {opt}
+   423→   423→                              {poll.isQuiz && i === poll.correctIndex && (
+   424→   424→                                <Check className="w-3 h-3 inline ml-1 text-green-400" />
+   425→   425→                              )}
+   426→   426→                            </span>
+   427→   427→                            <span className="text-white/60 text-xs">{count}</span>
+   428→   428→                          </div>
+   429→   429→                        </button>
+   430→   430→                      );
+   431→   431→                    })}
+   432→   432→                  </div>
+   433→   433→                  <div className="mt-2 text-white/40 text-xs">{totalResponses} responses</div>
+   434→   434→                </div>
+   435→   435→              );
+   436→   436→            })}
+   437→   437→          </div>
+   438→   438→        </>
+   439→   439→      )}
+   440→   440→    </motion.div>
+   441→   441→  );
+   442→   442→}
+   443→   443→
+   444→   444→// ─── Participants Panel ────────────────────────────────────────
+   445→   445→
+   446→   446→function ParticipantsPanel({
+   447→   447→  isOpen,
+   448→   448→  onClose,
+   449→   449→  raisedHands,
+   450→   450→  onLowerHand,
+   451→   451→  isHost,
+   452→   452→}: {
+   453→   453→  isOpen: boolean;
+   454→   454→  onClose: () => void;
+   455→   455→  raisedHands: RaiseHandState;
+   456→   456→  onLowerHand: (identity: string) => void;
+   457→   457→  isHost: boolean;
+   458→   458→}) {
+   459→   459→  const participants = useParticipants();
+   460→   460→
+   461→   461→  if (!isOpen) return null;
+   462→   462→
+   463→   463→  const sortedParticipants = [...participants].sort((a, b) => {
+   464→   464→    // Raised hands first
+   465→   465→    const aRaised = raisedHands[a.identity] ? 1 : 0;
+   466→   466→    const bRaised = raisedHands[b.identity] ? 1 : 0;
+   467→   467→    if (bRaised !== aRaised) return bRaised - aRaised;
+   468→   468→    return 0;
+   469→   469→  });
+   470→   470→
+   471→   471→  return (
+   472→   472→    <motion.div
+   473→   473→      initial={{ x: 320 }}
+   474→   474→      animate={{ x: 0 }}
+   475→   475→      exit={{ x: 320 }}
+   476→   476→      className="w-72 bg-gray-900 border-l border-white/10 flex flex-col h-full"
+   477→   477→    >
+   478→   478→      <div className="p-3 border-b border-white/10 flex items-center justify-between">
+   479→   479→        <div className="flex items-center gap-2">
+   480→   480→          <Users className="w-4 h-4 text-white/60" />
+   481→   481→          <span className="text-white text-sm font-semibold">
+   482→   482→            Participants ({participants.length})
+   483→   483→          </span>
+   484→   484→        </div>
+   485→   485→        <button onClick={onClose} className="text-white/60 hover:text-white p-1">
+   486→   486→          <X className="w-4 h-4" />
+   487→   487→        </button>
+   488→   488→      </div>
+   489→   489→
+   490→   490→      <div className="flex-1 overflow-y-auto p-3 space-y-1">
+   491→   491→        {sortedParticipants.map((p) => {
+   492→   492→          const isRaised = raisedHands[p.identity];
+   493→   493→          const metadata = p.metadata ? JSON.parse(p.metadata) : null;
+   494→   494→          const role = metadata?.role || 'participant';
+   495→   495→          const isLocal = p.isLocal;
+   496→   496→
+   497→   497→          return (
+   498→   498→            <div
+   499→   499→              key={p.identity}
+   500→   500→              className={`flex items-center gap-2 p-2 rounded-lg ${isRaised ? 'bg-yellow-500/10 border border-yellow-500/30' : 'hover:bg-white/5'}`}
+   501→   501→            >
+   502→   502→              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+   503→   503→                {(p.name || p.identity).charAt(0).toUpperCase()}
+   504→   504→              </div>
+   505→   505→              <div className="flex-1 min-w-0">
+   506→   506→                <div className="flex items-center gap-1">
+   507→   507→                  <span className="text-white text-xs font-medium truncate">
+   508→   508→                    {p.name || p.identity} {isLocal && '(You)'}
+   509→   509→                  </span>
+   510→   510→                  {role === 'host' && <Crown className="w-3 h-3 text-yellow-400" />}
+   511→   511→                  {role === 'viewer' && <Eye className="w-3 h-3 text-gray-400" />}
+   512→   512→                  {role === 'student' && <GraduationCap className="w-3 h-3 text-blue-400" />}
+   513→   513→                </div>
+   514→   514→                <div className="flex items-center gap-1.5">
+   515→   515→                  {p.isCameraEnabled ? (
+   516→   516→                    <Video className="w-3 h-3 text-green-400" />
+   517→   517→                  ) : (
+   518→   518→                    <VideoOff className="w-3 h-3 text-red-400" />
+   519→   519→                  )}
+   520→   520→                  {p.isMicrophoneEnabled ? (
+   521→   521→                    <Mic className="w-3 h-3 text-green-400" />
+   522→   522→                  ) : (
+   523→   523→                    <MicOff className="w-3 h-3 text-red-400" />
+   524→   524→                  )}
+   525→   525→                </div>
+   526→   526→              </div>
+   527→   527→              {isRaised && (
+   528→   528→                <div className="flex items-center gap-1">
+   529→   529→                  <Hand className="w-4 h-4 text-yellow-400 animate-bounce" />
+   530→   530→                  {isHost && !isLocal && (
+   531→   531→                    <button
+   532→   532→                      onClick={() => onLowerHand(p.identity)}
+   533→   533→                      className="text-[10px] text-yellow-400 hover:text-yellow-300 underline"
+   534→   534→                    >
+   535→   535→                      Lower
+   536→   536→                    </button>
+   537→   537→                  )}
+   538→   538→                </div>
+   539→   539→              )}
+   540→   540→            </div>
+   541→   541→          );
+   542→   542→        })}
+   543→   543→      </div>
+   544→   544→    </motion.div>
+   545→   545→  );
+   546→   546→}
+   547→   547→
+   548→   548→// ─── Emoji Reaction Bar ────────────────────────────────────────
+   549→   549→
+   550→   550→function ReactionBar({ onReact }: { onReact: (emoji: string) => void }) {
+   551→   551→  const [showAll, setShowAll] = useState(false);
+   552→   552→
+   553→   553→  const visibleReactions = showAll ? REACTION_TYPES : REACTION_TYPES.slice(0, 5);
+   554→   554→
+   555→   555→  return (
+   556→   556→    <div className="flex items-center gap-1">
+   557→   557→      {visibleReactions.map((r) => (
+   558→   558→        <button
+   559→   559→          key={r.id}
+   560→   560→          onClick={() => onReact(r.emoji)}
+   561→   561→          className="p-1.5 rounded-lg hover:bg-white/20 transition-all hover:scale-110 active:scale-95"
+   562→   562→          title={r.label}
+   563→   563→        >
+   564→   564→          <span className="text-lg">{r.emoji}</span>
+   565→   565→        </button>
+   566→   566→      ))}
+   567→   567→      <button
+   568→   568→        onClick={() => setShowAll(!showAll)}
+   569→   569→        className="p-1.5 rounded-lg hover:bg-white/20 transition-colors text-white/60"
+   570→   570→      >
+   571→   571→        {showAll ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+   572→   572→      </button>
+   573→   573→    </div>
+   574→   574→  );
+   575→   575→}
+   576→   576→
+   577→   577→// ─── Main Video Conference Layout ─────────────────────────────
+   578→   578→
+   579→   579→function ConferenceInner({
+   580→   580→  roomType,
+   581→   581→  isHost,
+   582→   582→}: {
+   583→   583→  roomType: RoomType;
+   584→   584→  isHost: boolean;
+   585→   585→}) {
+   586→   586→  const tracks = useTracks(
+   587→   587→    [
+   588→   588→      { source: Track.Source.Camera, withPlaceholder: true },
+   589→   589→      { source: Track.Source.ScreenShare, withPlaceholder: false },
+   590→   590→    ],
+   591→   591→    { onlySubscribed: false }
+   592→   592→  );
+   593→   593→  const participants = useParticipants();
+   594→   594→  const { localParticipant } = useLocalParticipant();
+   595→   595→  const room = useRoomContext();
+   596→   596→
+   597→   597→  const [focusTrack, setFocusTrack] = useState<typeof tracks[0] | null>(null);
+   598→   598→  const [raisedHands, setRaisedHands] = useState<RaiseHandState>({});
+   599→   599→  const [reactions, setReactions] = useState<ReactionState[]>([]);
+   600→   600→  const [showChat, setShowChat] = useState(false);
+   601→   601→  const [showParticipants, setShowParticipants] = useState(false);
+   602→   602→  const [isHandRaised, setIsHandRaised] = useState(false);
+   603→   603→  const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>(ConnectionQuality.Excellent);
+   604→   604→  const [isFullscreen, setIsFullscreen] = useState(false);
+   605→   605→  const [elapsedTime, setElapsedTime] = useState(0);
+   606→   606→  const [showReactions, setShowReactions] = useState(true);
+   607→   607→  const encoder = useRef(new TextEncoder());
+   608→   608→
+   609→   609→  // Auto-focus on screen share
+   610→   610→  useEffect(() => {
+   611→   611→    const screenShare = tracks.find(t => t.source === Track.Source.ScreenShare);
+   612→   612→    if (screenShare) {
+   613→   613→      setFocusTrack(screenShare);
+   614→   614→    } else if (tracks.length > 0 && !focusTrack) {
+   615→   615→      setFocusTrack(tracks[0]);
+   616→   616→    }
+   617→   617→  }, [tracks]);
+   618→   618→
+   619→   619→  // Track connection quality
+   620→   620→  useEffect(() => {
+   621→   621→    const handleConnectionQuality = (q: ConnectionQuality) => {
+   622→   622→      setConnectionQuality(q);
+   623→   623→    };
+   624→   624→    localParticipant.on(ParticipantEvent.ConnectionQualityChanged, handleConnectionQuality);
+   625→   625→    return () => {
+   626→   626→      localParticipant.off(ParticipantEvent.ConnectionQualityChanged, handleConnectionQuality);
+   627→   627→    };
+   628→   628→  }, [localParticipant]);
+   629→   629→
+   630→   630→  // Timer
+   631→   631→  useEffect(() => {
+   632→   632→    const timer = setInterval(() => {
+   633→   633→      setElapsedTime(prev => prev + 1);
+   634→   634→    }, 1000);
+   635→   635→    return () => clearInterval(timer);
+   636→   636→  }, []);
+   637→   637→
+   638→   638→  // Format elapsed time
+   639→   639→  const formatTime = (seconds: number) => {
+   640→   640→    const h = Math.floor(seconds / 3600);
+   641→   641→    const m = Math.floor((seconds % 3600) / 60);
+   642→   642→    const s = seconds % 60;
+   643→   643→    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+   644→   644→    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+   645→   645→  };
+   646→   646→
+   647→   647→  // Data channel for reactions and raise hand
+   648→   648→  const onMessage = useCallback((msg: any) => {
+   649→   649→    try {
+   650→   650→      const data: DataMessage = JSON.parse(new TextDecoder().decode(msg.payload as Uint8Array));
+   651→   651→      if (data.type === 'reaction') {
+   652→   652→        const reaction: ReactionState = {
+   653→   653→          id: `${data.timestamp}-${data.sender}`,
+   654→   654→          emoji: data.payload.emoji,
+   655→   655→          x: Math.random() * 80 + 10,
+   656→   656→          y: Math.random() * 60 + 20,
+   657→   657→          timestamp: data.timestamp,
+   658→   658→        };
+   659→   659→        setReactions(prev => [...prev, reaction]);
+   660→   660→        // Auto-remove after 2.5 seconds
+   661→   661→        setTimeout(() => {
+   662→   662→          setReactions(prev => prev.filter(r => r.id !== reaction.id));
+   663→   663→        }, 2500);
+   664→   664→      } else if (data.type === 'raise-hand') {
+   665→   665→        setRaisedHands(prev => ({ ...prev, [data.sender]: true }));
+   666→   666→      } else if (data.type === 'hand-lower') {
+   667→   667→        setRaisedHands(prev => ({ ...prev, [data.sender]: false }));
+   668→   668→      }
+   669→   669→    } catch {}
+   670→   670→  }, []);
+   671→   671→
+   672→   672→  useDataChannel(onMessage);
+   673→   673→
+   674→   674→  // Send reaction
+   675→   675→  const sendReaction = useCallback((emoji: string) => {
+   676→   676→    const data: DataMessage = {
+   677→   677→      type: 'reaction',
+   678→   678→      payload: { emoji },
+   679→   679→      sender: localParticipant.identity,
+   680→   680→      senderName: localParticipant.name || localParticipant.identity,
+   681→   681→      timestamp: Date.now(),
+   682→   682→    };
+   683→   683→    localParticipant.publishData(
+   684→   684→      encoder.current.encode(JSON.stringify(data)),
+   685→   685→      { reliable: true }
+   686→   686→    );
+   687→   687→  }, [localParticipant]);
+   688→   688→
+   689→   689→  // Toggle raise hand
+   690→   690→  const toggleRaiseHand = useCallback(() => {
+   691→   691→    const newState = !isHandRaised;
+   692→   692→    setIsHandRaised(newState);
+   693→   693→    const data: DataMessage = {
+   694→   694→      type: newState ? 'raise-hand' : 'hand-lower',
+   695→   695→      payload: {},
+   696→   696→      sender: localParticipant.identity,
+   697→   697→      senderName: localParticipant.name || localParticipant.identity,
+   698→   698→      timestamp: Date.now(),
+   699→   699→    };
+   700→   700→    localParticipant.publishData(
+   701→   701→      encoder.current.encode(JSON.stringify(data)),
+   702→   702→      { reliable: true }
+   703→   703→    );
+   704→   704→  }, [isHandRaised, localParticipant]);
+   705→   705→
+   706→   706→  // Lower hand for others (host only)
+   707→   707→  const lowerHand = useCallback((identity: string) => {
+   708→   708→    setRaisedHands(prev => ({ ...prev, [identity]: false }));
+   709→   709→  }, []);
+   710→   710→
+   711→   711→  // Fullscreen toggle
+   712→   712→  const toggleFullscreen = useCallback(() => {
+   713→   713→    if (!document.fullscreenElement) {
+   714→   714→      document.documentElement.requestFullscreen();
+   715→   715→      setIsFullscreen(true);
+   716→   716→    } else {
+   717→   717→      document.exitFullscreen();
+   718→   718→      setIsFullscreen(false);
+   719→   719→    }
+   720→   720→  }, []);
+   721→   721→
+   722→   722→  // Connection quality indicator
+   723→   723→  const qualityColor = useMemo(() => {
+   724→   724→    switch (connectionQuality) {
+   725→   725→      case ConnectionQuality.Excellent: return 'text-green-400';
+   726→   726→      case ConnectionQuality.Good: return 'text-yellow-400';
+   727→   727→      case ConnectionQuality.Poor: return 'text-red-400';
+   728→   728→      default: return 'text-gray-400';
+   729→   729→    }
+   730→   730→  }, [connectionQuality]);
+   731→   731→
+   732→   732→  const isVoiceRoom = roomType === 'voice';
+   733→   733→  const isWebinar = roomType === 'webinar';
+   734→   734→  const isClassroom = roomType === 'classroom';
+   735→   735→
+   736→   736→  return (
+   737→   737→    <div className="h-full flex flex-col relative">
+   738→   738→      <ReactionOverlay reactions={reactions} />
+   739→   739→
+   740→   740→      {/* Video area */}
+   741→   741→      <div className="flex-1 flex relative overflow-hidden">
+   742→   742→        <div className={`flex-1 ${isVoiceRoom ? 'flex items-center justify-center' : ''}`}>
+   743→   743→          {isVoiceRoom ? (
+   744→   744→            // Voice room layout — circular avatars
+   745→   745→            <div className="flex flex-wrap items-center justify-center gap-4 p-6 max-w-2xl mx-auto">
+   746→   746→              {participants.map((p) => (
+   747→   747→                <motion.div
+   748→   748→                  key={p.identity}
+   749→   749→                  className={`relative flex flex-col items-center ${raisedHands[p.identity] ? 'ring-2 ring-yellow-400 rounded-full' : ''}`}
+   750→   750→                  initial={{ scale: 0.8, opacity: 0 }}
+   751→   751→                  animate={{ scale: 1, opacity: 1 }}
+   752→   752→                >
+   753→   753→                  <div className={`w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold ${
+   754→   754→                    p.isMicrophoneEnabled ? '' : 'opacity-50'
+   755→   755→                  }`}>
+   756→   756→                    {(p.name || p.identity).charAt(0).toUpperCase()}
+   757→   757→                  </div>
+   758→   758→                  <span className="text-white text-xs mt-1 truncate max-w-[80px]">
+   759→   759→                    {p.name || p.identity}
+   760→   760→                  </span>
+   761→   761→                  {p.isMicrophoneEnabled && (
+   762→   762→                    <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2">
+   763→   763→                      <div className="flex items-end gap-0.5 h-3">
+   764→   764→                        {[...Array(3)].map((_, i) => (
+   765→   765→                          <motion.div
+   766→   766→                            key={i}
+   767→   767→                            className="w-1 bg-green-400 rounded-full"
+   768→   768→                            animate={{ height: [4, 12, 6, 10, 4] }}
+   769→   769→                            transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.1 }}
+   770→   770→                          />
+   771→   771→                        ))}
+   772→   772→                      </div>
+   773→   773→                    </div>
+   774→   774→                  )}
+   775→   775→                  {raisedHands[p.identity] && (
+   776→   776→                    <Hand className="absolute -top-2 -right-2 w-5 h-5 text-yellow-400 animate-bounce" />
+   777→   777→                  )}
+   778→   778→                </motion.div>
+   779→   779→              ))}
+   780→   780→            </div>
+   781→   781→          ) : (
+   782→   782→            // Video layout
+   783→   783→            <FocusLayoutContainer className="h-full">
+   784→   784→              {focusTrack && (
+   785→   785→                <FocusLayout trackRef={focusTrack} className="h-full">
+   786→   786→                  <ParticipantTile trackRef={focusTrack} className="h-full" />
+   787→   787→                </FocusLayout>
+   788→   788→              )}
+   789→   789→              {tracks.filter(t => t !== focusTrack).length > 0 && (
+   790→   790→                <div className="grid grid-cols-3 gap-1 p-1">
+   791→   791→                  {tracks
+   792→   792→                    .filter(t => t !== focusTrack)
+   793→   793→                    .map((track) => (
+   794→   794→                      <ParticipantTile key={track.participant.identity} trackRef={track} />
+   795→   795→                    ))}
+   796→   796→                </div>
+   797→   797→              )}
+   798→   798→            </FocusLayoutContainer>
+   799→   799→          )}
+   800→   800→        </div>
+   801→   801→
+   802→   802→        {/* Side panels */}
+   803→   803→        {showChat && (
+   804→   804→          <ConferenceChatPanel
+   805→   805→            isOpen={showChat}
+   806→   806→            onClose={() => setShowChat(false)}
+   807→   807→            roomType={roomType}
+   808→   808→            isHost={isHost}
+   809→   809→          />
+   810→   810→        )}
+   811→   811→        {showParticipants && (
+   812→   812→          <ParticipantsPanel
+   813→   813→            isOpen={showParticipants}
+   814→   814→            onClose={() => setShowParticipants(false)}
+   815→   815→            raisedHands={raisedHands}
+   816→   816→            onLowerHand={lowerHand}
+   817→   817→            isHost={isHost}
+   818→   818→          />
+   819→   819→        )}
+   820→   820→      </div>
+   821→   821→
+   822→   822→      {/* Audio renderer */}
+   823→   823→      <RoomAudioRenderer />
+   824→   824→
+   825→   825→      {/* Bottom control bar */}
+   826→   826→      <div className="bg-gray-900/95 border-t border-white/10 px-4 py-2">
+   827→   827→        <div className="flex items-center justify-between">
+   828→   828→          {/* Left: Timer & Quality */}
+   829→   829→          <div className="flex items-center gap-3">
+   830→   830→            <div className="flex items-center gap-1.5">
+   831→   831→              <motion.div
+   832→   832→                className="w-2 h-2 rounded-full bg-red-500"
+   833→   833→                animate={{ opacity: [1, 0.3, 1] }}
+   834→   834→                transition={{ duration: 1.5, repeat: Infinity }}
+   835→   835→              />
+   836→   836→              <span className="text-white text-xs font-mono">{formatTime(elapsedTime)}</span>
+   837→   837→            </div>
+   838→   838→            <div className="flex items-center gap-1">
+   839→   839→              <Wifi className={`w-3.5 h-3.5 ${qualityColor}`} />
+   840→   840→              <span className={`text-xs ${qualityColor}`}>
+   841→   841→                {connectionQuality === ConnectionQuality.Excellent ? 'Excellent' :
+   842→   842→                 connectionQuality === ConnectionQuality.Good ? 'Good' : 'Poor'}
+   843→   843→              </span>
+   844→   844→            </div>
+   845→   845→            <span className="text-white/40 text-xs">
+   846→   846→              {participants.length} participant{participants.length !== 1 ? 's' : ''}
+   847→   847→            </span>
+   848→   848→          </div>
+   849→   849→
+   850→   850→          {/* Center: Media controls */}
+   851→   851→          <div className="flex items-center gap-2">
+   852→   852→            <TrackToggle source={Track.Source.Microphone} className="lk-button" />
+   853→   853→            {!isVoiceRoom && (
+   854→   854→              <TrackToggle source={Track.Source.Camera} className="lk-button" />
+   855→   855→            )}
+   856→   856→            <TrackToggle source={Track.Source.ScreenShare} className="lk-button" />
+   857→   857→
+   858→   858→            {/* Raise hand */}
+   859→   859→            <button
+   860→   860→              onClick={toggleRaiseHand}
+   861→   861→              className={`p-2 rounded-lg transition-colors ${
+   862→   862→                isHandRaised ? 'bg-yellow-500/20 text-yellow-400' : 'hover:bg-white/10 text-white/60'
+   863→   863→              }`}
+   864→   864→              title={isHandRaised ? 'Lower hand' : 'Raise hand'}
+   865→   865→            >
+   866→   866→              <Hand className="w-5 h-5" />
+   867→   867→            </button>
+   868→   868→
+   869→   869→            <DisconnectButton className="p-2 rounded-lg bg-red-600 hover:bg-red-500 text-white transition-colors">
+   870→   870→              <PhoneOff className="w-5 h-5" />
+   871→   871→            </DisconnectButton>
+   872→   872→          </div>
+   873→   873→
+   874→   874→          {/* Right: Panel toggles & Reactions */}
+   875→   875→          <div className="flex items-center gap-2">
+   876→   876→            {/* Reactions */}
+   877→   877→            {showReactions && <ReactionBar onReact={sendReaction} />}
+   878→   878→            <button
+   879→   879→              onClick={() => setShowReactions(!showReactions)}
+   880→   880→              className={`p-2 rounded-lg transition-colors ${showReactions ? 'bg-white/20 text-white' : 'hover:bg-white/10 text-white/60'}`}
+   881→   881→            >
+   882→   882→              <Smile className="w-4 h-4" />
+   883→   883→            </button>
+   884→   884→
+   885→   885→            {/* Chat toggle */}
+   886→   886→            <button
+   887→   887→              onClick={() => { setShowChat(!showChat); setShowParticipants(false); }}
+   888→   888→              className={`p-2 rounded-lg transition-colors ${showChat ? 'bg-white/20 text-white' : 'hover:bg-white/10 text-white/60'}`}
+   889→   889→            >
+   890→   890→              <MessageSquare className="w-4 h-4" />
+   891→   891→            </button>
+   892→   892→
+   893→   893→            {/* Participants toggle */}
+   894→   894→            <button
+   895→   895→              onClick={() => { setShowParticipants(!showParticipants); setShowChat(false); }}
+   896→   896→              className={`p-2 rounded-lg transition-colors ${showParticipants ? 'bg-white/20 text-white' : 'hover:bg-white/10 text-white/60'}`}
+   897→   897→            >
+   898→   898→              <Users className="w-4 h-4" />
+   899→   899→            </button>
+   900→   900→
+   901→   901→            {/* Fullscreen */}
+   902→   902→            <button
+   903→   903→              onClick={toggleFullscreen}
+   904→   904→              className="p-2 rounded-lg hover:bg-white/10 text-white/60 transition-colors"
+   905→   905→            >
+   906→   906→              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+   907→   907→            </button>
+   908→   908→          </div>
+   909→   909→        </div>
+   910→   910→      </div>
+   911→   911→    </div>
+   912→   912→  );
+   913→   913→}
+   914→   914→
+   915→   915→// ─── Main Conference Room Component ────────────────────────────
+   916→   916→
+   917→   917→export function ConferenceRoom({ roomName, courseName, roomType = 'video', onLeave }: ConferenceRoomProps) {
+   918→   918→  const { fetchToken: fetchRoleToken, loading: tokenLoading, error: tokenError } = useLiveKitRoleToken();
+   919→   919→  const { data: livekitConfig } = useLiveKitConfig();
+   920→   920→  const { createSession: createCallsSession, loading: callsLoading } = useCallsFallback();
+   921→   921→  const { data: health } = useLiveKitHealth();
+   922→   922→  const goBack = useNavigationStore((s) => s.goBack);
+   923→   923→  const { user } = useAuthStore();
+   924→   924→
+   925→   925→  const [token, setToken] = useState<string | null>(null);
+   926→   926→  const [connectionState, setConnectionState] = useState<string>('disconnected');
+   927→   927→  const [useFallback, setUseFallback] = useState(false);
+   928→   928→  const [fallbackError, setFallbackError] = useState<string | null>(null);
+   929→   929→  const [callsConfig, setCallsConfig] = useState<any>(null);
+   930→   930→
+   931→   931→  const livekitUrl = livekitConfig?.url || LIVEKIT_URL;
+   932→   932→
+   933→   933→  // Try LiveKit first, then fallback to Cloudflare Calls
+   934→   934→  useEffect(() => {
+   935→   935→    async function getToken() {
+   936→   936→      try {
+   937→   937→        const result = await fetchRoleToken(
+   938→   938→          roomName,
+   939→   939→          'host',
+   940→   940→          roomType,
+   941→   941→          user?.id || 'instructor',
+   942→   942→          user?.name || 'Instructor',
+   943→   943→        );
+   944→   944→        if (result?.token) {
+   945→   945→          setToken(result.token);
+   946→   946→          return;
+   947→   947→        }
+   948→   948→      } catch (err: any) {
+   949→   949→        console.warn('LiveKit token failed, trying fallback:', err.message);
+   950→   950→      }
+   951→   951→
+   952→   952→      // LiveKit failed — try Cloudflare Calls fallback
+   953→   953→      if (health?.fallback === 'available') {
+   954→   954→        try {
+   955→   955→          setUseFallback(true);
+   956→   956→          const callsResult = await createCallsSession(roomName);
+   957→   957→          if (callsResult) {
+   958→   958→            setCallsConfig(callsResult);
+   959→   959→            return;
+   960→   960→          }
+   961→   961→        } catch (callsErr: any) {
+   962→   962→          setFallbackError(callsErr.message);
+   963→   963→        }
+   964→   964→      }
+   965→   965→
+   966→   966→      setFallbackError('LiveKit is unavailable and Cloudflare Calls fallback is not configured.');
+   967→   967→    }
+   968→   968→    getToken();
+   969→   969→  }, [roomName, roomType, fetchRoleToken, user, health, createCallsSession]);
+   970→   970→
+   971→   971→  const handleDisconnected = useCallback(() => {
+   972→   972→    setConnectionState('disconnected');
+   973→   973→  }, []);
+   974→   974→
+   975→   975→  const handleConnected = useCallback(() => {
+   976→   976→    setConnectionState('connected');
+   977→   977→  }, []);
+   978→   978→
+   979→   979→  const handleLeave = useCallback(() => {
+   980→   980→    if (onLeave) {
+   981→   981→      onLeave();
+   982→   982→    } else {
+   983→   983→      goBack();
+   984→   984→    }
+   985→   985→  }, [onLeave, goBack]);
+   986→   986→
+   987→   987→  // Loading state
+   988→   988→  if (tokenLoading || callsLoading) {
+   989→   989→    return (
+   990→   990→      <div className="flex flex-col items-center justify-center min-h-[80vh] gap-4">
+   991→   991→        <Loader2 className="w-8 h-8 animate-spin text-foreground" />
+   992→   992→        <p className="text-muted-foreground">
+   993→   993→          {useFallback ? 'Connecting to Cloudflare Calls...' : 'Connecting to LiveKit...'}
+   994→   994→        </p>
+   995→   995→      </div>
+   996→   996→    );
+   997→   997→  }
+   998→   998→
+   999→   999→  // Error state — no LiveKit and no fallback
+  1000→  1000→  if ((!token || tokenError) && !callsConfig) {
+  1001→  1001→    return (
+  1002→  1002→      <div className="flex flex-col items-center justify-center min-h-[80vh] gap-4">
+  1003→  1003→        <GlassCard className="p-8 text-center max-w-md">
+  1004→  1004→          <AlertTriangle className="w-12 h-12 mx-auto text-yellow-500 mb-4" />
+  1005→  1005→          <h3 className="text-lg font-bold mb-2">Connection Failed</h3>
+  1006→  1006→          <p className="text-muted-foreground mb-4">
+  1007→  1007→            {fallbackError || tokenError || 'Could not connect to the conference server.'}
+  1008→  1008→          </p>
+  1009→  1009→          <div className="flex gap-2 justify-center">
+  1010→  1010→            <GradientButton onClick={() => window.location.reload()}>
+  1011→  1011→              <RefreshCw className="w-4 h-4 mr-2" /> Retry
+  1012→  1012→            </GradientButton>
+  1013→  1013→            <GradientButton onClick={handleLeave}>
+  1014→  1014→              <ArrowLeft className="w-4 h-4 mr-2" /> Go Back
+  1015→  1015→            </GradientButton>
+  1016→  1016→          </div>
+  1017→  1017→        </GlassCard>
+  1018→  1018→      </div>
+  1019→  1019→    );
+  1020→  1020→  }
+  1021→  1021→
+  1022→  1022→  // Cloudflare Calls fallback UI
+  1023→  1023→  if (useFallback && callsConfig) {
+  1024→  1024→    return (
+  1025→  1025→      <div className="h-[calc(100vh-64px)] -m-4 md:-m-6 flex flex-col bg-black">
+  1026→  1026→        <div className="flex items-center justify-between px-4 py-2 bg-black/80 border-b border-white/10 z-10">
+  1027→  1027→          <div className="flex items-center gap-3">
+  1028→  1028→            <button onClick={handleLeave} className="p-1.5 rounded-lg hover:bg-white/10">
+  1029→  1029→              <ArrowLeft className="w-5 h-5 text-white" />
+  1030→  1030→            </button>
+  1031→  1031→            <div>
+  1032→  1032→              <h3 className="text-white text-sm font-semibold">{courseName || roomName}</h3>
+  1033→  1033→              <div className="flex items-center gap-1.5">
+  1034→  1034→                <Zap className="w-3 h-3 text-orange-400" />
+  1035→  1035→                <span className="text-xs text-orange-400">Cloudflare Calls (Fallback)</span>
+  1036→  1036→              </div>
+  1037→  1037→            </div>
+  1038→  1038→          </div>
+  1039→  1039→        </div>
+  1040→  1040→        <div className="flex-1 flex items-center justify-center">
+  1041→  1041→          <div className="text-center p-8">
+  1042→  1042→            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center mx-auto mb-4">
+  1043→  1043→              <Radio className="w-10 h-10 text-white" />
+  1044→  1044→            </div>
+  1045→  1045→            <h3 className="text-white text-xl font-bold mb-2">Cloudflare Calls Session</h3>
+  1046→  1046→            <p className="text-white/60 text-sm mb-4 max-w-md">
+  1047→  1047→              LiveKit limit reached. Using Cloudflare Calls as fallback.
+  1048→  1048→              Connect using WebRTC with the session details below.
+  1049→  1049→            </p>
+  1050→  1050→            <div className="bg-white/5 rounded-lg p-4 text-left space-y-2">
+  1051→  1051→              <div className="flex items-center justify-between">
+  1052→  1052→                <span className="text-white/40 text-xs">Session ID</span>
+  1053→  1053→                <span className="text-white text-xs font-mono">{callsConfig.sessionId}</span>
+  1054→  1054→              </div>
+  1055→  1055→              <div className="flex items-center justify-between">
+  1056→  1056→                <span className="text-white/40 text-xs">Room</span>
+  1057→  1057→                <span className="text-white text-xs">{callsConfig.room}</span>
+  1058→  1058→              </div>
+  1059→  1059→            </div>
+  1060→  1060→            <p className="text-white/40 text-xs mt-4">
+  1061→  1061→              Note: Cloudflare Calls provides basic WebRTC connectivity.
+  1062→  1062→              Some advanced features may not be available in fallback mode.
+  1063→  1063→            </p>
+  1064→  1064→          </div>
+  1065→  1065→        </div>
+  1066→  1066→      </div>
+  1067→  1067→    );
+  1068→  1068→  }
+  1069→  1069→
+  1070→  1070→  // LiveKit connected — full conference experience
+  1071→  1071→  return (
+  1072→  1072→    <div className="h-[calc(100vh-64px)] -m-4 md:-m-6 flex flex-col bg-black rounded-none">
+  1073→  1073→      {/* Top bar */}
+  1074→  1074→      <div className="flex items-center justify-between px-4 py-2 bg-black/80 border-b border-white/10 z-10">
+  1075→  1075→        <div className="flex items-center gap-3">
+  1076→  1076→          <button onClick={handleLeave} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+  1077→  1077→            <ArrowLeft className="w-5 h-5 text-white" />
+  1078→  1078→          </button>
+  1079→  1079→          <div>
+  1080→  1080→            <h3 className="text-white text-sm font-semibold">{courseName || roomName}</h3>
+  1081→  1081→            <div className="flex items-center gap-1.5">
+  1082→  1082→              <Wifi className="w-3 h-3 text-green-400" />
+  1083→  1083→              <span className="text-xs text-green-400 capitalize">{connectionState}</span>
+  1084→  1084→              <span className="text-xs text-white/30">·</span>
+  1085→  1085→              <span className="text-xs text-white/40 capitalize">{roomType}</span>
+  1086→  1086→            </div>
+  1087→  1087→          </div>
+  1088→  1088→        </div>
+  1089→  1089→        <div className="flex items-center gap-2">
+  1090→  1090→          <div className="px-2 py-0.5 rounded-full bg-white/10 text-white/60 text-xs flex items-center gap-1">
+  1091→  1091→            <Crown className="w-3 h-3 text-yellow-400" />
+  1092→  1092→            Host
+  1093→  1093→          </div>
+  1094→  1094→        </div>
+  1095→  1095→      </div>
+  1096→  1096→
+  1097→  1097→      {/* Main content */}
+  1098→  1098→      <div className="flex-1 overflow-hidden">
+  1099→  1099→        <LiveKitRoom
+  1100→  1100→          video={roomType !== 'voice'}
+  1101→  1101→          audio={true}
+  1102→  1102→          token={token}
+  1103→  1103→          serverUrl={livekitUrl}
+  1104→  1104→          onDisconnected={handleDisconnected}
+  1105→  1105→          onConnected={handleConnected}
+  1106→  1106→          data-lk-theme="default"
+  1107→  1107→          style={{ height: '100%', width: '100%' }}
+  1108→  1108→          // Network optimization: adaptive bitrate
+  1109→  1109→          adaptDynacast={true}
+  1110→  1110→          // Auto manage subscriptions for large rooms
+  1111→  1111→          autoSubscribe={true}
+  1112→  1112→        >
+  1113→  1113→          <ConferenceInner roomType={roomType} isHost={true} />
+  1114→  1114→        </LiveKitRoom>
+  1115→  1115→      </div>
+  1116→  1116→    </div>
+  1117→  1117→  );
+  1118→  1118→}
+  1119→  1119→
+  1120→  1120→// Helper import
+  1121→  1121→import { cn } from '@/lib/utils';
+  1122→  1122→
