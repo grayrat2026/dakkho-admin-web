@@ -90,6 +90,34 @@
   --radius-3xl: calc(var(--radius) + 12px);
 }
 
+/* Custom Cursors */
+:root {
+  --cursor-default: url('/cursors/cursor-light.svg') 4 4, auto;
+  --cursor-pointer: url('/cursors/pointer-light.svg') 12 12, pointer;
+}
+
+.dark {
+  --cursor-default: url('/cursors/cursor-dark.svg') 4 4, auto;
+  --cursor-pointer: url('/cursors/pointer-dark.svg') 12 12, pointer;
+}
+
+/* Apply custom cursor only on non-touch devices */
+@media (hover: hover) and (pointer: fine) {
+  * {
+    cursor: var(--cursor-default) !important;
+  }
+  a, button, [role="button"], [onclick], input[type="submit"], input[type="button"],
+  select, summary, details, [tabindex], .cursor-pointer, [data-cursor="pointer"] {
+    cursor: var(--cursor-pointer) !important;
+  }
+  input, textarea, [contenteditable="true"], [data-cursor="text"] {
+    cursor: text !important;
+  }
+  input[type="range"], input[type="number"]::-webkit-inner-spin-button {
+    cursor: var(--cursor-pointer) !important;
+  }
+}
+
 :root {
   --radius: 0.75rem;
   --background: #f0f9ff;
