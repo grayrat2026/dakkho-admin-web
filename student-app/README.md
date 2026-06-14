@@ -146,6 +146,11 @@ npx wrangler pages deploy out --project-name dakkho-student
 - **Institute name from API**: Login and refreshUser now get institute name directly from /auth/me response
 - **Progressive image loading**: All images across the app now use lazy loading + progressive blur-up (ProgressiveImage component) — IntersectionObserver-based lazy load with shimmer placeholder, smooth crossfade transition, and error fallback
 - **Radix Avatar lazy**: AvatarImage components now include `loading="lazy"` and `decoding="async"` for deferred loading
+- **Instructor avatars fixed**: InstructorsPage now shows actual profile pictures via ProgressiveImage (was showing only initial letter)
+- **Removed mock data**: Downloads, Certificates, and all Exam pages (Prep, Schedule, Results, Practice) no longer use hardcoded mock data
+- **Certificates API-connected**: CertificatesPage fetches from real /api/student/certificates endpoint
+- **Dynamic departments**: Sidebar Departments section now fetches active technologies from Admin Panel API instead of hardcoded list
+- **Admin-editable exam tips**: ExamTipsPage now fetches tips from /api/exam-tips endpoint (stored in app_config, editable by admin via D1)
 
 ## 📄 License
 
