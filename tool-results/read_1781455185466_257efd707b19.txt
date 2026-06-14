@@ -1,0 +1,748 @@
+     1→/**
+     2→ * Student Public Routes
+     3→ * Config, payment config, course catalog, course-packages, instructor list,
+     4→ * institute/technology lists, events, live-classes, users/lookup, packages/mine
+     5→ */
+     6→
+     7→import { Hono } from 'hono';
+     8→import type { Env } from '../../env';
+     9→import type { ServerConfig } from '../../lib/types';
+    10→import {
+    11→  getStudentAuth,
+    12→  getInstituteName,
+    13→  getPublicUrl,
+    14→  transformConfigForStudent,
+    15→  DEFAULT_CONFIG,
+    16→  getErrorMessage,
+    17→  type StudentAuthVariables,
+    18→} from './helpers';
+    19→
+    20→const routes = new Hono<{ Bindings: Env; Variables: StudentAuthVariables }>();
+    21→
+    22→// ─── Helper: Transform R2 keys to public URLs ───
+    23→function toPublicUrl(env: Env, url: string | null | undefined, bucket: string = 'images'): string {
+    24→  if (!url) return '';
+    25→  // Already a full URL (http/https) — return as-is
+    26→  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    27→  // R2 key — convert to public URL
+    28→  return getPublicUrl(env, bucket, url);
+    29→}
+    30→
+    31→// ─── Config ───
+    32→
+    33→// GET /config — Get server config for student app (public)
+    34→routes.get('/config', async (c) => {
+    35→  try {
+    36→    const cachedConfig = await c.env.KV_CONFIG.get('server_config', 'json');
+    37→    if (cachedConfig) {
+    38→      const config = cachedConfig as ServerConfig;
+    39→      return c.json({ config: transformConfigForStudent(config) });
+    40→    }
+    41→
+    42→    const { results } = await c.env.DB.prepare(
+    43→      'SELECT key, value FROM app_config'
+    44→    ).all<{ key: string; value: string }>();
+    45→
+    46→    const configMap: Record<string, unknown> = {};
+    47→    for (const row of results) {
+    48→      try {
+    49→        configMap[row.key] = JSON.parse(row.value);
+    50→      } catch {
+    51→        configMap[row.key] = row.value;
+    52→      }
+    53→    }
+    54→
+    55→    const config: ServerConfig = {
+    56→      featureToggles: { ...DEFAULT_CONFIG.featureToggles, ...(configMap.featureToggles as Partial<ServerConfig['featureToggles']>) },
+    57→      homePageSections: (configMap.homePageSections as ServerConfig['homePageSections']) || DEFAULT_CONFIG.homePageSections,
+    58→      sidebarVisibility: { ...DEFAULT_CONFIG.sidebarVisibility, ...(configMap.sidebarVisibility as Partial<ServerConfig['sidebarVisibility']>) },
+    59→      bottomNavTabs: (configMap.bottomNavTabs as ServerConfig['bottomNavTabs']) || DEFAULT_CONFIG.bottomNavTabs,
+    60→      topBarElements: { ...DEFAULT_CONFIG.topBarElements, ...(configMap.topBarElements as Partial<ServerConfig['topBarElements']>) },
+    61→      cardStyle: (configMap.cardStyle as ServerConfig['cardStyle']) || DEFAULT_CONFIG.cardStyle,
+    62→      contentProtection: { ...DEFAULT_CONFIG.contentProtection, ...(configMap.contentProtection as Partial<ServerConfig['contentProtection']>) },
+    63→    };
+    64→
+    65→    await c.env.KV_CONFIG.put('server_config', JSON.stringify(config), { expirationTtl: 300 });
+    66→
+    67→    return c.json({ config: transformConfigForStudent(config) });
+    68→  } catch (error) {
+    69→    return c.json({ config: transformConfigForStudent(DEFAULT_CONFIG) });
+    70→  }
+    71→});
+    72→
+    73→// GET /config/payment — Get active payment gateway config (public)
+    74→routes.get('/config/payment', async (c) => {
+    75→  try {
+    76→    const result = await c.env.DB.prepare(
+    77→      'SELECT id, gateway, is_active, instructions, instructions_bn, sandbox_mode FROM payment_config WHERE is_active = 1'
+    78→    ).all();
+    79→
+    80→    return c.json({ paymentConfig: result.results });
+    81→  } catch (error) {
+    82→    return c.json({ error: getErrorMessage(error) }, 500);
+    83→  }
+    84→});
+    85→
+    86→// ─── Institutes ───
+    87→
+    88→routes.get('/institutes', async (c) => {
+    89→  try {
+    90→    const division = c.req.query('division');
+    91→    const search = c.req.query('search');
+    92→    const page = parseInt(c.req.query('page') || '1');
+    93→    const limit = parseInt(c.req.query('limit') || '50');
+    94→    const offset = (page - 1) * limit;
+    95→
+    96→    let query = 'SELECT * FROM institutes WHERE is_active = 1';
+    97→    let countQuery = 'SELECT COUNT(*) as total FROM institutes WHERE is_active = 1';
+    98→    const params: any[] = [];
+    99→
+   100→    if (division) {
+   101→      query += ' AND division = ?';
+   102→      countQuery += ' AND division = ?';
+   103→      params.push(division);
+   104→    }
+   105→
+   106→    if (search) {
+   107→      query += ' AND (name LIKE ? OR name_bn LIKE ?)';
+   108→      countQuery += ' AND (name LIKE ? OR name_bn LIKE ?)';
+   109→      params.push(`%${search}%`, `%${search}%`);
+   110→    }
+   111→
+   112→    query += ' ORDER BY is_requested ASC, name ASC LIMIT ? OFFSET ?';
+   113→
+   114→    const countResult = await c.env.DB.prepare(countQuery).bind(...params).first();
+   115→    const total = (countResult as any)?.total || 0;
+   116→
+   117→    const result = await c.env.DB.prepare(query).bind(...params, limit, offset).all();
+   118→
+   119→    return c.json({ institutes: result.results, total });
+   120→  } catch (error) {
+   121→    return c.json({ error: getErrorMessage(error) }, 500);
+   122→  }
+   123→});
+   124→
+   125→routes.get('/institutes/:id', async (c) => {
+   126→  try {
+   127→    const id = c.req.param('id');
+   128→    const result = await c.env.DB.prepare(
+   129→      'SELECT * FROM institutes WHERE id = ? AND is_active = 1'
+   130→    ).bind(id).first();
+   131→
+   132→    if (!result) {
+   133→      return c.json({ error: 'Institute not found' }, 404);
+   134→    }
+   135→
+   136→    return c.json({ institute: result });
+   137→  } catch (error) {
+   138→    return c.json({ error: getErrorMessage(error) }, 500);
+   139→  }
+   140→});
+   141→
+   142→// ─── Technologies ───
+   143→
+   144→routes.get('/technologies', async (c) => {
+   145→  try {
+   146→    const result = await c.env.DB.prepare(
+   147→      'SELECT * FROM technologies WHERE is_active = 1 ORDER BY name ASC'
+   148→    ).all();
+   149→
+   150→    return c.json({ technologies: result.results });
+   151→  } catch (error) {
+   152→    return c.json({ error: getErrorMessage(error) }, 500);
+   153→  }
+   154→});
+   155→
+   156→// ─── Events ───
+   157→
+   158→routes.get('/events', async (c) => {
+   159→  try {
+   160→    const result = await c.env.DB.prepare(
+   161→      "SELECT * FROM events WHERE is_active = 1 AND end_date >= date('now') ORDER BY start_date ASC"
+   162→    ).all();
+   163→
+   164→    return c.json({ events: result.results });
+   165→  } catch (error) {
+   166→    return c.json({ error: getErrorMessage(error) }, 500);
+   167→  }
+   168→});
+   169→
+   170→// ─── Live Classes ───
+   171→
+   172→routes.get('/live-classes', async (c) => {
+   173→  try {
+   174→    const result = await c.env.DB.prepare(
+   175→      "SELECT * FROM live_class_schedules WHERE is_active = 1 AND status IN ('scheduled', 'live') ORDER BY scheduled_at ASC"
+   176→    ).all();
+   177→
+   178→    return c.json({ liveClasses: result.results });
+   179→  } catch (error) {
+   180→    return c.json({ error: getErrorMessage(error) }, 500);
+   181→  }
+   182→});
+   183→
+   184→// ─── Course Packages ───
+   185→
+   186→routes.get('/course-packages', async (c) => {
+   187→  try {
+   188→    const courseId = c.req.query('courseId');
+   189→    if (!courseId) {
+   190→      return c.json({ error: 'courseId required' }, 400);
+   191→    }
+   192→
+   193→    // Get course price
+   194→    const course = await c.env.DB.prepare(
+   195→      'SELECT id, price FROM courses WHERE id = ? AND is_published = 1'
+   196→    ).bind(courseId).first<{ id: string; price: number }>();
+   197→
+   198→    if (!course) {
+   199→      return c.json({ packages: [] });
+   200→    }
+   201→
+   202→    let result = await c.env.DB.prepare(
+   203→      'SELECT * FROM course_packages WHERE course_id = ? AND is_active = 1 ORDER BY price ASC'
+   204→    ).bind(courseId).all();
+   205→
+   206→    // Auto-generate Single & Duo packages if missing (always show both for paid courses)
+   207→    if (course.price > 0) {
+   208→      const existingTypes = new Set((result.results as any[]).map((p: any) => p.package_type));
+   209→      let needsRefetch = false;
+   210→
+   211→      // Ensure Single package exists
+   212→      if (!existingTypes.has('single')) {
+   213→        await c.env.DB.prepare(`
+   214→          INSERT INTO course_packages (course_id, package_type, price, duration_months, max_users, is_auto_assign, is_active, display_name, description)
+   215→          VALUES (?, 'single', ?, 6, 1, 1, 1, 'Single', '1 জন ইউজারের জন্য')
+   216→        `).bind(courseId, course.price).run();
+   217→        needsRefetch = true;
+   218→      }
+   219→
+   220→      // Ensure Duo package exists (original price + 15% extra)
+   221→      if (!existingTypes.has('dual')) {
+   222→        const duoPrice = Math.round(course.price * 1.15);
+   223→        await c.env.DB.prepare(`
+   224→          INSERT INTO course_packages (course_id, package_type, price, duration_months, max_users, is_auto_assign, is_active, display_name, description)
+   225→          VALUES (?, 'dual', ?, 6, 2, 1, 1, 'Duo', '2 জন ইউজারের জন্য — বন্ধুকে শেয়ার করুন!')
+   226→        `).bind(courseId, duoPrice).run();
+   227→        needsRefetch = true;
+   228→      }
+   229→
+   230→      // Re-fetch after auto-generation
+   231→      if (needsRefetch) {
+   232→        result = await c.env.DB.prepare(
+   233→          'SELECT * FROM course_packages WHERE course_id = ? AND is_active = 1 AND package_type IN ("single", "dual") ORDER BY price ASC'
+   234→        ).bind(courseId).all();
+   235→      }
+   236→    }
+   237→
+   238→    // Filter to only show Single and Duo packages (hide any other types)
+   239→    const filteredPackages = (result.results as any[]).filter((p: any) => p.package_type === 'single' || p.package_type === 'dual');
+   240→
+   241→    return c.json({ packages: filteredPackages });
+   242→  } catch (error) {
+   243→    return c.json({ error: getErrorMessage(error) }, 500);
+   244→  }
+   245→});
+   246→
+   247→// GET /packages/mine — Get current user's purchased packages
+   248→routes.get('/packages/mine', async (c) => {
+   249→  try {
+   250→    const auth = await getStudentAuth(c);
+   251→    if (!auth.authorized) {
+   252→      return c.json({ error: 'Unauthorized' }, 401);
+   253→    }
+   254→
+   255→    const result = await c.env.DB.prepare(`
+   256→      SELECT up.*, cp.package_type, cp.price, cp.duration_months, cp.course_id, cp.max_users,
+   257→             c.title as course_title, c.thumbnail_url as course_thumbnail
+   258→      FROM user_packages up
+   259→      JOIN course_packages cp ON up.package_id = cp.id
+   260→      LEFT JOIN courses c ON cp.course_id = c.id
+   261→      WHERE up.user_id = ?
+   262→      ORDER BY up.activated_at DESC
+   263→    `).bind(auth.userId).all();
+   264→
+   265→    return c.json({ packages: result.results });
+   266→  } catch (error) {
+   267→    return c.json({ error: getErrorMessage(error) }, 500);
+   268→  }
+   269→});
+   270→
+   271→// GET /users/lookup?email=... — Look up a user by email (for duo member)
+   272→routes.get('/users/lookup', async (c) => {
+   273→  try {
+   274→    const email = c.req.query('email');
+   275→    if (!email) {
+   276→      return c.json({ error: 'email query parameter required' }, 400);
+   277→    }
+   278→
+   279→    const user = await c.env.DB.prepare(
+   280→      'SELECT id, full_name, email, institute_id, technology, avatar_url FROM users WHERE email = ? AND is_active = 1'
+   281→    ).bind(email).first();
+   282→
+   283→    if (!user) {
+   284→      return c.json({ found: false, user: null });
+   285→    }
+   286→
+   287→    const u = user as any;
+   288→    const instituteName = await getInstituteName(c.env, u.institute_id || null);
+   289→
+   290→    return c.json({
+   291→      found: true,
+   292→      user: {
+   293→        id: u.id,
+   294→        name: u.full_name,
+   295→        email: u.email,
+   296→        technology: u.technology || null,
+   297→        instituteName: instituteName || null,
+   298→        avatarUrl: u.avatar_url || null,
+   299→      },
+   300→    });
+   301→  } catch (error) {
+   302→    return c.json({ error: getErrorMessage(error) }, 500);
+   303→  }
+   304→});
+   305→
+   306→// ─── Courses (from D1 — public catalog) ───
+   307→
+   308→routes.get('/courses', async (c) => {
+   309→  try {
+   310→    const technology = c.req.query('technology') || '';
+   311→    const limit = parseInt(c.req.query('limit') || '20');
+   312→    const offset = parseInt(c.req.query('offset') || '0');
+   313→    const search = c.req.query('search') || '';
+   314→    const level = c.req.query('level') || '';
+   315→
+   316→    let where = 'WHERE is_published = 1';
+   317→    const params: unknown[] = [];
+   318→
+   319→    if (technology) {
+   320→      where += ' AND technology_id = ?';
+   321→      params.push(technology);
+   322→    }
+   323→    if (search) {
+   324→      where += ' AND title LIKE ?';
+   325→      params.push(`%${search}%`);
+   326→    }
+   327→    if (level) {
+   328→      where += ' AND level = ?';
+   329→      params.push(level);
+   330→    }
+   331→
+   332→    const countResult = await c.env.DB.prepare(
+   333→      `SELECT COUNT(*) as total FROM courses ${where}`
+   334→    ).bind(...params).first();
+   335→    const total = (countResult as any)?.total || 0;
+   336→
+   337→    const result = await c.env.DB.prepare(
+   338→      `SELECT * FROM courses ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+   339→    ).bind(...params, limit, offset).all();
+   340→
+   341→    // Enrich courses with auto-calculated duration from videos
+   342→    const enrichedCourses = await Promise.all(result.results.map(async (course: any) => {
+   343→      try {
+   344→        const vidStats = await c.env.DB.prepare(
+   345→          'SELECT COUNT(*) as count, COALESCE(SUM(duration), 0) as total_duration FROM videos WHERE course_id = ?'
+   346→        ).bind(course.id).first();
+   347→        const vc = (vidStats as any)?.count || 0;
+   348→        const td = (vidStats as any)?.total_duration || 0;
+   349→        const avg = vc > 0 ? Math.round(td / vc * 10) / 10 : 0;
+   350→        return {
+   351→          ...course,
+   352→          duration: avg,
+   353→          total_videos: vc,
+   354→          total_video_duration: td,
+   355→          thumbnail_url: toPublicUrl(c.env, course.thumbnail_url, 'images'),
+   356→        };
+   357→      } catch {
+   358→        return {
+   359→          ...course,
+   360→          thumbnail_url: toPublicUrl(c.env, course.thumbnail_url, 'images'),
+   361→        };
+   362→      }
+   363→    }));
+   364→
+   365→    return c.json({ courses: enrichedCourses, total });
+   366→  } catch (error) {
+   367→    return c.json({ error: getErrorMessage(error) }, 500);
+   368→  }
+   369→});
+   370→
+   371→// ─── Instructors (from D1 — public) ───
+   372→
+   373→routes.get('/instructors', async (c) => {
+   374→  try {
+   375→    const limit = parseInt(c.req.query('limit') || '20');
+   376→    const offset = parseInt(c.req.query('offset') || '0');
+   377→    const search = c.req.query('search') || '';
+   378→
+   379→    let where = 'WHERE is_active = 1';
+   380→    const params: unknown[] = [];
+   381→
+   382→    if (search) {
+   383→      where += ' AND name LIKE ?';
+   384→      params.push(`%${search}%`);
+   385→    }
+   386→
+   387→    const countResult = await c.env.DB.prepare(
+   388→      `SELECT COUNT(*) as total FROM instructors ${where}`
+   389→    ).bind(...params).first();
+   390→    const total = (countResult as any)?.total || 0;
+   391→
+   392→    const result = await c.env.DB.prepare(
+   393→      `SELECT * FROM instructors ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+   394→    ).bind(...params, limit, offset).all();
+   395→
+   396→    // Transform avatar_url and cover_url to public URLs
+   397→    const enrichedInstructors = (result.results as any[]).map((inst: any) => ({
+   398→      ...inst,
+   399→      avatar_url: toPublicUrl(c.env, inst.avatar_url, 'images'),
+   400→      cover_url: toPublicUrl(c.env, inst.cover_url, 'images'),
+   401→    }));
+   402→
+   403→    return c.json({ instructors: enrichedInstructors, total });
+   404→  } catch (error) {
+   405→    return c.json({ error: getErrorMessage(error) }, 500);
+   406→  }
+   407→});
+   408→
+   409→routes.get('/instructors/:id', async (c) => {
+   410→  try {
+   411→    const id = c.req.param('id');
+   412→    const instructor = await c.env.DB.prepare(
+   413→      'SELECT * FROM instructors WHERE id = ? AND is_active = 1'
+   414→    ).bind(id).first();
+   415→
+   416→    if (!instructor) {
+   417→      return c.json({ error: 'Instructor not found' }, 404);
+   418→    }
+   419→
+   420→    const inst = instructor as any;
+   421→
+   422→    // Compute totalCourses from courses table (both as owner and via course_instructors junction)
+   423→    let totalCourses = 0;
+   424→    try {
+   425→      const courseCount = await c.env.DB.prepare(`
+   426→        SELECT COUNT(DISTINCT c.id) as total 
+   427→        FROM courses c 
+   428→        LEFT JOIN course_instructors ci ON c.id = ci.course_id AND ci.instructor_id = ?
+   429→        WHERE (c.instructor_id = ? OR ci.instructor_id = ?) AND c.is_published = 1
+   430→      `).bind(id, id, id).first<{ total: number }>();
+   431→      totalCourses = courseCount?.total || 0;
+   432→    } catch {}
+   433→
+   434→    // Compute totalStudents from enrollments for this instructor's courses
+   435→    let totalStudents = 0;
+   436→    try {
+   437→      const studentCount = await c.env.DB.prepare(`
+   438→        SELECT COUNT(DISTINCT e.user_id) as total
+   439→        FROM enrollments e
+   440→        JOIN courses c ON e.course_id = c.id
+   441→        WHERE c.instructor_id = ?
+   442→      `).bind(id).first<{ total: number }>();
+   443→      totalStudents = studentCount?.total || 0;
+   444→    } catch {}
+   445→
+   446→    // Compute rating from course_ratings or default to instructor's rating
+   447→    const rating = inst.rating || 0;
+   448→
+   449→    // Get cover URL
+   450→    const coverUrl = toPublicUrl(c.env, inst.cover_url || inst.coverUrl, 'images');
+   451→    const avatarUrl = toPublicUrl(c.env, inst.avatar_url || inst.avatarUrl, 'images');
+   452→
+   453→    return c.json({
+   454→      instructor: {
+   455→        ...inst,
+   456→        totalCourses,
+   457→        totalStudents,
+   458→        rating,
+   459→        coverUrl,
+   460→        avatarUrl,
+   461→      }
+   462→    });
+   463→  } catch (error) {
+   464→    return c.json({ error: getErrorMessage(error) }, 500);
+   465→  }
+   466→});
+   467→
+   468→// GET /instructors/:id/courses — List courses by instructor
+   469→routes.get('/instructors/:id/courses', async (c) => {
+   470→  try {
+   471→    const instructorId = c.req.param('id');
+   472→    const limit = parseInt(c.req.query('limit') || '20');
+   473→    const offset = parseInt(c.req.query('offset') || '0');
+   474→
+   475→    // Verify instructor exists and is active
+   476→    const instructor = await c.env.DB.prepare(
+   477→      'SELECT id FROM instructors WHERE id = ? AND is_active = 1'
+   478→    ).bind(instructorId).first();
+   479→
+   480→    if (!instructor) {
+   481→      return c.json({ error: 'Instructor not found' }, 404);
+   482→    }
+   483→
+   484→    // Get courses where instructor is either owner or assigned via course_instructors
+   485→    const result = await c.env.DB.prepare(`
+   486→      SELECT DISTINCT c.* FROM courses c
+   487→      LEFT JOIN course_instructors ci ON c.id = ci.course_id AND ci.instructor_id = ?
+   488→      WHERE (c.instructor_id = ? OR ci.instructor_id = ?) AND c.is_published = 1
+   489→      ORDER BY c.created_at DESC LIMIT ? OFFSET ?
+   490→    `).bind(instructorId, instructorId, instructorId, limit, offset).all();
+   491→
+   492→    const countResult = await c.env.DB.prepare(`
+   493→      SELECT COUNT(DISTINCT c.id) as total FROM courses c
+   494→      LEFT JOIN course_instructors ci ON c.id = ci.course_id AND ci.instructor_id = ?
+   495→      WHERE (c.instructor_id = ? OR ci.instructor_id = ?) AND c.is_published = 1
+   496→    `).bind(instructorId, instructorId, instructorId).first();
+   497→    const total = (countResult as any)?.total || 0;
+   498→
+   499→    return c.json({ courses: result.results, total });
+   500→  } catch (error) {
+   501→    return c.json({ error: getErrorMessage(error) }, 500);
+   502→  }
+   503→});
+   504→
+   505→// ─── Exam Tips ───
+   506→
+   507→// GET /exam-tips — Get exam tips from app_config (admin-editable)
+   508→routes.get('/exam-tips', async (c) => {
+   509→  try {
+   510→    // Try KV cache first
+   511→    const cached = await c.env.KV_CONFIG.get('exam_tips', 'json');
+   512→    if (cached) {
+   513→      return c.json({ tips: cached });
+   514→    }
+   515→
+   516→    // Try D1 app_config table
+   517→    const row = await c.env.DB.prepare(
+   518→      "SELECT value FROM app_config WHERE key = 'exam_tips'"
+   519→    ).first<{ value: string }>();
+   520→
+   521→    if (row?.value) {
+   522→      try {
+   523→        const tips = JSON.parse(row.value);
+   524→        // Cache in KV for 5 minutes
+   525→        await c.env.KV_CONFIG.put('exam_tips', row.value, { expirationTtl: 300 });
+   526→        return c.json({ tips });
+   527→      } catch {
+   528→        // Invalid JSON, fall through to defaults
+   529→      }
+   530→    }
+   531→
+   532→    // Return default tips if none configured
+   533→    const defaultTips = {
+   534→      strategies: [
+   535→        { title: 'Active Recall Method', description: 'Instead of re-reading notes, close your book and try to recall the key concepts from memory. This strengthens neural connections and improves long-term retention.', tip: 'Try this: After each chapter, write down everything you remember without looking. Then check what you missed.' },
+   536→        { title: 'Spaced Repetition', description: 'Review material at increasing intervals (1 day, 3 days, 7 days, 14 days). This technique leverages the spacing effect for optimal memory retention.', tip: 'Use DAKKHO\'s built-in review reminders to schedule your spaced repetition sessions automatically.' },
+   537→        { title: 'Pomodoro Technique', description: 'Study in focused 25-minute blocks followed by 5-minute breaks. After 4 blocks, take a longer 15-30 minute break. This maintains concentration and prevents burnout.', tip: 'Set a timer on your phone. During the 25 minutes, eliminate all distractions — no phone, no social media.' },
+   538→        { title: 'Feynman Technique', description: 'Explain the concept in simple terms as if teaching someone else. If you can\'t explain it simply, you don\'t understand it well enough.', tip: 'Try recording yourself explaining a topic. Listen back and notice where you hesitate or get confused.' },
+   539→        { title: 'Practice Testing', description: 'Take practice exams under realistic conditions. This not only tests your knowledge but also reduces exam anxiety by making the actual exam feel familiar.', tip: 'Use DAKKHO\'s Practice Mode with timed sessions. Aim to complete practice tests faster than the actual time limit.' },
+   540→      ],
+   541→      timeManagement: [
+   542→        { title: 'Create a Study Schedule', desc: 'Plan your study sessions at least 2 weeks before the exam. Allocate more time to difficult subjects.', priority: 'High' },
+   543→        { title: 'Use the 80/20 Rule', desc: 'Focus 80% of your time on the 20% of topics most likely to appear on the exam. Analyze past papers to identify patterns.', priority: 'High' },
+   544→        { title: 'Set Daily Goals', desc: 'Break down your syllabus into daily chunks. Complete each day\'s target before moving on.', priority: 'Medium' },
+   545→        { title: 'Prioritize Weak Areas', desc: 'Start study sessions with your weakest topics when your mind is fresh.', priority: 'High' },
+   546→        { title: 'Review Before Sleep', desc: 'Study the most important material right before going to sleep. Your brain consolidates memories during sleep.', priority: 'Low' },
+   547→      ],
+   548→      commonMistakes: [
+   549→        { mistake: 'Cramming the night before', consequence: 'Information overload leads to confusion and anxiety.', fix: 'Start early and review regularly using spaced repetition.' },
+   550→        { mistake: 'Skipping practice problems', consequence: 'You may struggle to apply concepts under time pressure.', fix: 'Solve at least 10 practice problems for each topic.' },
+   551→        { mistake: 'Not reading questions carefully', consequence: 'Misunderstanding a question can cost you marks.', fix: 'Read each question twice. Underline key terms.' },
+   552→        { mistake: 'Not managing exam time', consequence: 'Spending too long on difficult questions means easier ones go unanswered.', fix: 'Allocate time per question. Skip difficult ones and return later.' },
+   553→      ],
+   554→      wellness: [
+   555→        { title: 'Sleep Well', desc: 'Aim for 7-8 hours of quality sleep. Avoid screens 30 minutes before bed.', time: 'Night' },
+   556→        { title: 'Stay Hydrated', desc: 'Drink at least 8 glasses of water daily. Dehydration impairs concentration by up to 30%.', time: 'All Day' },
+   557→        { title: 'Take Regular Breaks', desc: 'Follow the 50/10 rule: 50 minutes of study, 10 minutes of break.', time: 'Study Time' },
+   558→        { title: 'Practice Mindfulness', desc: '5 minutes of deep breathing or meditation before studying can significantly improve focus.', time: 'Before Study' },
+   559→      ],
+   560→    };
+   561→    return c.json({ tips: defaultTips });
+   562→  } catch (error) {
+   563→    return c.json({ tips: { strategies: [], timeManagement: [], commonMistakes: [], wellness: [] } });
+   564→  }
+   565→});
+   566→
+   567→// ─── AI-Powered Search ───
+   568→
+   569→interface SearchCourseResult {
+   570→  id: string;
+   571→  title: string;
+   572→  description: string | null;
+   573→  technology_id: string | null;
+   574→  instructor_id: string | null;
+   575→  level: string | null;
+   576→  thumbnail_url: string | null;
+   577→  tags: string | null;
+   578→}
+   579→
+   580→interface SearchInstructorResult {
+   581→  id: string;
+   582→  name: string;
+   583→  bio: string | null;
+   584→  specialization: string | null;
+   585→  avatar_url: string | null;
+   586→}
+   587→
+   588→interface SearchVideoResult {
+   589→  id: string;
+   590→  title: string;
+   591→  description: string | null;
+   592→  course_id: string | null;
+   593→  duration: number | null;
+   594→  sort_order: number | null;
+   595→  course_title: string | null;
+   596→}
+   597→
+   598→/**
+   599→ * Core search logic shared by GET /search and POST /ai-search.
+   600→ * Searches courses, instructors, and videos with case-insensitive LIKE matching.
+   601→ * If Workers AI binding is available, uses it to re-rank results by relevance.
+   602→ */
+   603→async function performSearch(c: any, query: string) {
+   604→  const searchTerm = `%${query}%`;
+   605→  const limit = 10;
+   606→
+   607→  // Run all three searches in parallel
+   608→  const [coursesResult, instructorsResult, videosResult] = await Promise.all([
+   609→    c.env.DB.prepare(
+   610→      `SELECT id, title, description, technology_id, instructor_id, level, thumbnail_url, tags
+   611→       FROM courses
+   612→       WHERE is_published = 1
+   613→         AND (title LIKE ? OR description LIKE ? OR tags LIKE ?)
+   614→       LIMIT ?`
+   615→    ).bind(searchTerm, searchTerm, searchTerm, limit).all() as { results: SearchCourseResult[] },
+   616→
+   617→    c.env.DB.prepare(
+   618→      `SELECT id, name, bio, specialization, avatar_url
+   619→       FROM instructors
+   620→       WHERE is_active = 1
+   621→         AND (name LIKE ? OR specialization LIKE ? OR bio LIKE ?)
+   622→       LIMIT ?`
+   623→    ).bind(searchTerm, searchTerm, searchTerm, limit).all() as { results: SearchInstructorResult[] },
+   624→
+   625→    c.env.DB.prepare(
+   626→      `SELECT v.id, v.title, v.description, v.course_id, v.duration, v.sort_order,
+   627→              c.title AS course_title
+   628→       FROM videos v
+   629→       LEFT JOIN courses c ON v.course_id = c.id
+   630→       WHERE c.is_published = 1
+   631→         AND (v.title LIKE ? OR v.description LIKE ?)
+   632→       LIMIT ?`
+   633→    ).bind(searchTerm, searchTerm, limit).all() as { results: SearchVideoResult[] },
+   634→  ]);
+   635→
+   636→  let courses = coursesResult.results;
+   637→  let instructors = instructorsResult.results;
+   638→  let videos = videosResult.results;
+   639→
+   640→  // If Workers AI binding is available, use it to re-rank results by relevance
+   641→  if (c.env.AI && (courses.length + instructors.length + videos.length) > 0) {
+   642→    try {
+   643→      const aiRanked = await aiReRank(c, query, courses, instructors, videos);
+   644→      courses = aiRanked.courses;
+   645→      instructors = aiRanked.instructors;
+   646→      videos = aiRanked.videos;
+   647→    } catch {
+   648→      // AI ranking failed — fall back to SQL order (already good enough)
+   649→    }
+   650→  }
+   651→
+   652→  return {
+   653→    query,
+   654→    courses,
+   655→    instructors,
+   656→    videos,
+   657→    total: courses.length + instructors.length + videos.length,
+   658→    aiEnhanced: !!c.env.AI,
+   659→  };
+   660→}
+   661→
+   662→/**
+   663→ * Use Workers AI to re-rank search results by semantic relevance.
+   664→ * Sends a prompt asking the model to score each result and returns sorted arrays.
+   665→ */
+   666→async function aiReRank(
+   667→  c: any,
+   668→  query: string,
+   669→  courses: SearchCourseResult[],
+   670→  instructors: SearchInstructorResult[],
+   671→  videos: SearchVideoResult[]
+   672→): Promise<{ courses: SearchCourseResult[]; instructors: SearchInstructorResult[]; videos: SearchVideoResult[] }> {
+   673→  const buildList = (items: { id: string; title?: string; name?: string; description?: string | null }[]) =>
+   674→    items.map((item, i) => `${i + 1}. [id:${item.id}] ${item.title || item.name} — ${(item.description || '').slice(0, 100)}`).join('\n');
+   675→
+   676→  const prompt = `You are a search relevance ranker. Given the search query "${query}", assign a relevance score (0-100) to each result.
+   677→
+   678→COURSES:
+   679→${buildList(courses.map(c => ({ id: c.id, title: c.title, description: c.description })))}
+   680→
+   681→INSTRUCTORS:
+   682→${buildList(instructors.map(i => ({ id: i.id, name: i.name, description: i.specialization || i.bio })))}
+   683→
+   684→VIDEOS:
+   685→${buildList(videos.map(v => ({ id: v.id, title: v.title, description: v.description })))}
+   686→
+   687→Respond ONLY with a JSON object like:
+   688→{"courses":[{"id":"...","score":90}],"instructors":[{"id":"...","score":80}],"videos":[{"id":"...","score":70}]}`;
+   689→
+   690→  const aiResponse = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
+   691→    messages: [{ role: 'user', content: prompt }],
+   692→    max_tokens: 512,
+   693→  });
+   694→
+   695→  const text = (aiResponse as any)?.response || '';
+   696→  // Extract JSON from the response (may be wrapped in markdown code blocks)
+   697→  const jsonMatch = text.match(/\{[\s\S]*\}/);
+   698→  if (!jsonMatch) throw new Error('AI did not return valid JSON');
+   699→
+   700→  const scores = JSON.parse(jsonMatch[0]);
+   701→
+   702→  const sortByScore = <T extends { id: string }>(items: T[], scoreList: { id: string; score: number }[]): T[] => {
+   703→    const scoreMap = new Map(scoreList.map(s => [s.id, s.score]));
+   704→    return [...items].sort((a, b) => (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0));
+   705→  };
+   706→
+   707→  return {
+   708→    courses: scores.courses ? sortByScore(courses, scores.courses) : courses,
+   709→    instructors: scores.instructors ? sortByScore(instructors, scores.instructors) : instructors,
+   710→    videos: scores.videos ? sortByScore(videos, scores.videos) : videos,
+   711→  };
+   712→}
+   713→
+   714→// POST /ai-search — AI-enhanced search (body: { "query": "search term" })
+   715→routes.post('/ai-search', async (c) => {
+   716→  try {
+   717→    const body = await c.req.json<{ query?: string }>();
+   718→    const query = (body.query || '').trim();
+   719→
+   720→    if (!query) {
+   721→      return c.json({ error: 'Search query is required. Send { "query": "search term" }' }, 400);
+   722→    }
+   723→
+   724→    const results = await performSearch(c, query);
+   725→    return c.json(results);
+   726→  } catch (error) {
+   727→    return c.json({ error: getErrorMessage(error) }, 500);
+   728→  }
+   729→});
+   730→
+   731→// GET /search?q=term — Convenience GET endpoint for search
+   732→routes.get('/search', async (c) => {
+   733→  try {
+   734→    const query = (c.req.query('q') || '').trim();
+   735→
+   736→    if (!query) {
+   737→      return c.json({ error: 'Search query is required. Use ?q=search+term' }, 400);
+   738→    }
+   739→
+   740→    const results = await performSearch(c, query);
+   741→    return c.json(results);
+   742→  } catch (error) {
+   743→    return c.json({ error: getErrorMessage(error) }, 500);
+   744→  }
+   745→});
+   746→
+   747→export default routes;
+   748→

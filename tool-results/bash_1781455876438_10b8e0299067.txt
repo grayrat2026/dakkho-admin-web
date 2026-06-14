@@ -1,0 +1,519 @@
+rm 'tool-results/bash_1781282326287_6e817922c123.txt'
+rm 'tool-results/bash_1781333575995_0b24d39a7511.txt'
+rm 'tool-results/bash_1781334450421_8ae4e7d4d8bc.txt'
+rm 'tool-results/bash_1781354994685_95725eba6da7.txt'
+rm 'tool-results/bash_1781359313061_fb64c6fe6b05.txt'
+rm 'tool-results/bash_1781364017157_191ed6a90473.txt'
+rm 'tool-results/grep_1781324623293_84ffe72646e8.txt'
+rm 'tool-results/grep_1781324623855_c487d0f4bb9d.txt'
+rm 'tool-results/grep_1781344572388_246e6e5363f7.txt'
+rm 'tool-results/grep_1781350395674_e9092981bb26.txt'
+rm 'tool-results/grep_1781350396326_455d4d8e2135.txt'
+rm 'tool-results/grep_1781362187160_bf8a901e353c.txt'
+rm 'tool-results/grep_1781452184308_21d46528076d.txt'
+rm 'tool-results/grep_1781454583534_42800c69e7d0.txt'
+rm 'tool-results/read_1781259071629_83efe7f76e9d.txt'
+rm 'tool-results/read_1781259191413_83efe7f76e9d.txt'
+rm 'tool-results/read_1781259196041_2cb5a807c776.txt'
+rm 'tool-results/read_1781261810272_83efe7f76e9d.txt'
+rm 'tool-results/read_1781262424325_83efe7f76e9d.txt'
+rm 'tool-results/read_1781264114049_65778602085b.txt'
+rm 'tool-results/read_1781264122550_a31188d43830.txt'
+rm 'tool-results/read_1781264124743_65778602085b.txt'
+rm 'tool-results/read_1781264139804_5d6a0f533628.txt'
+rm 'tool-results/read_1781264213568_65778602085b.txt'
+rm 'tool-results/read_1781266494595_a2edb15e5906.txt'
+rm 'tool-results/read_1781266534298_47a73de0fdb1.txt'
+rm 'tool-results/read_1781267173610_3a190aa18f2e.txt'
+rm 'tool-results/read_1781267180858_8330864c4930.txt'
+rm 'tool-results/read_1781267183943_3a190aa18f2e.txt'
+rm 'tool-results/read_1781267187105_85f98183190d.txt'
+rm 'tool-results/read_1781267191379_0f56a26d0f2d.txt'
+rm 'tool-results/read_1781270979854_bb6cb1ef8d65.txt'
+rm 'tool-results/read_1781270979936_10353f072b4a.txt'
+rm 'tool-results/read_1781270983650_84373c4541bf.txt'
+rm 'tool-results/read_1781270983703_41a0a70d298c.txt'
+rm 'tool-results/read_1781271174952_4e47ca4f2ff7.txt'
+rm 'tool-results/read_1781272046608_9cc77dc401f9.txt'
+rm 'tool-results/read_1781272046699_8fa703e37b3e.txt'
+rm 'tool-results/read_1781272049990_70a704bff4d4.txt'
+rm 'tool-results/read_1781272050041_71ec301215a1.txt'
+rm 'tool-results/read_1781272130585_9cc77dc401f9.txt'
+rm 'tool-results/read_1781272138090_70a704bff4d4.txt'
+rm 'tool-results/read_1781272140664_9cc77dc401f9.txt'
+rm 'tool-results/read_1781272174584_8fa703e37b3e.txt'
+rm 'tool-results/read_1781272361228_ccf23c2aa8db.txt'
+rm 'tool-results/read_1781278367471_8fa703e37b3e.txt'
+rm 'tool-results/read_1781278370054_8ea3097b31e5.txt'
+rm 'tool-results/read_1781278377430_71ec301215a1.txt'
+rm 'tool-results/read_1781278377971_26cd3d566866.txt'
+rm 'tool-results/read_1781278566292_8fa703e37b3e.txt'
+rm 'tool-results/read_1781278570128_71ec301215a1.txt'
+rm 'tool-results/read_1781278570698_8ea3097b31e5.txt'
+rm 'tool-results/read_1781278575321_26cd3d566866.txt'
+rm 'tool-results/read_1781278575576_b3dff814a5b7.txt'
+rm 'tool-results/read_1781278582506_ccf23c2aa8db.txt'
+rm 'tool-results/read_1781278586472_706686a59d70.txt'
+rm 'tool-results/read_1781278589854_78e6affeea4b.txt'
+rm 'tool-results/read_1781280565510_a7eb4adf4c89.txt'
+rm 'tool-results/read_1781280575620_5139fe54f125.txt'
+rm 'tool-results/read_1781280582832_4d2ae75dc4a4.txt'
+rm 'tool-results/read_1781280623247_5d6a0f533628.txt'
+rm 'tool-results/read_1781280629975_94e625302f91.txt'
+rm 'tool-results/read_1781282599282_5d6a0f533628.txt'
+rm 'tool-results/read_1781282603456_eb8e596493e8.txt'
+rm 'tool-results/read_1781283770236_5916f04c6c6e.txt'
+rm 'tool-results/read_1781289802700_5916f04c6c6e.txt'
+rm 'tool-results/read_1781289896084_9f0239edc3f2.txt'
+rm 'tool-results/read_1781290501350_5916f04c6c6e.txt'
+rm 'tool-results/read_1781290505716_9f0239edc3f2.txt'
+rm 'tool-results/read_1781290508832_5916f04c6c6e.txt'
+rm 'tool-results/read_1781290979486_fec0d5e70b47.txt'
+rm 'tool-results/read_1781290980262_5916f04c6c6e.txt'
+rm 'tool-results/read_1781290984102_30adbeaa8fe0.txt'
+rm 'tool-results/read_1781290984613_9f0239edc3f2.txt'
+rm 'tool-results/read_1781290986904_fec0d5e70b47.txt'
+rm 'tool-results/read_1781290996821_5916f04c6c6e.txt'
+rm 'tool-results/read_1781292685613_8ea3097b31e5.txt'
+rm 'tool-results/read_1781295332089_24af19d76d8d.txt'
+rm 'tool-results/read_1781295332347_9a380562e87b.txt'
+rm 'tool-results/read_1781295342299_eb8e596493e8.txt'
+rm 'tool-results/read_1781296025228_f8814a9e0803.txt'
+rm 'tool-results/read_1781296029896_419789a37823.txt'
+rm 'tool-results/read_1781297924457_b80b9207f52c.txt'
+rm 'tool-results/read_1781297931685_f8814a9e0803.txt'
+rm 'tool-results/read_1781299120845_c67d0ac29aed.txt'
+rm 'tool-results/read_1781299127273_eb55c03c1738.txt'
+rm 'tool-results/read_1781300495254_eb8e596493e8.txt'
+rm 'tool-results/read_1781300496153_d71af7bef56f.txt'
+rm 'tool-results/read_1781300496919_0e39eace74ac.txt'
+rm 'tool-results/read_1781300499564_f8814a9e0803.txt'
+rm 'tool-results/read_1781300500631_e51015a568fc.txt'
+rm 'tool-results/read_1781300500888_222f485505d0.txt'
+rm 'tool-results/read_1781300501142_a06b07f856b3.txt'
+rm 'tool-results/read_1781300511168_c67d0ac29aed.txt'
+rm 'tool-results/read_1781300515731_eb55c03c1738.txt'
+rm 'tool-results/read_1781301049998_952204a9f483.txt'
+rm 'tool-results/read_1781301050759_f8814a9e0803.txt'
+rm 'tool-results/read_1781301054233_419789a37823.txt'
+rm 'tool-results/read_1781324637059_be6fbe560859.txt'
+rm 'tool-results/read_1781324847894_9a380562e87b.txt'
+rm 'tool-results/read_1781324979918_bdea308a422d.txt'
+rm 'tool-results/read_1781325794768_f8814a9e0803.txt'
+rm 'tool-results/read_1781325802688_419789a37823.txt'
+rm 'tool-results/read_1781325803464_ee50747a9713.txt'
+rm 'tool-results/read_1781325807975_5916f04c6c6e.txt'
+rm 'tool-results/read_1781325810048_952204a9f483.txt'
+rm 'tool-results/read_1781325810825_61eea133bbee.txt'
+rm 'tool-results/read_1781325825205_8ea3097b31e5.txt'
+rm 'tool-results/read_1781325825431_be757902167e.txt'
+rm 'tool-results/read_1781325826568_3a190aa18f2e.txt'
+rm 'tool-results/read_1781325847716_0f6100bfab43.txt'
+rm 'tool-results/read_1781326531604_bdea308a422d.txt'
+rm 'tool-results/read_1781326533298_6f26316fa3bb.txt'
+rm 'tool-results/read_1781326534623_a6630b41c33d.txt'
+rm 'tool-results/read_1781326536297_21f2afb2077b.txt'
+rm 'tool-results/read_1781326548375_ee50747a9713.txt'
+rm 'tool-results/read_1781326558449_5916f04c6c6e.txt'
+rm 'tool-results/read_1781326563570_952204a9f483.txt'
+rm 'tool-results/read_1781326567213_8ea3097b31e5.txt'
+rm 'tool-results/read_1781326576557_3a190aa18f2e.txt'
+rm 'tool-results/read_1781326577230_61eea133bbee.txt'
+rm 'tool-results/read_1781326577681_2e76160e0a36.txt'
+rm 'tool-results/read_1781326591624_f8814a9e0803.txt'
+rm 'tool-results/read_1781330456129_3d9a359ef48f.txt'
+rm 'tool-results/read_1781330456919_03f0f61bdec9.txt'
+rm 'tool-results/read_1781330457450_b539881882e9.txt'
+rm 'tool-results/read_1781330466328_6535219d29a7.txt'
+rm 'tool-results/read_1781330484576_3a190aa18f2e.txt'
+rm 'tool-results/read_1781334454744_48f27a8e82b1.txt'
+rm 'tool-results/read_1781337521235_4e08183d12c8.txt'
+rm 'tool-results/read_1781337522084_932f72722fd7.txt'
+rm 'tool-results/read_1781337522341_e5b757dd6e15.txt'
+rm 'tool-results/read_1781337523122_c63ab9534139.txt'
+rm 'tool-results/read_1781337531521_5db52a3502f9.txt'
+rm 'tool-results/read_1781337531978_907b6685f62d.txt'
+rm 'tool-results/read_1781337532878_38744f9141c1.txt'
+rm 'tool-results/read_1781337533336_d5472bb84470.txt'
+rm 'tool-results/read_1781337533565_3d9a359ef48f.txt'
+rm 'tool-results/read_1781337538988_551eb1e448c1.txt'
+rm 'tool-results/read_1781341908899_eb8e596493e8.txt'
+rm 'tool-results/read_1781341910357_03f0f61bdec9.txt'
+rm 'tool-results/read_1781341914679_171fe66f05e0.txt'
+rm 'tool-results/read_1781341914936_932f72722fd7.txt'
+rm 'tool-results/read_1781341917643_e51015a568fc.txt'
+rm 'tool-results/read_1781341918095_5bbf03f622d0.txt'
+rm 'tool-results/read_1781341921112_38744f9141c1.txt'
+rm 'tool-results/read_1781341923421_1fbf090c4899.txt'
+rm 'tool-results/read_1781341933592_7a81ad6be68c.txt'
+rm 'tool-results/read_1781341937107_0442bc34f742.txt'
+rm 'tool-results/read_1781342064755_03f0f61bdec9.txt'
+rm 'tool-results/read_1781343745629_9a7f427a6544.txt'
+rm 'tool-results/read_1781343755166_fc6abfd471ad.txt'
+rm 'tool-results/read_1781343759322_9a7f427a6544.txt'
+rm 'tool-results/read_1781343773808_8b9f832afa2e.txt'
+rm 'tool-results/read_1781344210131_fcf2403e0a22.txt'
+rm 'tool-results/read_1781346158827_9a7f427a6544.txt'
+rm 'tool-results/read_1781346383448_0270ca5d7587.txt'
+rm 'tool-results/read_1781347845391_120b884e06bf.txt'
+rm 'tool-results/read_1781347846674_be757902167e.txt'
+rm 'tool-results/read_1781347846972_952204a9f483.txt'
+rm 'tool-results/read_1781347855766_5bbf03f622d0.txt'
+rm 'tool-results/read_1781348135785_434ad53cce73.txt'
+rm 'tool-results/read_1781350399803_aed20b3ead04.txt'
+rm 'tool-results/read_1781350400298_261d336fc9e1.txt'
+rm 'tool-results/read_1781350405144_eb8e596493e8.txt'
+rm 'tool-results/read_1781350406775_bb3f5c86c80b.txt'
+rm 'tool-results/read_1781350407031_d802c916666f.txt'
+rm 'tool-results/read_1781350407513_9a7f427a6544.txt'
+rm 'tool-results/read_1781350410448_c409ff995c46.txt'
+rm 'tool-results/read_1781350413553_aed20b3ead04.txt'
+rm 'tool-results/read_1781350414781_c67d0ac29aed.txt'
+rm 'tool-results/read_1781350432124_eb8e596493e8.txt'
+rm 'tool-results/read_1781350432607_7e7e7fc06759.txt'
+rm 'tool-results/read_1781350616103_d802c916666f.txt'
+rm 'tool-results/read_1781350620094_e2079308cdb9.txt'
+rm 'tool-results/read_1781351456476_eb8e596493e8.txt'
+rm 'tool-results/read_1781351461170_64a0b9821f22.txt'
+rm 'tool-results/read_1781352134240_ccd931e15cab.txt'
+rm 'tool-results/read_1781352343184_c409ff995c46.txt'
+rm 'tool-results/read_1781353778086_c26160e4d97e.txt'
+rm 'tool-results/read_1781353778748_aed20b3ead04.txt'
+rm 'tool-results/read_1781354684285_aed20b3ead04.txt'
+rm 'tool-results/read_1781357105890_b99e17d670c7.txt'
+rm 'tool-results/read_1781357106974_aed20b3ead04.txt'
+rm 'tool-results/read_1781357115271_53c36c65a569.txt'
+rm 'tool-results/read_1781357147601_f21bf2ea0ff1.txt'
+rm 'tool-results/read_1781357213932_aed20b3ead04.txt'
+rm 'tool-results/read_1781359133878_74be90ed8e8a.txt'
+rm 'tool-results/read_1781359134560_dd2fc6d617dd.txt'
+rm 'tool-results/read_1781359135469_fb36eccc4622.txt'
+rm 'tool-results/read_1781359143290_8022bac90c5c.txt'
+rm 'tool-results/read_1781359146248_6b8621a0a35f.txt'
+rm 'tool-results/read_1781359148079_3b62ef55dca0.txt'
+rm 'tool-results/read_1781359148601_4f6477076e65.txt'
+rm 'tool-results/read_1781359148870_32a0f69d59d9.txt'
+rm 'tool-results/read_1781359149136_2e76160e0a36.txt'
+rm 'tool-results/read_1781359156683_54840cab0c42.txt'
+rm 'tool-results/read_1781359156948_53c36c65a569.txt'
+rm 'tool-results/read_1781359191801_3f56ac31b88e.txt'
+rm 'tool-results/read_1781359192054_6b8621a0a35f.txt'
+rm 'tool-results/read_1781359315558_cda062da2edc.txt'
+rm 'tool-results/read_1781359777611_a92acf50f252.txt'
+rm 'tool-results/read_1781359781583_9a7f427a6544.txt'
+rm 'tool-results/read_1781359983671_a92acf50f252.txt'
+rm 'tool-results/read_1781359988214_9a7f427a6544.txt'
+rm 'tool-results/read_1781359988468_f249564fd924.txt'
+rm 'tool-results/read_1781359993304_fc6abfd471ad.txt'
+rm 'tool-results/read_1781361081062_a92acf50f252.txt'
+rm 'tool-results/read_1781361107941_932f72722fd7.txt'
+rm 'tool-results/read_1781362435744_74be90ed8e8a.txt'
+rm 'tool-results/read_1781362459417_dd2fc6d617dd.txt'
+rm 'tool-results/read_1781362460714_54840cab0c42.txt'
+rm 'tool-results/read_1781362461443_53c36c65a569.txt'
+rm 'tool-results/read_1781362465878_7e7e7fc06759.txt'
+rm 'tool-results/read_1781364026588_b539881882e9.txt'
+rm 'tool-results/read_1781364026853_a92acf50f252.txt'
+rm 'tool-results/read_1781364027121_3d9a359ef48f.txt'
+rm 'tool-results/read_1781364035495_5b05888cec78.txt'
+rm 'tool-results/read_1781364123116_a92acf50f252.txt'
+rm 'tool-results/read_1781364123429_be757902167e.txt'
+rm 'tool-results/read_1781364123739_3d9a359ef48f.txt'
+rm 'tool-results/read_1781364128812_5b05888cec78.txt'
+rm 'tool-results/read_1781364142742_b46cabcf01e8.txt'
+rm 'tool-results/read_1781364145761_c2f22def253a.txt'
+rm 'tool-results/read_1781364149579_e68db447fe65.txt'
+rm 'tool-results/read_1781365018554_be757902167e.txt'
+rm 'tool-results/read_1781365025797_34f07036df13.txt'
+rm 'tool-results/read_1781368694593_434ad53cce73.txt'
+rm 'tool-results/read_1781368701957_8579b9a48144.txt'
+rm 'tool-results/read_1781368705733_2e76160e0a36.txt'
+rm 'tool-results/read_1781368809317_2e76160e0a36.txt'
+rm 'tool-results/read_1781368810183_8579b9a48144.txt'
+rm 'tool-results/read_1781368817357_7d76f96d2816.txt'
+rm 'tool-results/read_1781446230624_74be90ed8e8a.txt'
+rm 'tool-results/read_1781446241059_8022bac90c5c.txt'
+rm 'tool-results/read_1781446332247_c26160e4d97e.txt'
+rm 'tool-results/read_1781447955650_93d4871f2015.txt'
+rm 'tool-results/read_1781453684294_c58b22a1777f.txt'
+rm 'tool-results/read_1781453749832_c58b22a1777f.txt'
+rm 'tool-results/read_1781453753155_8d0fa7277e05.txt'
+---
+On branch main
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	modified:   ../src/app/api/admin/analytics/route.ts
+	modified:   ../src/app/api/admin/auth/check/route.ts
+	modified:   ../src/app/api/admin/auth/route.ts
+	modified:   ../src/app/api/admin/categories/route.ts
+	modified:   ../src/app/api/admin/config/route.ts
+	modified:   ../src/app/api/admin/courses/route.ts
+	modified:   ../src/app/api/admin/exam-tips/route.ts
+	modified:   ../src/app/api/admin/institutes/route.ts
+	modified:   ../src/app/api/admin/instructors/route.ts
+	modified:   ../src/app/api/admin/notifications/route.ts
+	modified:   ../src/app/api/admin/system/api-key/route.ts
+	modified:   ../src/app/api/admin/system/status/route.ts
+	modified:   ../src/app/api/admin/users/route.ts
+	modified:   ../src/app/api/admin/videos/route.ts
+	deleted:    ../src/app/api/route.ts
+	modified:   ../src/components/admin/exam-tips-panel.tsx
+	new file:   public/cursors/cursor-dark.svg
+	new file:   public/cursors/cursor-light.svg
+	new file:   public/cursors/pointer-dark.svg
+	new file:   public/cursors/pointer-light.svg
+	modified:   src/app/globals.css
+	modified:   src/components/dakkho/home/TrendingCourses.tsx
+	modified:   src/components/dakkho/shared/CourseCardGrid.tsx
+	deleted:    ../tool-results/bash_1781282326287_6e817922c123.txt
+	deleted:    ../tool-results/bash_1781333575995_0b24d39a7511.txt
+	deleted:    ../tool-results/bash_1781334450421_8ae4e7d4d8bc.txt
+	deleted:    ../tool-results/bash_1781354994685_95725eba6da7.txt
+	deleted:    ../tool-results/bash_1781359313061_fb64c6fe6b05.txt
+	deleted:    ../tool-results/bash_1781364017157_191ed6a90473.txt
+	deleted:    ../tool-results/grep_1781324623293_84ffe72646e8.txt
+	deleted:    ../tool-results/grep_1781324623855_c487d0f4bb9d.txt
+	deleted:    ../tool-results/grep_1781344572388_246e6e5363f7.txt
+	deleted:    ../tool-results/grep_1781350395674_e9092981bb26.txt
+	deleted:    ../tool-results/grep_1781350396326_455d4d8e2135.txt
+	deleted:    ../tool-results/grep_1781362187160_bf8a901e353c.txt
+	deleted:    ../tool-results/grep_1781452184308_21d46528076d.txt
+	deleted:    ../tool-results/grep_1781454583534_42800c69e7d0.txt
+	deleted:    ../tool-results/read_1781259071629_83efe7f76e9d.txt
+	deleted:    ../tool-results/read_1781259191413_83efe7f76e9d.txt
+	deleted:    ../tool-results/read_1781259196041_2cb5a807c776.txt
+	deleted:    ../tool-results/read_1781261810272_83efe7f76e9d.txt
+	deleted:    ../tool-results/read_1781262424325_83efe7f76e9d.txt
+	deleted:    ../tool-results/read_1781264114049_65778602085b.txt
+	deleted:    ../tool-results/read_1781264122550_a31188d43830.txt
+	deleted:    ../tool-results/read_1781264124743_65778602085b.txt
+	deleted:    ../tool-results/read_1781264139804_5d6a0f533628.txt
+	deleted:    ../tool-results/read_1781264213568_65778602085b.txt
+	deleted:    ../tool-results/read_1781266494595_a2edb15e5906.txt
+	deleted:    ../tool-results/read_1781266534298_47a73de0fdb1.txt
+	deleted:    ../tool-results/read_1781267173610_3a190aa18f2e.txt
+	deleted:    ../tool-results/read_1781267180858_8330864c4930.txt
+	deleted:    ../tool-results/read_1781267183943_3a190aa18f2e.txt
+	deleted:    ../tool-results/read_1781267187105_85f98183190d.txt
+	deleted:    ../tool-results/read_1781267191379_0f56a26d0f2d.txt
+	deleted:    ../tool-results/read_1781270979854_bb6cb1ef8d65.txt
+	deleted:    ../tool-results/read_1781270979936_10353f072b4a.txt
+	deleted:    ../tool-results/read_1781270983650_84373c4541bf.txt
+	deleted:    ../tool-results/read_1781270983703_41a0a70d298c.txt
+	deleted:    ../tool-results/read_1781271174952_4e47ca4f2ff7.txt
+	deleted:    ../tool-results/read_1781272046608_9cc77dc401f9.txt
+	deleted:    ../tool-results/read_1781272046699_8fa703e37b3e.txt
+	deleted:    ../tool-results/read_1781272049990_70a704bff4d4.txt
+	deleted:    ../tool-results/read_1781272050041_71ec301215a1.txt
+	deleted:    ../tool-results/read_1781272130585_9cc77dc401f9.txt
+	deleted:    ../tool-results/read_1781272138090_70a704bff4d4.txt
+	deleted:    ../tool-results/read_1781272140664_9cc77dc401f9.txt
+	deleted:    ../tool-results/read_1781272174584_8fa703e37b3e.txt
+	deleted:    ../tool-results/read_1781272361228_ccf23c2aa8db.txt
+	deleted:    ../tool-results/read_1781278367471_8fa703e37b3e.txt
+	deleted:    ../tool-results/read_1781278370054_8ea3097b31e5.txt
+	deleted:    ../tool-results/read_1781278377430_71ec301215a1.txt
+	deleted:    ../tool-results/read_1781278377971_26cd3d566866.txt
+	deleted:    ../tool-results/read_1781278566292_8fa703e37b3e.txt
+	deleted:    ../tool-results/read_1781278570128_71ec301215a1.txt
+	deleted:    ../tool-results/read_1781278570698_8ea3097b31e5.txt
+	deleted:    ../tool-results/read_1781278575321_26cd3d566866.txt
+	deleted:    ../tool-results/read_1781278575576_b3dff814a5b7.txt
+	deleted:    ../tool-results/read_1781278582506_ccf23c2aa8db.txt
+	deleted:    ../tool-results/read_1781278586472_706686a59d70.txt
+	deleted:    ../tool-results/read_1781278589854_78e6affeea4b.txt
+	deleted:    ../tool-results/read_1781280565510_a7eb4adf4c89.txt
+	deleted:    ../tool-results/read_1781280575620_5139fe54f125.txt
+	deleted:    ../tool-results/read_1781280582832_4d2ae75dc4a4.txt
+	deleted:    ../tool-results/read_1781280623247_5d6a0f533628.txt
+	deleted:    ../tool-results/read_1781280629975_94e625302f91.txt
+	deleted:    ../tool-results/read_1781282599282_5d6a0f533628.txt
+	deleted:    ../tool-results/read_1781282603456_eb8e596493e8.txt
+	deleted:    ../tool-results/read_1781283770236_5916f04c6c6e.txt
+	deleted:    ../tool-results/read_1781289802700_5916f04c6c6e.txt
+	deleted:    ../tool-results/read_1781289896084_9f0239edc3f2.txt
+	deleted:    ../tool-results/read_1781290501350_5916f04c6c6e.txt
+	deleted:    ../tool-results/read_1781290505716_9f0239edc3f2.txt
+	deleted:    ../tool-results/read_1781290508832_5916f04c6c6e.txt
+	deleted:    ../tool-results/read_1781290979486_fec0d5e70b47.txt
+	deleted:    ../tool-results/read_1781290980262_5916f04c6c6e.txt
+	deleted:    ../tool-results/read_1781290984102_30adbeaa8fe0.txt
+	deleted:    ../tool-results/read_1781290984613_9f0239edc3f2.txt
+	deleted:    ../tool-results/read_1781290986904_fec0d5e70b47.txt
+	deleted:    ../tool-results/read_1781290996821_5916f04c6c6e.txt
+	deleted:    ../tool-results/read_1781292685613_8ea3097b31e5.txt
+	deleted:    ../tool-results/read_1781295332089_24af19d76d8d.txt
+	deleted:    ../tool-results/read_1781295332347_9a380562e87b.txt
+	deleted:    ../tool-results/read_1781295342299_eb8e596493e8.txt
+	deleted:    ../tool-results/read_1781296025228_f8814a9e0803.txt
+	deleted:    ../tool-results/read_1781296029896_419789a37823.txt
+	deleted:    ../tool-results/read_1781297924457_b80b9207f52c.txt
+	deleted:    ../tool-results/read_1781297931685_f8814a9e0803.txt
+	deleted:    ../tool-results/read_1781299120845_c67d0ac29aed.txt
+	deleted:    ../tool-results/read_1781299127273_eb55c03c1738.txt
+	deleted:    ../tool-results/read_1781300495254_eb8e596493e8.txt
+	deleted:    ../tool-results/read_1781300496153_d71af7bef56f.txt
+	deleted:    ../tool-results/read_1781300496919_0e39eace74ac.txt
+	deleted:    ../tool-results/read_1781300499564_f8814a9e0803.txt
+	deleted:    ../tool-results/read_1781300500631_e51015a568fc.txt
+	deleted:    ../tool-results/read_1781300500888_222f485505d0.txt
+	deleted:    ../tool-results/read_1781300501142_a06b07f856b3.txt
+	deleted:    ../tool-results/read_1781300511168_c67d0ac29aed.txt
+	deleted:    ../tool-results/read_1781300515731_eb55c03c1738.txt
+	deleted:    ../tool-results/read_1781301049998_952204a9f483.txt
+	deleted:    ../tool-results/read_1781301050759_f8814a9e0803.txt
+	deleted:    ../tool-results/read_1781301054233_419789a37823.txt
+	deleted:    ../tool-results/read_1781324637059_be6fbe560859.txt
+	deleted:    ../tool-results/read_1781324847894_9a380562e87b.txt
+	deleted:    ../tool-results/read_1781324979918_bdea308a422d.txt
+	deleted:    ../tool-results/read_1781325794768_f8814a9e0803.txt
+	deleted:    ../tool-results/read_1781325802688_419789a37823.txt
+	deleted:    ../tool-results/read_1781325803464_ee50747a9713.txt
+	deleted:    ../tool-results/read_1781325807975_5916f04c6c6e.txt
+	deleted:    ../tool-results/read_1781325810048_952204a9f483.txt
+	deleted:    ../tool-results/read_1781325810825_61eea133bbee.txt
+	deleted:    ../tool-results/read_1781325825205_8ea3097b31e5.txt
+	deleted:    ../tool-results/read_1781325825431_be757902167e.txt
+	deleted:    ../tool-results/read_1781325826568_3a190aa18f2e.txt
+	deleted:    ../tool-results/read_1781325847716_0f6100bfab43.txt
+	deleted:    ../tool-results/read_1781326531604_bdea308a422d.txt
+	deleted:    ../tool-results/read_1781326533298_6f26316fa3bb.txt
+	deleted:    ../tool-results/read_1781326534623_a6630b41c33d.txt
+	deleted:    ../tool-results/read_1781326536297_21f2afb2077b.txt
+	deleted:    ../tool-results/read_1781326548375_ee50747a9713.txt
+	deleted:    ../tool-results/read_1781326558449_5916f04c6c6e.txt
+	deleted:    ../tool-results/read_1781326563570_952204a9f483.txt
+	deleted:    ../tool-results/read_1781326567213_8ea3097b31e5.txt
+	deleted:    ../tool-results/read_1781326576557_3a190aa18f2e.txt
+	deleted:    ../tool-results/read_1781326577230_61eea133bbee.txt
+	deleted:    ../tool-results/read_1781326577681_2e76160e0a36.txt
+	deleted:    ../tool-results/read_1781326591624_f8814a9e0803.txt
+	deleted:    ../tool-results/read_1781330456129_3d9a359ef48f.txt
+	deleted:    ../tool-results/read_1781330456919_03f0f61bdec9.txt
+	deleted:    ../tool-results/read_1781330457450_b539881882e9.txt
+	deleted:    ../tool-results/read_1781330466328_6535219d29a7.txt
+	deleted:    ../tool-results/read_1781330484576_3a190aa18f2e.txt
+	deleted:    ../tool-results/read_1781334454744_48f27a8e82b1.txt
+	deleted:    ../tool-results/read_1781337521235_4e08183d12c8.txt
+	deleted:    ../tool-results/read_1781337522084_932f72722fd7.txt
+	deleted:    ../tool-results/read_1781337522341_e5b757dd6e15.txt
+	deleted:    ../tool-results/read_1781337523122_c63ab9534139.txt
+	deleted:    ../tool-results/read_1781337531521_5db52a3502f9.txt
+	deleted:    ../tool-results/read_1781337531978_907b6685f62d.txt
+	deleted:    ../tool-results/read_1781337532878_38744f9141c1.txt
+	deleted:    ../tool-results/read_1781337533336_d5472bb84470.txt
+	deleted:    ../tool-results/read_1781337533565_3d9a359ef48f.txt
+	deleted:    ../tool-results/read_1781337538988_551eb1e448c1.txt
+	deleted:    ../tool-results/read_1781341908899_eb8e596493e8.txt
+	deleted:    ../tool-results/read_1781341910357_03f0f61bdec9.txt
+	deleted:    ../tool-results/read_1781341914679_171fe66f05e0.txt
+	deleted:    ../tool-results/read_1781341914936_932f72722fd7.txt
+	deleted:    ../tool-results/read_1781341917643_e51015a568fc.txt
+	deleted:    ../tool-results/read_1781341918095_5bbf03f622d0.txt
+	deleted:    ../tool-results/read_1781341921112_38744f9141c1.txt
+	deleted:    ../tool-results/read_1781341923421_1fbf090c4899.txt
+	deleted:    ../tool-results/read_1781341933592_7a81ad6be68c.txt
+	deleted:    ../tool-results/read_1781341937107_0442bc34f742.txt
+	deleted:    ../tool-results/read_1781342064755_03f0f61bdec9.txt
+	deleted:    ../tool-results/read_1781343745629_9a7f427a6544.txt
+	deleted:    ../tool-results/read_1781343755166_fc6abfd471ad.txt
+	deleted:    ../tool-results/read_1781343759322_9a7f427a6544.txt
+	deleted:    ../tool-results/read_1781343773808_8b9f832afa2e.txt
+	deleted:    ../tool-results/read_1781344210131_fcf2403e0a22.txt
+	deleted:    ../tool-results/read_1781346158827_9a7f427a6544.txt
+	deleted:    ../tool-results/read_1781346383448_0270ca5d7587.txt
+	deleted:    ../tool-results/read_1781347845391_120b884e06bf.txt
+	deleted:    ../tool-results/read_1781347846674_be757902167e.txt
+	deleted:    ../tool-results/read_1781347846972_952204a9f483.txt
+	deleted:    ../tool-results/read_1781347855766_5bbf03f622d0.txt
+	deleted:    ../tool-results/read_1781348135785_434ad53cce73.txt
+	deleted:    ../tool-results/read_1781350399803_aed20b3ead04.txt
+	deleted:    ../tool-results/read_1781350400298_261d336fc9e1.txt
+	deleted:    ../tool-results/read_1781350405144_eb8e596493e8.txt
+	deleted:    ../tool-results/read_1781350406775_bb3f5c86c80b.txt
+	deleted:    ../tool-results/read_1781350407031_d802c916666f.txt
+	deleted:    ../tool-results/read_1781350407513_9a7f427a6544.txt
+	deleted:    ../tool-results/read_1781350410448_c409ff995c46.txt
+	deleted:    ../tool-results/read_1781350413553_aed20b3ead04.txt
+	deleted:    ../tool-results/read_1781350414781_c67d0ac29aed.txt
+	deleted:    ../tool-results/read_1781350432124_eb8e596493e8.txt
+	deleted:    ../tool-results/read_1781350432607_7e7e7fc06759.txt
+	deleted:    ../tool-results/read_1781350616103_d802c916666f.txt
+	deleted:    ../tool-results/read_1781350620094_e2079308cdb9.txt
+	deleted:    ../tool-results/read_1781351456476_eb8e596493e8.txt
+	deleted:    ../tool-results/read_1781351461170_64a0b9821f22.txt
+	deleted:    ../tool-results/read_1781352134240_ccd931e15cab.txt
+	deleted:    ../tool-results/read_1781352343184_c409ff995c46.txt
+	deleted:    ../tool-results/read_1781353778086_c26160e4d97e.txt
+	deleted:    ../tool-results/read_1781353778748_aed20b3ead04.txt
+	deleted:    ../tool-results/read_1781354684285_aed20b3ead04.txt
+	deleted:    ../tool-results/read_1781357105890_b99e17d670c7.txt
+	deleted:    ../tool-results/read_1781357106974_aed20b3ead04.txt
+	deleted:    ../tool-results/read_1781357115271_53c36c65a569.txt
+	deleted:    ../tool-results/read_1781357147601_f21bf2ea0ff1.txt
+	deleted:    ../tool-results/read_1781357213932_aed20b3ead04.txt
+	deleted:    ../tool-results/read_1781359133878_74be90ed8e8a.txt
+	deleted:    ../tool-results/read_1781359134560_dd2fc6d617dd.txt
+	deleted:    ../tool-results/read_1781359135469_fb36eccc4622.txt
+	deleted:    ../tool-results/read_1781359143290_8022bac90c5c.txt
+	deleted:    ../tool-results/read_1781359146248_6b8621a0a35f.txt
+	deleted:    ../tool-results/read_1781359148079_3b62ef55dca0.txt
+	deleted:    ../tool-results/read_1781359148601_4f6477076e65.txt
+	deleted:    ../tool-results/read_1781359148870_32a0f69d59d9.txt
+	deleted:    ../tool-results/read_1781359149136_2e76160e0a36.txt
+	deleted:    ../tool-results/read_1781359156683_54840cab0c42.txt
+	deleted:    ../tool-results/read_1781359156948_53c36c65a569.txt
+	deleted:    ../tool-results/read_1781359191801_3f56ac31b88e.txt
+	deleted:    ../tool-results/read_1781359192054_6b8621a0a35f.txt
+	deleted:    ../tool-results/read_1781359315558_cda062da2edc.txt
+	deleted:    ../tool-results/read_1781359777611_a92acf50f252.txt
+	deleted:    ../tool-results/read_1781359781583_9a7f427a6544.txt
+	deleted:    ../tool-results/read_1781359983671_a92acf50f252.txt
+	deleted:    ../tool-results/read_1781359988214_9a7f427a6544.txt
+	deleted:    ../tool-results/read_1781359988468_f249564fd924.txt
+	deleted:    ../tool-results/read_1781359993304_fc6abfd471ad.txt
+	deleted:    ../tool-results/read_1781361081062_a92acf50f252.txt
+	deleted:    ../tool-results/read_1781361107941_932f72722fd7.txt
+	deleted:    ../tool-results/read_1781362435744_74be90ed8e8a.txt
+	deleted:    ../tool-results/read_1781362459417_dd2fc6d617dd.txt
+	deleted:    ../tool-results/read_1781362460714_54840cab0c42.txt
+	deleted:    ../tool-results/read_1781362461443_53c36c65a569.txt
+	deleted:    ../tool-results/read_1781362465878_7e7e7fc06759.txt
+	deleted:    ../tool-results/read_1781364026588_b539881882e9.txt
+	deleted:    ../tool-results/read_1781364026853_a92acf50f252.txt
+	deleted:    ../tool-results/read_1781364027121_3d9a359ef48f.txt
+	deleted:    ../tool-results/read_1781364035495_5b05888cec78.txt
+	deleted:    ../tool-results/read_1781364123116_a92acf50f252.txt
+	deleted:    ../tool-results/read_1781364123429_be757902167e.txt
+	deleted:    ../tool-results/read_1781364123739_3d9a359ef48f.txt
+	deleted:    ../tool-results/read_1781364128812_5b05888cec78.txt
+	deleted:    ../tool-results/read_1781364142742_b46cabcf01e8.txt
+	deleted:    ../tool-results/read_1781364145761_c2f22def253a.txt
+	deleted:    ../tool-results/read_1781364149579_e68db447fe65.txt
+	deleted:    ../tool-results/read_1781365018554_be757902167e.txt
+	deleted:    ../tool-results/read_1781365025797_34f07036df13.txt
+	deleted:    ../tool-results/read_1781368694593_434ad53cce73.txt
+	deleted:    ../tool-results/read_1781368701957_8579b9a48144.txt
+	deleted:    ../tool-results/read_1781368705733_2e76160e0a36.txt
+	deleted:    ../tool-results/read_1781368809317_2e76160e0a36.txt
+	deleted:    ../tool-results/read_1781368810183_8579b9a48144.txt
+	deleted:    ../tool-results/read_1781368817357_7d76f96d2816.txt
+	deleted:    ../tool-results/read_1781446230624_74be90ed8e8a.txt
+	deleted:    ../tool-results/read_1781446241059_8022bac90c5c.txt
+	deleted:    ../tool-results/read_1781446332247_c26160e4d97e.txt
+	deleted:    ../tool-results/read_1781447955650_93d4871f2015.txt
+	deleted:    ../tool-results/read_1781453684294_c58b22a1777f.txt
+	deleted:    ../tool-results/read_1781453749832_c58b22a1777f.txt
+	deleted:    ../tool-results/read_1781453753155_8d0fa7277e05.txt
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+  (commit or discard the untracked or modified content in submodules)
+	modified:   ../dakkho-admin-web-fresh (modified content)
+	modified:   ../dakkho-worker-fresh (modified content)
+	modified:   ../instructor-app (modified content)
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	../tool-results/
