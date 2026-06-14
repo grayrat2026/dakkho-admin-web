@@ -59,7 +59,8 @@ DAKKHO Student App is a mobile-first SPA built with Next.js 16 (static export) t
 
 ### Profile & Learning
 - Student profile with institute and technology info
-- Learning statistics dashboard (streak, total hours, courses)
+- Real-time learning statistics dashboard (hours watched, streak, courses enrolled)
+- AI-powered search across courses, instructors, and videos
 - Achievement system with unlockable badges
 - Certificate generation for completed courses
 
