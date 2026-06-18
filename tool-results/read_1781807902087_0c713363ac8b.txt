@@ -1,0 +1,823 @@
+     1→/**
+     2→ * Student Auth Routes
+     3→ * Signup, login, logout, me, verify-otp, forgot-password, reset-password, resend-otp, otp-cooldown
+     4→ */
+     5→
+     6→import { Hono } from 'hono';
+     7→import type { Env } from '../../env';
+     8→import {
+     9→  getStudentAuth,
+    10→  getStudentUserDoc,
+    11→  getInstituteName,
+    12→  getTechnologyName,
+    13→  generateOTP,
+    14→  sendPasswordResetEmail,
+    15→  checkDailyEmailRateLimit,
+    16→  getErrorMessage,
+    17→  hashPassword,
+    18→  verifyPassword,
+    19→  createStudentSession,
+    20→  deleteStudentSession,
+    21→  rateLimit,
+    22→  type StudentAuthVariables,
+    23→} from './helpers';
+    24→import { logError } from '../../lib/error-monitor';
+    25→import { verifyTOTP } from '../../lib/totp';
+    26→
+    27→const routes = new Hono<{ Bindings: Env; Variables: StudentAuthVariables }>();
+    28→
+    29→// POST /auth/signup — Create student account
+    30→routes.post('/auth/signup', async (c) => {
+    31→  try {
+    32→    // Rate limit: 3 registrations per 15 min
+    33→    const limited = await rateLimit(c, 'register');
+    34→    if (limited) return limited;
+    35→
+    36→    const { fullName, email, password, instituteId, technology } = await c.req.json();
+    37→
+    38→    if (!fullName || !email || !password) {
+    39→      return c.json({ error: 'fullName, email, and password are required' }, 400);
+    40→    }
+    41→
+    42→    if (password.length < 8) {
+    43→      return c.json({ error: 'Password must be at least 8 characters' }, 400);
+    44→    }
+    45→
+    46→    // Check if user already exists
+    47→    const existing = await c.env.DB.prepare(
+    48→      'SELECT id FROM users WHERE email = ?'
+    49→    ).bind(email).first();
+    50→
+    51→    if (existing) {
+    52→      return c.json({ error: 'An account with this email already exists' }, 400);
+    53→    }
+    54→
+    55→    // Create user in D1
+    56→    const userId = crypto.randomUUID();
+    57→    const passwordHash = await hashPassword(password);
+    58→
+    59→    await c.env.DB.prepare(`
+    60→      INSERT INTO users (id, email, full_name, institute_id, technology, role, email_verified, is_active, enrolled_course_ids, password_hash)
+    61→      VALUES (?, ?, ?, ?, ?, 'student', 0, 1, '[]', ?)
+    62→    `).bind(userId, email, fullName, instituteId || null, technology || null, passwordHash).run();
+    63→
+    64→    // Create default user preferences
+    65→    await c.env.DB.prepare(`
+    66→      INSERT OR IGNORE INTO user_preferences (user_id, theme_mode, accent_color, font_size, border_radius, compact_mode)
+    67→      VALUES (?, 'system', '#0ea5e9', 16, 16, 0)
+    68→    `).bind(userId).run();
+    69→
+    70→    // Create default notification preferences
+    71→    await c.env.DB.prepare(
+    72→      'INSERT OR IGNORE INTO notification_preferences (user_id) VALUES (?)'
+    73→    ).bind(userId).run();
+    74→
+    75→    // ── Per-user daily rate limit for verification emails ──
+    76→    const rl = await checkDailyEmailRateLimit(c.env.DB, email);
+    77→    if (!rl.allowed) {
+    78→      return c.json({ error: `Too many verification emails. You can send up to ${rl.limit} emails per day. Please try again tomorrow.`, code: 'RATE_LIMITED' }, 429);
+    79→    }
+    80→
+    81→    // Generate and send email verification OTP (cryptographically secure)
+    82→    const verifyOtp = generateOTP();
+    83→    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+    84→
+    85→    await c.env.DB.prepare(
+    86→      'INSERT INTO password_reset_otps (email, otp, purpose, expires_at, used, created_at) VALUES (?, ?, ?, ?, 0, ?)'
+    87→    ).bind(email, verifyOtp, 'email_verification', otpExpiresAt, new Date().toISOString()).run();
+    88→
+    89→    // Send verification email
+    90→    try {
+    91→      const { sendEmail } = await import('../../lib/resend');
+    92→      await sendEmail(c.env, email, 'DAKKHO — Verify Your Email Address', `
+    93→        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+    94→          <div style="text-align: center; margin-bottom: 24px;">
+    95→            <h1 style="color: #0ea5e9; font-size: 28px; margin: 0;">DAKKHO</h1>
+    96→            <p style="color: #64748b; margin: 4px 0 0;">Bangladesh's Premier Polytechnic Platform</p>
+    97→          </div>
+    98→          <div style="background: #f8fafc; border-radius: 16px; padding: 32px; text-align: center;">
+    99→            <h2 style="color: #0f172a; font-size: 20px; margin: 0 0 8px;">Welcome to DAKKHO, ${fullName}!</h2>
+   100→            <p style="color: #334155; font-size: 16px; margin: 0 0 24px;">Please verify your email address to get started.</p>
+   101→            <div style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #0ea5e9; background: white; border: 2px dashed #e2e8f0; border-radius: 12px; padding: 16px; display: inline-block;">
+   102→              ${verifyOtp}
+   103→            </div>
+   104→            <p style="color: #64748b; font-size: 14px; margin: 16px 0 0;">This code expires in 10 minutes.</p>
+   105→            <p style="color: #94a3b8; font-size: 13px; margin: 8px 0 0;">If you did not create an account, please ignore this email.</p>
+   106→          </div>
+   107→          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+   108→          <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+   109→            Sent from DAKKHO — Bangladesh's Premier Polytechnic Student Platform<br />
+   110→            noreply@dakkho.pro.bd
+   111→          </p>
+   112→        </div>
+   113→      `);
+   114→    } catch (emailError: any) {
+   115→      console.error('Failed to send verification email:', emailError.message);
+   116→      // Don't fail signup if email fails, but log it
+   117→    }
+   118→
+   119→    // Look up institute name and technology name for the response
+   120→    const instituteName = await getInstituteName(c.env, instituteId || null);
+   121→    const technologyName = await getTechnologyName(c.env, technology || null);
+   122→
+   123→    // Create D1 student session
+   124→    const token = await createStudentSession(c.env, userId, email);
+   125→
+   126→    return c.json({
+   127→      success: true,
+   128→      token,
+   129→      userId,
+   130→      user: {
+   131→        id: userId,
+   132→        name: fullName,
+   133→        email,
+   134→        instituteId: instituteId || null,
+   135→        instituteName: instituteName || null,
+   136→        technology: technology || null,
+   137→        technologyName: technologyName || null,
+   138→        emailVerified: false,
+   139→        packages: [],
+   140→        themeMode: 'system',
+   141→      },
+   142→    });
+   143→  } catch (error) {
+   144→    await logError(c.env.KV_CONFIG, {
+   145→      error,
+   146→      route: '/api/auth/signup',
+   147→      method: 'POST',
+   148→      ip: c.req.header('CF-Connecting-IP'),
+   149→      userAgent: c.req.header('User-Agent'),
+   150→      statusCode: 500,
+   151→    });
+   152→    return c.json({ error: getErrorMessage(error) }, 500);
+   153→  }
+   154→});
+   155→
+   156→// POST /auth/login — Login student
+   157→routes.post('/auth/login', async (c) => {
+   158→  try {
+   159→    // Rate limit: 5 login attempts per 15 min
+   160→    const limited = await rateLimit(c, 'auth');
+   161→    if (limited) return limited;
+   162→
+   163→    const { email, password } = await c.req.json();
+   164→
+   165→    if (!email || !password) {
+   166→      return c.json({ error: 'Email and password are required' }, 400);
+   167→    }
+   168→
+   169→    // Look up user in D1
+   170→    const user = await c.env.DB.prepare(
+   171→      'SELECT id, email, full_name, role, password_hash, institute_id, technology, email_verified, is_active, avatar_url FROM users WHERE email = ? AND is_active = 1'
+   172→    ).bind(email).first<{ id: string; email: string; full_name: string; role: string; password_hash: string; institute_id: number | null; technology: string | null; email_verified: number; is_active: number; avatar_url: string | null }>();
+   173→
+   174→    if (!user) {
+   175→      return c.json({ error: 'Invalid email or password' }, 401);
+   176→    }
+   177→
+   178→    // Verify password using PBKDF2 (supports salt:hash format)
+   179→    const validPassword = await verifyPassword(password, user.password_hash);
+   180→    if (!validPassword) {
+   181→      return c.json({ error: 'Invalid email or password' }, 401);
+   182→    }
+   183→
+   184→    // Verify this is a student (not admin/super_admin)
+   185→    if (user.role === 'admin' || user.role === 'super_admin') {
+   186→      return c.json({ error: 'Admin accounts cannot login here. Use the admin panel.' }, 403);
+   187→    }
+   188→
+   189→    // Check if 2FA is enabled for this user
+   190→    let twoFAEnabled = false;
+   191→    try {
+   192→      const twoFA = await c.env.DB.prepare(
+   193→        'SELECT is_enabled FROM user_2fa WHERE user_id = ?'
+   194→      ).bind(user.id).first<{ is_enabled: number }>();
+   195→      twoFAEnabled = twoFA?.is_enabled === 1;
+   196→    } catch {}
+   197→
+   198→    // If 2FA is enabled, return a pending token and require TOTP verification
+   199→    if (twoFAEnabled) {
+   200→      // Generate a temporary pending token (valid for 5 minutes)
+   201→      const pendingToken = crypto.randomUUID();
+   202→      const pendingExpiry = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+   203→
+   204→      await c.env.DB.prepare(
+   205→        `INSERT INTO pending_2fa_tokens (id, user_id, email, expires_at, created_at)
+   206→         VALUES (?, ?, ?, ?, datetime('now'))`
+   207→      ).bind(pendingToken, user.id, user.email, pendingExpiry).run().catch(async () => {
+   208→        // Table might not exist yet, try creating it
+   209→        try {
+   210→          await c.env.DB.exec(`
+   211→            CREATE TABLE IF NOT EXISTS pending_2fa_tokens (
+   212→              id TEXT PRIMARY KEY,
+   213→              user_id TEXT NOT NULL,
+   214→              email TEXT NOT NULL,
+   215→              expires_at TEXT NOT NULL,
+   216→              created_at TEXT DEFAULT (datetime('now'))
+   217→            )
+   218→          `);
+   219→          await c.env.DB.prepare(
+   220→            `INSERT INTO pending_2fa_tokens (id, user_id, email, expires_at, created_at)
+   221→             VALUES (?, ?, ?, ?, datetime('now'))`
+   222→          ).bind(pendingToken, user.id, user.email, pendingExpiry).run();
+   223→        } catch {}
+   224→      });
+   225→
+   226→      return c.json({
+   227→        requires2FA: true,
+   228→        pendingToken,
+   229→        email: user.email,
+   230→        method: 'totp',
+   231→      });
+   232→    }
+   233→
+   234→    // Get user packages from D1
+   235→    let userPackages: any[] = [];
+   236→    try {
+   237→      const pkgResult = await c.env.DB.prepare(
+   238→        "SELECT up.*, cp.package_type, cp.price, cp.duration_months FROM user_packages up JOIN course_packages cp ON up.package_id = cp.id WHERE up.user_id = ? AND up.status = 'active' ORDER BY up.activated_at DESC"
+   239→      ).bind(user.id).all();
+   240→      userPackages = pkgResult.results as any[];
+   241→    } catch {}
+   242→
+   243→    // Get user theme preference from D1
+   244→    let themeMode = 'system';
+   245→    try {
+   246→      const prefs = await c.env.DB.prepare(
+   247→        'SELECT theme_mode FROM user_preferences WHERE user_id = ?'
+   248→      ).bind(user.id).first();
+   249→      if (prefs && (prefs as any).theme_mode) {
+   250→        themeMode = (prefs as any).theme_mode;
+   251→      }
+   252→    } catch {}
+   253→
+   254→    // Look up institute name and technology name
+   255→    const instituteName = await getInstituteName(c.env, user.institute_id || null);
+   256→    const technologyName = await getTechnologyName(c.env, user.technology || null);
+   257→
+   258→    // Get device info and IP from request
+   259→    const userAgent = c.req.header('User-Agent') || '';
+   260→    const ipAddress = c.req.header('CF-Connecting-IP') || '';
+   261→
+   262→    // Parse basic device info from user agent
+   263→    let deviceInfo = 'Browser';
+   264→    if (/mobile|android|iphone/i.test(userAgent)) deviceInfo = 'Chrome Mobile on Mobile';
+   265→    else if (/tablet|ipad/i.test(userAgent)) deviceInfo = 'Safari Mobile on Tablet';
+   266→    else if (/firefox/i.test(userAgent)) deviceInfo = 'Firefox on Desktop';
+   267→    else if (/safari/i.test(userAgent) && !/chrome/i.test(userAgent)) deviceInfo = 'Safari on Desktop';
+   268→    else if (/edge/i.test(userAgent)) deviceInfo = 'Edge on Desktop';
+   269→    else deviceInfo = 'Chrome on Desktop';
+   270→
+   271→    // Delete any existing D1 sessions and create new one with device info
+   272→    // Note: We keep other sessions alive for the Active Sessions page to show them
+   273→    // Only the current session will be marked active; old ones stay as-is
+   274→    const token = await createStudentSession(c.env, user.id, user.email, deviceInfo, ipAddress);
+   275→
+   276→    return c.json({
+   277→      success: true,
+   278→      token,
+   279→      userId: user.id,
+   280→      user: {
+   281→        id: user.id,
+   282→        name: user.full_name,
+   283→        email: user.email,
+   284→        instituteId: user.institute_id || null,
+   285→        instituteName: instituteName || null,
+   286→        technology: user.technology || null,
+   287→        technologyName: technologyName || null,
+   288→        emailVerified: !!user.email_verified,
+   289→        avatarUrl: user.avatar_url || '',
+   290→        packages: userPackages,
+   291→        themeMode,
+   292→      },
+   293→    });
+   294→  } catch (error) {
+   295→    const msg = getErrorMessage(error);
+   296→    await logError(c.env.KV_CONFIG, {
+   297→      error,
+   298→      route: '/api/auth/login',
+   299→      method: 'POST',
+   300→      ip: c.req.header('CF-Connecting-IP'),
+   301→      userAgent: c.req.header('User-Agent'),
+   302→      statusCode: 401,
+   303→    });
+   304→    return c.json({ error: msg.includes('Invalid') ? msg : 'Invalid email or password' }, 401);
+   305→  }
+   306→});
+   307→
+   308→// POST /auth/2fa/verify — Verify 2FA TOTP code during login
+   309→routes.post('/auth/2fa/verify', async (c) => {
+   310→  try {
+   311→    const { pendingToken, totpCode } = await c.req.json();
+   312→
+   313→    if (!pendingToken || !totpCode) {
+   314→      return c.json({ error: 'Pending token and TOTP code are required' }, 400);
+   315→    }
+   316→
+   317→    // Look up the pending token
+   318→    const pending = await c.env.DB.prepare(
+   319→      'SELECT user_id, email, expires_at FROM pending_2fa_tokens WHERE id = ?'
+   320→    ).bind(pendingToken).first<{ user_id: string; email: string; expires_at: string }>();
+   321→
+   322→    if (!pending) {
+   323→      return c.json({ error: 'Invalid or expired verification session. Please login again.' }, 401);
+   324→    }
+   325→
+   326→    // Check expiry
+   327→    if (new Date(pending.expires_at) < new Date()) {
+   328→      await c.env.DB.prepare('DELETE FROM pending_2fa_tokens WHERE id = ?').bind(pendingToken).run();
+   329→      return c.json({ error: 'Verification session expired. Please login again.' }, 401);
+   330→    }
+   331→
+   332→    const userId = pending.user_id;
+   333→
+   334→    // Get TOTP secret for this user
+   335→    const twoFA = await c.env.DB.prepare(
+   336→      'SELECT totp_secret, backup_codes FROM user_2fa WHERE user_id = ? AND is_enabled = 1'
+   337→    ).bind(userId).first<{ totp_secret: string; backup_codes: string }>();
+   338→
+   339→    if (!twoFA?.totp_secret) {
+   340→      return c.json({ error: '2FA not configured for this account' }, 400);
+   341→    }
+   342→
+   343→    // Verify TOTP code
+   344→    const valid = await verifyTOTP(twoFA.totp_secret, totpCode);
+   345→    if (!valid) {
+   346→      // Try backup codes
+   347→      let usedBackupCode = false;
+   348→      if (twoFA.backup_codes) {
+   349→        try {
+   350→          const codes: string[] = JSON.parse(twoFA.backup_codes);
+   351→          const codeIndex = codes.indexOf(totpCode.toUpperCase());
+   352→          if (codeIndex !== -1) {
+   353→            usedBackupCode = true;
+   354→            codes.splice(codeIndex, 1);
+   355→            await c.env.DB.prepare(
+   356→              'UPDATE user_2fa SET backup_codes = ?, updated_at = datetime(\'now\') WHERE user_id = ?'
+   357→            ).bind(JSON.stringify(codes), userId).run();
+   358→          }
+   359→        } catch {}
+   360→      }
+   361→      if (!usedBackupCode) {
+   362→        return c.json({ error: 'Invalid verification code. Please try again.' }, 400);
+   363→      }
+   364→    }
+   365→
+   366→    // Delete the pending token
+   367→    await c.env.DB.prepare('DELETE FROM pending_2fa_tokens WHERE id = ?').bind(pendingToken).run();
+   368→
+   369→    // Now complete the login (same as the regular login flow)
+   370→    const user = await c.env.DB.prepare(
+   371→      'SELECT id, email, full_name, role, password_hash, institute_id, technology, email_verified, is_active, avatar_url FROM users WHERE id = ? AND is_active = 1'
+   372→    ).bind(userId).first<{ id: string; email: string; full_name: string; role: string; password_hash: string; institute_id: number | null; technology: string | null; email_verified: number; is_active: number; avatar_url: string | null }>();
+   373→
+   374→    if (!user) {
+   375→      return c.json({ error: 'User not found' }, 404);
+   376→    }
+   377→
+   378→    // Get user packages
+   379→    let userPackages: any[] = [];
+   380→    try {
+   381→      const pkgResult = await c.env.DB.prepare(
+   382→        "SELECT up.*, cp.package_type, cp.price, cp.duration_months FROM user_packages up JOIN course_packages cp ON up.package_id = cp.id WHERE up.user_id = ? AND up.status = 'active' ORDER BY up.activated_at DESC"
+   383→      ).bind(user.id).all();
+   384→      userPackages = pkgResult.results as any[];
+   385→    } catch {}
+   386→
+   387→    // Get theme
+   388→    let themeMode = 'system';
+   389→    try {
+   390→      const prefs = await c.env.DB.prepare(
+   391→        'SELECT theme_mode FROM user_preferences WHERE user_id = ?'
+   392→      ).bind(user.id).first();
+   393→      if (prefs && (prefs as any).theme_mode) {
+   394→        themeMode = (prefs as any).theme_mode;
+   395→      }
+   396→    } catch {}
+   397→
+   398→    const instituteName = await getInstituteName(c.env, user.institute_id || null);
+   399→    const technologyName = await getTechnologyName(c.env, user.technology || null);
+   400→
+   401→    // Get device info and IP
+   402→    const userAgent = c.req.header('User-Agent') || '';
+   403→    const ipAddress = c.req.header('CF-Connecting-IP') || '';
+   404→    let deviceInfo = 'Browser';
+   405→    if (/mobile|android|iphone/i.test(userAgent)) deviceInfo = 'Chrome Mobile on Mobile';
+   406→    else if (/tablet|ipad/i.test(userAgent)) deviceInfo = 'Safari Mobile on Tablet';
+   407→    else if (/firefox/i.test(userAgent)) deviceInfo = 'Firefox on Desktop';
+   408→    else if (/safari/i.test(userAgent) && !/chrome/i.test(userAgent)) deviceInfo = 'Safari on Desktop';
+   409→    else if (/edge/i.test(userAgent)) deviceInfo = 'Edge on Desktop';
+   410→    else deviceInfo = 'Chrome on Desktop';
+   411→
+   412→    // Create session (keep existing sessions for Active Sessions page)
+   413→    const token = await createStudentSession(c.env, user.id, user.email, deviceInfo, ipAddress);
+   414→
+   415→    return c.json({
+   416→      success: true,
+   417→      token,
+   418→      userId: user.id,
+   419→      user: {
+   420→        id: user.id,
+   421→        name: user.full_name,
+   422→        email: user.email,
+   423→        instituteId: user.institute_id || null,
+   424→        instituteName: instituteName || null,
+   425→        technology: user.technology || null,
+   426→        technologyName: technologyName || null,
+   427→        emailVerified: !!user.email_verified,
+   428→        avatarUrl: user.avatar_url || '',
+   429→        packages: userPackages,
+   430→        themeMode,
+   431→      },
+   432→    });
+   433→  } catch (error) {
+   434→    return c.json({ error: getErrorMessage(error) }, 500);
+   435→  }
+   436→});
+   437→
+   438→// POST /auth/logout — Logout student
+   439→routes.post('/auth/logout', async (c) => {
+   440→  try {
+   441→    const auth = await getStudentAuth(c);
+   442→    if (!auth.authorized) {
+   443→      return c.json({ success: true });
+   444→    }
+   445→
+   446→    const authHeader = c.req.header('Authorization');
+   447→    const token = authHeader?.substring(7) || '';
+   448→    await deleteStudentSession(c.env, token);
+   449→
+   450→    return c.json({ success: true });
+   451→  } catch (error) {
+   452→    return c.json({ error: getErrorMessage(error) }, 500);
+   453→  }
+   454→});
+   455→
+   456→// GET /auth/me — Get current student profile
+   457→routes.get('/auth/me', async (c) => {
+   458→  try {
+   459→    const auth = await getStudentAuth(c);
+   460→    if (!auth.authorized) {
+   461→      return c.json({ error: 'Unauthorized' }, 401);
+   462→    }
+   463→
+   464→    // Get user from D1
+   465→    const userDoc = await getStudentUserDoc(c.env, auth.userId!);
+   466→
+   467→    // Get user packages from D1
+   468→    let userPackages: any[] = [];
+   469→    try {
+   470→      const pkgResult = await c.env.DB.prepare(
+   471→        "SELECT up.*, cp.package_type, cp.price, cp.duration_months FROM user_packages up JOIN course_packages cp ON up.package_id = cp.id WHERE up.user_id = ? AND up.status = 'active' ORDER BY up.activated_at DESC"
+   472→      ).bind(auth.userId).all();
+   473→      userPackages = pkgResult.results as any[];
+   474→    } catch {}
+   475→
+   476→    const u = userDoc as any;
+   477→
+   478→    // Get user theme preference from D1
+   479→    let themeMode = 'system';
+   480→    try {
+   481→      const prefs = await c.env.DB.prepare(
+   482→        'SELECT theme_mode FROM user_preferences WHERE user_id = ?'
+   483→      ).bind(auth.userId!).first();
+   484→      if (prefs && (prefs as any).theme_mode) {
+   485→        themeMode = (prefs as any).theme_mode;
+   486→      }
+   487→    } catch {}
+   488→
+   489→    // Look up institute name and technology name
+   490→    const instituteName = await getInstituteName(c.env, (u?.institute_id as number) || null);
+   491→    const technologyName = await getTechnologyName(c.env, (u?.technology as string) || null);
+   492→
+   493→    return c.json({
+   494→      user: {
+   495→        id: auth.userId,
+   496→        name: u?.full_name || auth.name || '',
+   497→        email: auth.email || u?.email || '',
+   498→        phone: u?.phone || null,
+   499→        bio: u?.bio || null,
+   500→        semester: u?.semester ?? null,
+   501→        instituteId: u?.institute_id || null,
+   502→        instituteName: instituteName || null,
+   503→        technology: u?.technology || null,
+   504→        technologyName: technologyName || null,
+   505→        emailVerified: !!u?.email_verified,
+   506→        avatarUrl: u?.avatar_url || '',
+   507→        role: u?.role || 'student',
+   508→        isActive: u?.is_active !== undefined ? !!u?.is_active : true,
+   509→        packages: userPackages,
+   510→        themeMode,
+   511→      },
+   512→    });
+   513→  } catch (error) {
+   514→    return c.json({ error: getErrorMessage(error) }, 500);
+   515→  }
+   516→});
+   517→
+   518→// POST /auth/verify-otp — Verify email with OTP
+   519→routes.post('/auth/verify-otp', async (c) => {
+   520→  try {
+   521→    const { email, otp } = await c.req.json();
+   522→
+   523→    if (!email || !otp) {
+   524→      return c.json({ error: 'email and otp are required' }, 400);
+   525→    }
+   526→
+   527→    // Validate OTP against stored codes — only email_verification purpose
+   528→    const otpRecord = await c.env.DB.prepare(
+   529→      'SELECT * FROM password_reset_otps WHERE email = ? AND otp = ? AND purpose = ? AND used = 0 ORDER BY created_at DESC LIMIT 1'
+   530→    ).bind(email, otp, 'email_verification').first<{ id: number; email: string; otp: string; purpose: string; expires_at: string; used: number; created_at: string }>();
+   531→
+   532→    if (!otpRecord) {
+   533→      // Debug: check if the OTP exists but is already used or has different purpose
+   534→      const anyOtpRecord = await c.env.DB.prepare(
+   535→        'SELECT id, email, otp, purpose, used, expires_at FROM password_reset_otps WHERE email = ? AND otp = ? ORDER BY created_at DESC LIMIT 1'
+   536→      ).bind(email, otp).first<{ id: number; email: string; otp: string; purpose: string; used: number | null; expires_at: string }>();
+   537→      if (anyOtpRecord) {
+   538→        console.log(`OTP verify failed: email=${email}, otp=${otp}, found_purpose=${anyOtpRecord.purpose}, found_used=${anyOtpRecord.used}, expected_purpose=email_verification, expected_used=0`);
+   539→      } else {
+   540→        console.log(`OTP verify failed: no record found for email=${email}, otp=${otp}`);
+   541→      }
+   542→      return c.json({ success: false, message: 'Invalid or expired OTP' }, 400);
+   543→    }
+   544→
+   545→    // Check expiry in JavaScript — works correctly with ISO 8601 dates
+   546→    if (new Date(otpRecord.expires_at) < new Date()) {
+   547→      // Mark expired OTP as used so it can't be retried
+   548→      await c.env.DB.prepare(
+   549→        'UPDATE password_reset_otps SET used = 1 WHERE id = ?'
+   550→      ).bind(otpRecord.id).run();
+   551→      return c.json({ success: false, message: 'OTP has expired. Please request a new one.' }, 400);
+   552→    }
+   553→
+   554→    // Mark OTP as used
+   555→    await c.env.DB.prepare(
+   556→      'UPDATE password_reset_otps SET used = 1 WHERE id = ?'
+   557→    ).bind(otpRecord.id).run();
+   558→
+   559→    // Mark email as verified
+   560→    const session = await c.env.DB.prepare(
+   561→      "SELECT user_id FROM student_sessions WHERE email = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1"
+   562→    ).bind(email).first<{ user_id: string }>();
+   563→
+   564→    if (session?.user_id) {
+   565→      await c.env.DB.prepare(
+   566→        'UPDATE users SET email_verified = 1 WHERE id = ?'
+   567→      ).bind(session.user_id).run();
+   568→    } else {
+   569→      // Fallback: verify by email directly
+   570→      await c.env.DB.prepare(
+   571→        'UPDATE users SET email_verified = 1 WHERE email = ?'
+   572→      ).bind(email).run();
+   573→    }
+   574→
+   575→    return c.json({ success: true, message: 'Email verified successfully' });
+   576→  } catch (error) {
+   577→    return c.json({ error: getErrorMessage(error) }, 500);
+   578→  }
+   579→});
+   580→
+   581→// GET /auth/otp-cooldown — Get remaining cooldown seconds for resending OTP
+   582→routes.get('/auth/otp-cooldown', async (c) => {
+   583→  try {
+   584→    const email = c.req.query('email');
+   585→    if (!email) {
+   586→      return c.json({ error: 'email query parameter is required' }, 400);
+   587→    }
+   588→
+   589→    // Find the most recent OTP sent to this email (any purpose)
+   590→    const lastOtp = await c.env.DB.prepare(
+   591→      'SELECT created_at FROM password_reset_otps WHERE email = ? ORDER BY created_at DESC LIMIT 1'
+   592→    ).bind(email).first<{ created_at: string | null }>();
+   593→
+   594→    if (!lastOtp || !lastOtp.created_at) {
+   595→      return c.json({ cooldownSeconds: 0 });
+   596→    }
+   597→
+   598→    // Calculate remaining cooldown (60 seconds since last OTP was sent)
+   599→    const RESEND_COOLDOWN_SECONDS = 60;
+   600→    const sentAt = new Date(lastOtp.created_at).getTime();
+   601→    const now = Date.now();
+   602→    const elapsed = Math.floor((now - sentAt) / 1000);
+   603→    const remaining = Math.max(0, RESEND_COOLDOWN_SECONDS - elapsed);
+   604→
+   605→    return c.json({ cooldownSeconds: remaining });
+   606→  } catch (error) {
+   607→    // On error, return 0 cooldown so user isn't stuck
+   608→    return c.json({ cooldownSeconds: 0 });
+   609→  }
+   610→});
+   611→
+   612→// POST /auth/forgot-password — Request password reset OTP
+   613→routes.post('/auth/forgot-password', async (c) => {
+   614→  try {
+   615→    const { email } = await c.req.json();
+   616→
+   617→    if (!email) {
+   618→      return c.json({ error: 'Email is required' }, 400);
+   619→    }
+   620→
+   621→    // Check if user exists
+   622→    const user = await c.env.DB.prepare(
+   623→      'SELECT id FROM users WHERE email = ? AND is_active = 1'
+   624→    ).bind(email).first();
+   625→
+   626→    if (user) {
+   627→      // ── Per-user daily rate limit ──
+   628→      const rl = await checkDailyEmailRateLimit(c.env.DB, email);
+   629→      if (!rl.allowed) {
+   630→        // Don't reveal rate limit to prevent email enumeration — still return success
+   631→        return c.json({ success: true, message: 'If an account exists with this email, a reset code has been sent.' });
+   632→      }
+   633→
+   634→      // Delete any previous unused OTPs for this email with password_reset purpose
+   635→      await c.env.DB.prepare(
+   636→        'DELETE FROM password_reset_otps WHERE email = ? AND used = 0 AND purpose = ?'
+   637→      ).bind(email, 'password_reset').run();
+   638→
+   639→      // Generate a 6-digit OTP
+   640→      const otp = generateOTP();
+   641→
+   642→      // Store OTP in D1 with 5-minute expiration
+   643→      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+   644→      await c.env.DB.prepare(
+   645→        'INSERT INTO password_reset_otps (email, otp, purpose, expires_at, used, created_at) VALUES (?, ?, ?, ?, 0, ?)'
+   646→      ).bind(email, otp, 'password_reset', expiresAt, new Date().toISOString()).run();
+   647→
+   648→      // Send OTP email via Resend
+   649→      try {
+   650→        await sendPasswordResetEmail(c.env, email, otp);
+   651→      } catch (emailError) {
+   652→        console.error('Failed to send password reset email:', emailError);
+   653→        // Still return success for security — don't reveal email sending failure
+   654→      }
+   655→    }
+   656→
+   657→    // Always return success for security (don't reveal if email exists)
+   658→    return c.json({ success: true, message: 'If an account exists with this email, a reset code has been sent.' });
+   659→  } catch (error) {
+   660→    return c.json({ error: getErrorMessage(error) }, 500);
+   661→  }
+   662→});
+   663→
+   664→// POST /auth/reset-password — Verify OTP and set new password
+   665→routes.post('/auth/reset-password', async (c) => {
+   666→  try {
+   667→    const { email, otp, newPassword } = await c.req.json();
+   668→
+   669→    if (!email || !otp || !newPassword) {
+   670→      return c.json({ error: 'email, otp, and newPassword are required' }, 400);
+   671→    }
+   672→
+   673→    if (newPassword.length < 8) {
+   674→      return c.json({ error: 'Password must be at least 8 characters' }, 400);
+   675→    }
+   676→
+   677→    // Look up the most recent unused OTP for this email with password_reset purpose
+   678→    const otpRecord = await c.env.DB.prepare(
+   679→      'SELECT id, otp, expires_at, used FROM password_reset_otps WHERE email = ? AND purpose = ? AND used = 0 ORDER BY created_at DESC LIMIT 1'
+   680→    ).bind(email, 'password_reset').first<{ id: number; otp: string; expires_at: string; used: number }>();
+   681→
+   682→    if (!otpRecord) {
+   683→      return c.json({ error: 'Invalid or expired reset code. Please request a new one.' }, 400);
+   684→    }
+   685→
+   686→    // Check if OTP has expired
+   687→    if (new Date(otpRecord.expires_at) < new Date()) {
+   688→      // Mark expired OTP as used
+   689→      await c.env.DB.prepare(
+   690→        'UPDATE password_reset_otps SET used = 1 WHERE id = ?'
+   691→      ).bind(otpRecord.id).run();
+   692→      return c.json({ error: 'Reset code has expired. Please request a new one.' }, 400);
+   693→    }
+   694→
+   695→    // Verify OTP
+   696→    if (otpRecord.otp !== otp) {
+   697→      return c.json({ error: 'Invalid reset code. Please try again.' }, 400);
+   698→    }
+   699→
+   700→    // Mark OTP as used
+   701→    await c.env.DB.prepare(
+   702→      'UPDATE password_reset_otps SET used = 1 WHERE id = ?'
+   703→    ).bind(otpRecord.id).run();
+   704→
+   705→    // Update the user's password
+   706→    const newPasswordHash = await hashPassword(newPassword);
+   707→    await c.env.DB.prepare(
+   708→      'UPDATE users SET password_hash = ?, updated_at = datetime(\'now\') WHERE email = ?'
+   709→    ).bind(newPasswordHash, email).run();
+   710→
+   711→    // Invalidate all active student sessions for this user (force re-login)
+   712→    await c.env.DB.prepare(
+   713→      'UPDATE student_sessions SET is_active = 0 WHERE email = ?'
+   714→    ).bind(email).run();
+   715→
+   716→    return c.json({ success: true, message: 'Password has been reset successfully.' });
+   717→  } catch (error) {
+   718→    return c.json({ error: getErrorMessage(error) }, 500);
+   719→  }
+   720→});
+   721→
+   722→// POST /auth/resend-otp — Resend OTP for email verification or password reset
+   723→routes.post('/auth/resend-otp', async (c) => {
+   724→  try {
+   725→    const { email } = await c.req.json();
+   726→
+   727→    if (!email) {
+   728→      return c.json({ error: 'Email is required' }, 400);
+   729→    }
+   730→
+   731→    // Check if user exists
+   732→    const user = await c.env.DB.prepare(
+   733→      'SELECT id FROM users WHERE email = ? AND is_active = 1'
+   734→    ).bind(email).first();
+   735→
+   736→    if (user) {
+   737→      // Delete any previous unused OTPs for this email (both purposes)
+   738→      const userForPurpose = await c.env.DB.prepare(
+   739→        'SELECT email_verified FROM users WHERE email = ?'
+   740→      ).bind(email).first<{ email_verified: number }>();
+   741→      const resendPurpose = (userForPurpose && !userForPurpose.email_verified) ? 'email_verification' : 'password_reset';
+   742→
+   743→      // ── Server-side cooldown: prevent resend within 60 seconds ──
+   744→      const lastOtp = await c.env.DB.prepare(
+   745→        'SELECT created_at FROM password_reset_otps WHERE email = ? ORDER BY created_at DESC LIMIT 1'
+   746→      ).bind(email).first<{ created_at: string | null }>();
+   747→      if (lastOtp?.created_at) {
+   748→        const lastSentAt = new Date(lastOtp.created_at).getTime();
+   749→        const elapsedSec = Math.floor((Date.now() - lastSentAt) / 1000);
+   750→        if (elapsedSec < 60) {
+   751→          return c.json({
+   752→            error: `Please wait ${60 - elapsedSec} seconds before requesting a new code.`,
+   753→            code: 'COOLDOWN_ACTIVE',
+   754→            cooldownSeconds: 60 - elapsedSec,
+   755→          }, 429);
+   756→        }
+   757→      }
+   758→
+   759→      // ── Per-user daily rate limit ──
+   760→      const rl = await checkDailyEmailRateLimit(c.env.DB, email);
+   761→      if (!rl.allowed) {
+   762→        return c.json({
+   763→          error: `Too many verification emails. You can send up to ${rl.limit} emails per day. Please try again tomorrow.`,
+   764→          code: 'RATE_LIMITED',
+   765→        }, 429);
+   766→      }
+   767→
+   768→      await c.env.DB.prepare(
+   769→        'DELETE FROM password_reset_otps WHERE email = ? AND used = 0 AND purpose = ?'
+   770→      ).bind(email, resendPurpose).run();
+   771→
+   772→      // Generate a new 6-digit OTP
+   773→      const otp = generateOTP();
+   774→
+   775→      // Store OTP with appropriate expiry: 10 min for email_verification, 5 min for password_reset
+   776→      const expiryMinutes = resendPurpose === 'email_verification' ? 10 : 5;
+   777→      const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000).toISOString();
+   778→      await c.env.DB.prepare(
+   779→        'INSERT INTO password_reset_otps (email, otp, purpose, expires_at, used, created_at) VALUES (?, ?, ?, ?, 0, ?)'
+   780→      ).bind(email, otp, resendPurpose, expiresAt, new Date().toISOString()).run();
+   781→
+   782→      // Send OTP email via Resend
+   783→      try {
+   784→        if (resendPurpose === 'email_verification') {
+   785→          const { sendEmail } = await import('../../lib/resend');
+   786→          await sendEmail(c.env, email, 'DAKKHO — Your Verification Code', `
+   787→            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+   788→              <div style="text-align: center; margin-bottom: 24px;">
+   789→                <h1 style="color: #0ea5e9; font-size: 28px; margin: 0;">DAKKHO</h1>
+   790→                <p style="color: #64748b; margin: 4px 0 0;">Email Verification</p>
+   791→              </div>
+   792→              <div style="background: #f8fafc; border-radius: 16px; padding: 32px; text-align: center;">
+   793→                <p style="color: #334155; font-size: 16px; margin: 0 0 16px;">Your email verification code is:</p>
+   794→                <div style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #0ea5e9; background: white; border: 2px dashed #e2e8f0; border-radius: 12px; padding: 16px; display: inline-block;">
+   795→                  ${otp}
+   796→                </div>
+   797→                <p style="color: #64748b; font-size: 14px; margin: 16px 0 0;">This code expires in ${expiryMinutes} minutes.</p>
+   798→                <p style="color: #94a3b8; font-size: 13px; margin: 8px 0 0;">If you did not request this, please ignore this email.</p>
+   799→              </div>
+   800→              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+   801→              <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+   802→                Sent from DAKKHO — Bangladesh's Premier Polytechnic Student Platform<br />
+   803→                noreply@dakkho.pro.bd
+   804→              </p>
+   805→            </div>
+   806→          `);
+   807→        } else {
+   808→          await sendPasswordResetEmail(c.env, email, otp);
+   809→        }
+   810→      } catch (emailError) {
+   811→        console.error('Failed to resend OTP email:', emailError);
+   812→      }
+   813→    }
+   814→
+   815→    // Always return success for security
+   816→    return c.json({ success: true, message: 'If an account exists, a new code has been sent.' });
+   817→  } catch (error) {
+   818→    return c.json({ error: getErrorMessage(error) }, 500);
+   819→  }
+   820→});
+   821→
+   822→export default routes;
+   823→
