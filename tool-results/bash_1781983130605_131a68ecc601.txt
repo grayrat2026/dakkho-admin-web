@@ -1,0 +1,756 @@
+--- PAGE 15 ---
+1.12 Configure build variants (debug/release) with signing config, debug ProGuard test, leak canary for
+debug
+Phase 2: Theme System, Typography & Design Tokens
+Pages: - | Estimated Duration: 2-3 days
+2.1 Define DAKKHO color palette from website CSS variables: sky-blue #0EA5E9, deep-blue #1E3A8A,
+green #22C55E, background #F8FAFC (light) / #0F172A (dark)
+2.2 Create Material3 ColorScheme (light mode): primary=sky-blue, onPrimary=white,
+secondary=deep-blue, surface=#F8FAFC, etc.
+2.3 Create Material3 ColorScheme (dark mode): primary=sky-blue, surface=#0F172A,
+onSurface=#F1F5F9, etc.
+2.4 Implement glassmorphism card effects: semi-transparent background rgba(255,255,255,0.7) light /
+rgba(15,23,42,0.7) dark, backdrop blur 24dp, subtle border, 16dp rounded corners
+2.5 Define typography scale matching website: displayLarge 57sp, headlineLarge 32sp, titleLarge 22sp,
+bodyLarge 16sp, bodyMedium 14sp, labelSmall 11sp — all using Noto Sans SC family
+2.6 Create DAKKHOTheme composable with MaterialTheme wrapper, dynamic color support (Android 12+
+Material You), and isDarkMode toggle
+2.7 Implement gradient definitions: primaryGradient (135deg sky-blue to deep-blue), successGradient
+(green tones), heroGradient (deep to sky with alpha)
+2.8 Define spacing/dimension constants: dp4=4dp, dp8=8dp, dp12=12dp, dp16=16dp, dp24=24dp,
+dp32=32dp — consistent across all screens
+2.9 Create custom shape definitions: small=8dp, medium=12dp, large=16dp, xl=24dp, full=CircleShape
+2.10 Implement animation constants: pageTransition=400ms ease-out, buttonPress=150ms,
+shimmerDelay=300ms, cardElevation=2dp
+2.11 Create DesignToken object for centralized token reference (colors, typography, spacing, shapes,
+animations)
+2.12 Setup ContextWrapper base class for future runtime locale switching (Bengali/English)
+Phase 3: Shared Components (14) & Navigation Scaffold
+Pages: - | Estimated Duration: 4-5 days
+3.1 TopBar composable: logo (left), search icon, notification bell with badge count, user avatar (right);
+supports collapsing scroll behavior on detail screens
+3.2 BottomNav composable: 4 tabs (Home, Explore, My Courses, Profile) with badge support for
+notifications, animated selection indicator using DAKKHO sky-blue color
+3.3 Sidebar/Drawer composable: user info header (avatar, name, email), menu items grouped by section
+(Main, Learning, Social, Settings), logout button at bottom
+3.4 GlassCard composable: semi-transparent background, blur effect (Modifier.graphicsLayer), subtle 1px
+border, 16dp rounded corners, elevation shadow
+3.5 GradientButton composable: linear gradient (135deg sky-blue to deep-blue), white text, 12dp rounded
+corners, press scale animation (0.98x), hover shadow
+3.6 DakkhoProgressBar composable: gradient fill (sky-blue), rounded caps, smooth animation using
+Animatable, supports determinate and indeterminate modes
+3.7 ShimmerEffect/LoadingSkeleton composable: infinite transition with gradient translation, replaces
+loading spinners for all content areas
+3.8 EmptyState compo
+--- PAGE 16 ---
+3.9 AnimatedPage transition wrapper: fadeInUp animation (translateY 12dp + alpha 0 to 1, 400ms
+ease-out), applied to all screen transitions
+3.10 AnimatedCounter composable: number counter animating from 0 to target value, used in stats
+displays (home, learning-stats)
+3.11 CourseCardGrid composable: LazyVerticalGrid of course cards with thumbnail (Coil), title, instructor
+name, rating stars, price badge, progress indicator
+3.12 SensitiveActionPrompt composable: BiometricPrompt confirmation dialog for destructive actions
+(delete account, change password, remote logout)
+3.13 ContentProtection composable: wrapper that applies FLAG_SECURE to current Activity window,
+toggleable via settings
+3.14 CustomContextMenu composable: override default context menu to prevent copy/paste on protected
+content (course descriptions, notes)
+3.15 NavHost setup: type-safe route definitions with @Serializable, deep links (dakkho://payment/status,
+dakkho://verify/otp, dakkho://course/:id), splash to auth check flow
+Phase 4: Login Page #1
+Pages: #1 | Estimated Duration: 2-3 days
+4.1 Create LoginViewModel with auth state management (Idle, Loading, Success, Error), email/password
+validation
+4.2 LoginScreen layout matching website: gradient background (deep-blue to sky-blue), centered card with
+DAKKHO branding
+4.3 Email input field with real-time validation (regex), error message display, autofill hint
+4.4 Password input with show/hide toggle (IconToggleButton), strength indicator below
+4.5 Google Sign-In button with OneTap API integration, credential manager flow
+4.6 "Forgot Password?" link navigating to ForgotPasswordScreen
+4.7 "Sign Up" link navigating to SignupScreen
+4.8 Animated DAKKHO logo on login screen (Lottie or animated vector)
+4.9 BiometricPrompt for returning users: quick login with fingerprint/face, stored in EncryptedPrefs
+4.10 EncryptedPrefs: save email + JWT token + userId on successful login, auto-restore on app launch
+4.11 JWT token stored as Bearer token, attached to all subsequent Retrofit requests via AuthInterceptor
+4.12 Error handling: wrong credentials (toast), network failure (snackbar with retry), account locked,
+server error
+Phase 5: Signup Page #2 (4-Step Wizard)
+Pages: #2 | Estimated Duration: 3-4 days
+5.1 Create SignupViewModel with multi-step state (MutableStateFlow), form data holder, API integration
+5.2 Step indicator in TopAppBar showing 1/4, 2/4, 3/4, 4/4 with animated progress line
+5.3 Step 1 UI: Name/Email/Password form with PasswordStrengthIndicator (weak/medium/strong color
+bars)
+5.4 Step 2 UI: Institute dropdown loaded from D1 (/api/institutes), searchable LazyColumn with filter
+5.5 Step 3 UI: Technology/Department selection grid (/api/technologies), selectable cards with green
+checkmark
+5.6 Step 4 UI: OTP verification with 6 individual digit inputs, 60s cooldown timer, resend button
+5.7 SmsRetrieverAPI auto-fill for OTP: hash code from app signature, broadcast receiver for SMS
+
+--- PAGE 17 ---
+5.8 API integration: POST /api/auth/signup (step 1-3), POST /api/auth/verify-otp (step 4), POST
+/api/auth/resend-otp
+5.9 Form validation for all fields: email regex, password min 8 chars + complexity, name min 3 chars,
+institute required
+5.10 Back/Next navigation between steps with slide animation, data persistence across steps
+5.11 On success: store token in EncryptedPrefs, navigate to HomeScreen with popUpTo login
+5.12 Error handling per step: duplicate email, invalid OTP (with remaining attempts), network timeout,
+expired OTP
+Phase 6: Forgot Password Page #3
+Pages: #3 | Estimated Duration: 2 days
+6.1 Create ForgotPasswordViewModel with 3-step flow state (Email -> OTP -> NewPassword)
+6.2 Step 1 UI: Email input screen with gradient background matching login
+6.3 Step 2 UI: OTP verification (reuse OTP composable from signup step 4)
+6.4 Step 3 UI: New password + confirm password with PasswordStrengthIndicator
+6.5 Deep link for email OTP callback: dakkho://verify/otp?token=X, handled by NavHost
+6.6 SmsRetrieverAPI auto-fill support (same as signup)
+6.7 API integration: POST /api/auth/forgot-password, POST /api/auth/reset-password, POST
+/api/auth/resend-otp
+6.8 Password strength validation on new password (same rules as signup)
+6.9 On success: navigate to LoginScreen with success toast "Password reset successfully"
+6.10 Error handling: invalid OTP, expired OTP, email not found, network failure
+6.11 Resend OTP timer UI (60s cooldown, same component as signup)
+Phase 7: Home Screen #4 (6 Components)
+Pages: #4 | Estimated Duration: 4-5 days
+7.1 Create HomeViewModel with combined data loading: courses, events, live-classes, instructors from
+multiple API endpoints
+7.2 HomeScreen layout: LazyColumn with StickyHeaders, pull-to-refresh (SwipeRefresh), nested scroll
+handling
+7.3 HeroSection component: if enrolled -> EnrolledHero (continue learning card), else -> hero banner with
+CTA (gradient card)
+7.4 TrendingCourses horizontal scroll: LazyRow of CourseCard items with thumbnail, title, price, rating
+7.5 ContinueWatching component: LazyRow from /api/watch-history, video thumbnail + progress bar +
+resume button
+7.6 FeaturedInstructors horizontal scroll: LazyRow of instructor cards (avatar, name, specialization)
+7.7 CategoryPills horizontal scroll: filter chips for each technology/department from D1
+7.8 Pull-to-refresh implementation: SwipeRefresh wrapper, refreshing state in ViewModel, Room cache
+update on refresh
+7.9 Cached data for instant load: Room as single source of truth, Flow for reactive UI updates, API fetch
+in background
+7.10 API integration: GET /api/courses, GET /api/events, GET /api/live-classes, GET /api/instructors
+7.11 Error/empty states for each section: ShimmerEffect while loading, EmptyState when no data, error
+snackbar on failure
+7.12 Deep link handling from notifications: dakkho://course/:id, dakkho://notification/:id
+
+--- PAGE 18 ---
+Phase 8: Explore Screen #5
+Pages: #5 | Estimated Duration: 3-4 days
+8.1 Create ExploreViewModel with Paging 3 (PagingSource + RemoteMediator)
+8.2 ExploreScreen layout: LazyVerticalGrid (2 columns), card design matching website (thumbnail, title,
+instructor, rating, price)
+8.3 Filter chips row: technology, level (beginner/intermediate/advanced), price (free/paid) — horizontal
+scrollable
+8.4 Sort options dropdown: Latest, Popular, Rating, Price Low-High, Price High-Low
+8.5 Search bar at top: expanding SearchBar composable linked to SearchScreen
+8.6 Paging 3 RemoteMediator: network (API) + Room cache, LoadType.REFRESH/PREPEND/APPEND
+handling
+8.7 Room cache for offline access: CourseEntity, RemoteKeys for pagination, stale data display while
+fetching
+8.8 Saved filter state persistence via SavedStateHandle: restore filters on configuration change
+8.9 Course card design: thumbnail (Coil with placeholder), title (2 lines max), instructor name, rating
+stars, price badge, bookmark icon
+8.10 API integration: GET /api/courses (paginated), GET /api/categories, GET /api/technologies
+8.11 Empty state when no courses match filters: illustration + "Try different filters" CTA
+8.12 Scroll to top FAB (animateToBounds), load more indicator at bottom
+Phase 9: Search Screen #6
+Pages: #6 | Estimated Duration: 2-3 days
+9.1 Create SearchViewModel with search query StateFlow, results Flow, and Room FTS integration
+9.2 SearchBar composable: expanded/collapsed states, animated transition, hint text "Search courses,
+instructors..."
+9.3 Debounced input: 300ms coroutine delay before API call, cancel previous search on new input
+9.4 Room FTS (Full-Text Search) entity: SearchSuggestionEntity with fts4, DAO with MATCH query
+9.5 Real-time suggestions from local Room cache: display as user types (courses + instructors mixed)
+9.6 Search history management: SearchHistoryEntity + DAO, insert on search, limit to 50 entries
+9.7 Recent searches display: LazyRow of chips with "x" to remove individual entries
+9.8 Clear search history action: confirmation dialog, delete all from Room
+9.9 API integration: GET /api/courses?search=X, GET /api/instructors?search=X
+9.10 Search results display: mixed courses + instructors list, section headers, tap to navigate
+9.11 Empty state for no results: illustration + "No results for 'X'" + suggestions
+9.12 Voice search placeholder: microphone icon (future RECORD_AUDIO permission)
+Phase 10: Notifications #7-8
+Pages: #7-8 | Estimated Duration: 2-3 days
+10.1 Create NotificationsViewModel with paging + unread count StateFlow
+10.2 NotificationsScreen layout: LazyColumn with SwipeRefresh
+10.3 Notification item composable: icon (left), title + body preview (2 lines), timestamp, unread blue dot
+indicator
+10.4 Unread badge count in TopBar: badge number on notification bell icon, update from ViewModel
+
+--- PAGE 19 ---
+10.5 Swipe-to-dismiss action: SwipeToDismiss composable, mark as read + delete on swipe
+10.6 Mark-all-read action: TopBar button "Mark all read", API call + local Room update
+10.7 NotificationDetailScreen: full content display, action button (deep link to relevant screen), mark as
+read on open
+10.8 Deep link handling: parse notification action URL, navigate to course/detail/etc.
+10.9 WorkManager periodic sync: PeriodicWorkRequest every 15 minutes, fetch new notifications, update
+Room + badge
+10.10 Notification channel management: create channels (courses, payments, system, live-classes) on
+app start
+10.11 API integration: GET /api/notifications (paginated), PATCH /api/notifications/:id/read
+10.12 Empty state for no notifications: illustration + "All caught up!" message
+Phase 11: Profile #9, Category #10, About #11
+Pages: #9-11 | Estimated Duration: 3 days
+11.1 Create ProfileViewModel: load user data from /api/auth/me, stats calculation
+11.2 ProfileScreen layout: LargeTopAppBar with collapsing parallax image, scroll behavior
+11.3 User info section: avatar (Coil with placeholder), name, institute, technology display
+11.4 Quick stats cards: courses enrolled, hours watched, streak days — in horizontal row with
+AnimatedCounter
+11.5 Menu items navigation: Edit Profile, Change Password, Learning Stats, Subscription, Referral,
+Settings, etc.
+11.6 CategoryScreen: same layout as ExploreScreen with pre-applied technology filter from route
+parameter
+11.7 CategoryScreen: technology name in TopAppBar, course grid filtered by /api/courses?technology=X
+11.8 AboutScreen layout: mission, vision, team sections with cards
+11.9 Markdown rendering for About content using local Markwon library or custom ComposeText
+11.10 Coil image loading for team/company images with error fallback
+11.11 API integration: GET /api/auth/me, GET /api/courses?technology=X, GET /api/about
+Phase 12: Watch History #12 & Assignment #13
+Pages: #12-13 | Estimated Duration: 2-3 days
+12.1 Create WatchHistoryViewModel: load from Room cache + sync with /api/watch-history
+12.2 WatchHistoryScreen layout: LazyColumn with SwipeRefresh
+12.3 Video thumbnail + progress bar composable: thumbnail (Coil), progress bar showing watch %, video
+title, duration
+12.4 Resume button: navigate to VideoPlayerScreen with courseId + startTime parameters
+12.5 Swipe-to-delete history item: confirm dialog, remove from Room + API
+12.6 Clear all confirmation dialog: "Clear all watch history?" with positive/negative buttons
+12.7 Create AssignmentViewModel: load assignments from /api/courses/:id/curriculum
+12.8 AssignmentScreen layout: LazyColumn with status badges (Pending=yellow, Submitted=blue,
+Graded=green)
+12.9 File upload via SAF: ActivityResultContracts.OpenDocument for PDF/DOC, show upload progress
+12.10 Camera intent for photo upload: ActivityResultContracts.TakePicture, compress before upload
+12.11 API integration: GET /api/watch-history, DELETE /api/watch-history/:id, POST
+/api/courses/:id/assignments
+
+--- PAGE 20 ---
+12.12 Empty states for both screens: illustrations + "No watch history" / "No assignments"
+Phase 13: Course Detail #14
+Pages: #14 | Estimated Duration: 4-5 days
+13.1 Create CourseDetailViewModel: load course, check enrollment, fetch packages
+13.2 CollapsingToolbarLayout with parallax thumbnail: image collapses on scroll, title appears in
+TopAppBar
+13.3 Course hero section: thumbnail, title, rating stars, review count, instructor card (avatar + name)
+13.4 Tab pager setup: HorizontalPager with 5 tabs (Overview, Curriculum, Reviews, Q&A;,
+Announcements)
+13.5 Overview tab content: description (markdown), "What you'll learn" list, prerequisites, target audience
+13.6 3-state enroll button: (1) "Enroll Now" (gradient) -> (2) "Enrolled - Continue" (outlined) -> (3)
+"Continue" (green)
+13.7 BottomSheet for enrollment/package selection: pricing cards, free vs premium, enroll CTA
+13.8 Share course functionality: Intent.ACTION_SEND with deep link dakkho://course/:id
+13.9 Offline cache for course detail: Room entity with full course data, Flow for reactive updates
+13.10 Course package display: pricing cards (Free / Premium), features list, PipraPay integration link
+13.11 API integration: GET /api/courses/:id, GET /api/enrollments/check, GET /api/course-packages
+13.12 Error handling: course not found (navigate back), network error (retry), enrollment check failure
+Phase 14: Secure Video Player #15 (Reference: player.html UI)
+Pages: #15 | Estimated Duration: 6-8 days
+14.1 ExoPlayer setup with multi-format support: (a) Regular video (MP4, MKV, AVI, WEBM, etc.) via
+ExoPlayer default media source, (b) HLS (m3u8) via HlsMediaSource with adaptive track selection, (c)
+DASH (mpd) via DashMediaSource, (d) YouTube embedded video via WebView with iframe
+(YouTubePlayerView), (e) Auto-detect source type from URL extension/mime
+14.2 Player UI matching player.html reference — TOP BAR (left-to-right): Back button (chevron-left) +
+Video Title (left side), Audio/DUB button (book-headphones) + CC/Subtitles button (closed-caption) +
+Bookmark button (bookmark) + Episodes/Chapter list button (list-video) + Settings button (settings-2)
+(right side)
+14.3 Player UI — CENTER CONTROLS: Rewind 10s button (arrow-rotate-left + "10" label) on left,
+Play/Pause button (68dp SVG play/pause icons) in center, Forward 10s button (arrow-rotate-right + "10"
+label) on right; ripple effect on play/pause (green #22C55E ripple animation)
+14.4 Player UI — BOTTOM BAR: PiP button (picture-in-picture) + Fullscreen button (maximize/minimize) on
+right; Seek bar with green (#22C55E) progress fill, white thumb with green border + glow, time tooltip
+on hover; Time display (current / total) in monospace font (DM Mono equivalent)
+14.5 Player UI — DROPDOWN PANELS (positioned below top bar buttons): Audio track selector (DUB
+dropdown with checkmarks), Subtitle selector (CC dropdown with checkmarks), Settings dropdown
+(scrollable): Playback Speed (0.25x, 0.5x, 0.75x, 1x Normal, 1.25x, 1.5x, 1.75x, 2x) + Quality (Auto
+--- PAGE 21 ---
+controls after 3 seconds of no interaction
+14.8 Full FLAG_SECURE window flags: screenshot protection, prevent screen recording, disabled for
+non-protected content (user setting)
+14.9 PiP (Picture-in-Picture) support: enter PiP on home button, custom PiP params (aspect ratio, source
+rect), seamless re-enter fullscreen
+14.10 MediaSession for lockscreen controls: play/pause/skip in notification, seek bar in notification,
+metadata (title, artwork)
+14.11 Background playback service: Foreground Service with persistent notification, audio-only mode
+when app minimized, resume on return
+14.12 YouTube embedded video handling: WebView container with YouTube IFrame API, custom controls
+overlay matching player.html style, fullscreen toggle, prevent YouTube app takeover
+14.13 HLS (m3u8) specific: HlsMediaSource with adaptive quality, track selection dialog (quality selector),
+bandwidth monitor, auto-quality fallback
+14.14 DRM token handling: fetch session from POST /api/video/stream/session/:id, pass token to
+ExoPlayer HttpDataSource header, refresh token on expiry
+14.15 Watch history sync: save current position + duration + progress to Room on every 10s, sync to
+/api/watch-history periodically, resume from saved position on reload
+Phase 15: Course Curriculum #16 & Reviews #17
+Pages: #16-17 | Estimated Duration: 3-4 days
+15.1 Create CourseCurriculumViewModel: load curriculum tree from /api/courses/:id/curriculum
+15.2 AnimatedExpandable tree: Subject > Chapter > Lesson > Video with expand/collapse icons, rotation
+animation
+15.3 Progress indicator per curriculum item: circular progress (0-100%) on video items, completed
+checkmark on finished
+15.4 Download toggle per video in curriculum: download icon button, WorkManager enqueue, progress
+indicator
+15.5 API integration: GET /api/courses/:id/curriculum
+15.6 Create CourseReviewsViewModel: load reviews with rating filter, submit review
+15.7 Review list: LazyColumn with header pinned, review card (avatar, name, date, rating stars, comment
+text)
+15.8 Rating filter chips: 5/4/3/2/1 stars, all — horizontal scrollable, filter reviews by rating
+15.9 Average rating breakdown bar chart: 5 bars (5-star to 1-star) with percentage, Canvas-drawn
+horizontal bars
+15.10 Write review: BottomSheet with rating bar (interactive stars), title input, comment textarea, submit
+button
+15.11 API integration: GET /api/courses/:id (reviews), POST /api/courses/:id/reviews
+15.12 Empty states: no curriculum items ("Course content coming soon"), no reviews ("Be the first to
+review")
+Phase 16: Course Q&A; #18, Announcements #19, Resources
+#20
+Pages: #18-20 | Estimated Duration: 3 days
+16.1 Create CourseQAViewModel: load Q&A; threads, post question, post answer
+16.2 Q&A; thread list: LazyColumn with question card (author avatar, question text, answer count,
+upvotes)
+
+--- PAGE 22 ---
+16.3 Ask question FAB: floating action button (GradientButton style), opens BottomSheet compose form
+16.4 Answer/reply functionality: expandable thread, reply input at bottom, post answer API call
+16.5 API integration: GET /api/courses/:id (qa), POST /api/courses/:id/qa
+16.6 Announcement timeline: LazyColumn with date section headers, announcement card (title, body,
+date, instructor tag)
+16.7 Push notification for new announcements: OneSignal integration, notification channel for course
+announcements
+16.8 API integration: GET /api/courses/:id (announcements)
+16.9 Resources download list: LazyColumn with file cards (PDF/slide icon, filename, file size, download
+button)
+16.10 SAF download for resource files: ActivityResultContracts.CreateDocument for saving, progress
+notification
+16.11 PDF viewer intent: launch external PDF viewer via Intent.ACTION_VIEW with FileProvider
+16.12 API integration: GET /api/courses/:id (resources), GET /api/resources/:id/download
+Phase 17: Course Notes #21, Quizzes #22, Progress #23
+Pages: #21-23 | Estimated Duration: 3-4 days
+17.1 Create CourseNotesViewModel: load notes from Room, auto-save on edit
+17.2 Split-screen note editor: video player (top 60%) + notes editor (bottom 40%) in landscape,
+side-by-side in tablet
+17.3 Auto-save to Room DB: debounced save (1s after last edit), timestamp + video position + course ID
+17.4 Timestamp-linked notes: tap on note -> seek video to that position, add note at current position
+button
+17.5 Create CourseQuizzesViewModel: load quiz list, start quiz, submit answers
+17.6 Quiz list: LazyColumn with quiz card (title, question count, duration, best score badge)
+17.7 Countdown timer: CountDownTimer in ViewModel, display in TopAppBar, auto-submit on timeout
+17.8 Haptic feedback on answer selection: HapticFeedbackConstants.CONFIRM, correct=green,
+wrong=red animation
+17.9 Score display + explanation after quiz: result screen with score circle, correct/wrong breakdown,
+explanations for each question
+17.10 Create CourseProgressViewModel: calculate progress from curriculum + watch history
+17.11 Progress dashboard: % complete (Canvas-drawn circular progress), learning path tracker (vertical
+stepper), time spent chart
+17.12 Canvas-drawn weekly study chart: bar chart showing daily study hours for last 7 days
+17.13 API integration: GET /api/courses/:id, GET /api/watch-history (for progress calculation)
+Phase 18: Instructor List #24 & Profile #25
+Pages: #24-25 | Estimated Duration: 3 days
+18.1 Create InstructorsViewModel with Paging 3 (paginated instructor list)
+18.2 Instructor grid: LazyVerticalGrid (2 columns, staggered layout), instructor card (avatar, name,
+specialization, rating, course count)
+18.3 Rating + course count display per card: star rating with number, course count badge
+18.4 Specialization filter chips: horizontal scrollable filter by department/technology
+18.5 API integration: GET /api/instructors (paginated with search/filter)
+18.6 Create InstructorProfileViewModel: load instructor
+--- PAGE 23 ---
+18.7 CollapsingToolbar with banner image: parallax scroll, avatar overlapping banner bottom, name +
+stats below
+18.8 Profile hero section: large avatar, name, bio text, stats row (students, courses, rating)
+18.9 Tab pager: HorizontalPager with 4 tabs (Courses, Reviews, Schedule, Contact)
+18.10 API integration: GET /api/instructors/:id
+18.11 Empty state for no instructors: illustration + "No instructors found"
+18.12 Pull-to-refresh on profile: SwipeRefresh, reload all tabs
+Phase 19: Instructor Sub-pages #26-29
+Pages: #26-29 | Estimated Duration: 2-3 days
+19.1 InstructorCoursesScreen: course grid matching ExploreScreen style, filtered by instructor ID
+19.2 API integration: GET /api/instructors/:id/courses (paginated)
+19.3 InstructorReviewsScreen: rating breakdown header (5-bar chart) + review list
+19.4 Canvas-drawn rating bar chart: 5 horizontal bars (5-star to 1-star), percentage labels, average
+rating number
+19.5 Review list with pagination: LazyColumn, review cards (avatar, name, date, rating, comment)
+19.6 InstructorScheduleScreen: calendar view of upcoming live classes
+19.7 Calendar composable: month view grid, dots on dates with events, event list below calendar
+19.8 Event cards for upcoming live classes: time, title, join button, countdown to start
+19.9 API integration: GET /api/live-classes?instructor_id=X
+19.10 InstructorContactScreen: contact options layout (email, phone, social links)
+19.11 Intent-based launching: email (Intent.ACTION_SENDTO), phone (Intent.ACTION_DIAL), browser
+(Intent.ACTION_VIEW)
+19.12 Social link buttons: YouTube, GitHub, Facebook, LinkedIn — icons + launch via Intent
+Phase 20: My Courses #30 & Bookmarks #31
+Pages: #30-31 | Estimated Duration: 2-3 days
+20.1 Create MyCoursesViewModel: load enrolled courses with tab filtering
+20.2 Tab layout: TabRow with 3 tabs (Ongoing, Completed, Bookmarked) + HorizontalPager for swipe
+20.3 ViewPager swipe between tabs: smooth page transition, tab indicator animation
+20.4 Course cards with progress indicator: thumbnail, title, progress bar, continue button
+20.5 API integration: GET /api/packages/mine, GET /api/enrollments/check
+20.6 Create BookmarksViewModel: Room-only data source with Flow for instant updates
+20.7 BookmarksScreen layout: LazyColumn of bookmarked courses/videos
+20.8 Room entity + DAO for bookmarks: BookmarkEntity (id, courseId, title, thumbnail, dateAdded), Flow>
+20.9 Instant UI updates via Room Flow: add/remove bookmark -> immediate list update
+20.10 Empty state illustration (Lottie): "No bookmarks yet" + "Browse courses" CTA
+20.11 Swipe-to-remove bookmark: SwipeToDismiss with undo snackbar
+20.12 Bookmark sync on login: fetch user bookmarks from API -> merge into Room
+Phase 21: Downloads #32 & Certificates #33
+Pages: #32-33 | Estimated Duration: 3-4 days
+
+--- PAGE 24 ---
+21.1 Create DownloadsViewModel: Room-only + WorkManager integration
+21.2 Downloaded videos list: LazyColumn with thumbnail, title, size, quality badge (720p/1080p)
+21.3 Storage usage bar: horizontal bar showing used/total storage, color coded by quality
+21.4 Delete/restore downloaded video: swipe-to-delete with confirmation, file system cleanup
+21.5 WorkManager download queue: OneTimeWorkRequest for each download, chain requests, persistent
+across reboot
+21.6 Notification progress for active downloads: foreground notification with progress bar, cancel action
+21.7 SAF file management for storage: check available space, user-selectable download directory
+21.8 Encrypted file storage: AES-256 encryption for downloaded video files, decrypt on-the-fly during
+playback
+21.9 Create CertificatesViewModel: load completion certificates
+21.10 Certificate cards: card with course name, completion date, download button, share button
+21.11 PDF generation for certificates: Canvas-based PDF with course name, student name, date,
+signature
+21.12 ShareCompat intent chooser: share certificate PDF via WhatsApp/Email/etc.
+21.13 Deep link verification: dakkho://certificate/:id for certificate verification from external links
+21.14 API integration: GET /api/courses/:id (completion status), GET /api/certificates
+Phase 22: Live Sessions #34, Achievements #35, Discussion
+#36
+Pages: #34-36 | Estimated Duration: 3-4 days
+22.1 Create LiveSessionsViewModel: load live classes with tab filtering
+22.2 Tabs: Upcoming / Active / Recorded — TabRow + HorizontalPager
+22.3 Countdown timer composable: animated countdown to session start, "Join Now" button when active
+22.4 Calendar intent for session reminders: add to Google Calendar via Intent, reminder alarm via
+AlarmManager
+22.5 API integration: GET /api/live-classes (with status filter)
+22.6 Create AchievementsViewModel: load badges, streak, milestones
+22.7 Badge grid display: LazyVerticalGrid (3 columns) with badge icon, name, locked/unlocked state
+22.8 Lottie animated badge unlock: play celebration animation when new badge earned
+22.9 Streak counter: daily streak number with fire icon, streak notification reminder
+22.10 Milestone progress bars: horizontal progress bars with milestone labels (50%, 75%, 100%)
+22.11 API integration: GET /api/achievements
+22.12 Create DiscussionViewModel: load forum threads, post, comment
+22.13 Forum-style thread list: LazyColumn with thread card (author, title, upvotes, comment count, time)
+22.14 BottomSheet for new post: title input, body textarea (markdown), category selector, submit button
+22.15 Markdown editor composable: preview toggle, basic formatting toolbar (bold, italic, code, link)
+22.16 API integration: GET /api/support (discussions), POST /api/support/discussions
+Phase 23: Department Pages Template #37-56 (20
+Departments)
+Pages: #37-56 | Estimated Duration: 3-4 days
+23.1 Create DepartmentViewModel (shared, parameterized by technology short_code): load courses,
+instructors for department
+
+--- PAGE 25 ---
+23.2 DepartmentScreen template composable: department name, description hero, course grid, semester
+nav, featured instructors
+23.3 Department hero display: gradient background, department name (large), description text,
+technology badge
+23.4 Course list filtered by technology: Paging 3 grid, same CourseCardGrid as ExploreScreen
+23.5 Semester navigation within department: semester tabs (1-8), horizontal scrollable, filter courses by
+semester+technology
+23.6 Featured instructors for department: LazyRow of instructor cards filtered by technology
+23.7 API integration: GET /api/courses?technology=X, GET /api/instructors?technology=X
+23.8 Define all 20 department constants: slug -> short_code map in DepartmentConstants.kt
+23.9 Navigation setup for all 20 department routes: @Serializable data class DepartmentRoute(val slug:
+String)
+23.10 Mapping table: dept-cse->CST, dept-eee->ELECTRICAL, dept-ete->ELEX, dept-me->MECH,
+dept-ce->CIVIL, dept-architecture->CIVIL, dept-textile->CIVIL, dept-chemical->CIVIL,
+dept-automobile->MECH, dept-rac->MECH, dept-glass-ceramic->CIVIL, dept-printing->CST,
+dept-surveying->CIVIL, dept-mechatronics->ELEX, dept-mining->CIVIL, dept-metallurgical->MECH,
+dept-power->POWER, dept-instrumentation->ELEX, dept-food->CIVIL, dept-leather->CIVIL
+23.11 Lazy loading + Room cache per department: separate Room query per technology, cache
+invalidation on refresh
+23.12 Empty state for departments with no courses: illustration + "No courses available for this
+department yet"
+Phase 24: Semester Pages Template #57-64 (8 Semesters)
+Pages: #57-64 | Estimated Duration: 2-3 days
+24.1 Create SemesterViewModel (shared, parameterized by semester number 1-8): load subjects,
+syllabus, courses
+24.2 SemesterScreen template composable: semester title, subjects list, routine, syllabus, course links
+24.3 Subjects list for semester: LazyColumn with subject cards (name, code, credit hours, instructor)
+24.4 Routine/schedule display: weekly timetable grid (day vs time slots), color coded by subject
+24.5 Syllabus overview section: expandable cards per subject with topics list
+24.6 Direct course links per subject: tap subject card -> navigate to CourseDetailScreen
+24.7 Semester progress indicator: calculated from enrollment date, show current semester position in 1-8
+timeline
+24.8 Offline syllabus data cache in Room: SemesterEntity + SubjectEntity, refresh on app open
+24.9 Calendar integration for exam schedules: add exam dates to calendar, set reminders via
+AlarmManager
+24.10 API integration: GET /api/courses?semester=X, GET /api/syllabus?semester=X
+24.11 Navigation setup for all 8 semester routes: @Serializable data class SemesterRoute(val number: Int)
+24.12 Empty state for semesters with no content: "Content coming soon for this semester"
+Phase 25: Profile Sub-pages #65-71 (7 Pages)
+Pages: #65-71 | Estimated Duration: 4-5 days
+25.1 EditProfileScreen: form with name, avatar (camera/gallery), institute picker, technology picker, bio
+textarea
+25.2 ActivityResultCon
+--- PAGE 26 ---
+25.3 Coil image upload to R2 via API: multipart upload with progress indicator, update avatar in
+EncryptedPrefs
+25.4 API integration: PUT /api/auth/profile (multipart form data)
+25.5 ChangePasswordScreen: old password + new password + confirm password form
+25.6 PasswordStrengthIndicator + autofill service: same component as signup, Android Autofill hints
+25.7 API integration: POST /api/auth/reset-password
+25.8 LearningStatsScreen: total hours watched, courses completed, current streak, weekly/monthly
+charts
+25.9 Canvas-drawn charts + AnimatedCounter: circular progress for hours, bar chart for weekly activity,
+animated number counters
+25.10 API integration: GET /api/auth/me, GET /api/watch-history (for stats calculation)
+25.11 SubscriptionScreen: current plan card, upgrade options, billing history, renewal date
+25.12 API integration: GET /api/packages/mine
+25.13 ReferralScreen: referral code display, share link button, invited friends list, rewards earned
+25.14 ShareCompat with deep link: share referral link dakkho://referral?code=X via Intent chooser
+25.15 DeleteAccountScreen: warning dialog, confirmation checkbox, password re-entry, biometric
+confirmation
+25.16 API integration: DELETE /api/auth/me (with biometric confirmation required)
+25.17 EmailVerificationScreen: OTP input with auto-fill, resend timer, verified badge display
+25.18 API integration: POST /api/auth/verify-otp, POST /api/auth/resend-otp
+Phase 26: Settings Part 1 #72-76 (5 Pages)
+Pages: #72-76 | Estimated Duration: 3 days
+26.1 SettingsScreen hub: grouped list layout (Account, Notifications, Privacy, Language, Theme,
+Downloads, Video, Network, Content Protection, Sessions)
+26.2 Preference-like layout with Material switches: each setting item with icon, title, subtitle,
+toggle/chevron
+26.3 AccountSettingsScreen: email display (read-only), phone number, password change link, linked
+accounts (Google)
+26.4 Account manager integration: Android AccountManager for DAKKHO account type
+26.5 API integration: GET /api/auth/me (for account details)
+26.6 NotificationSettingsScreen: toggle switches by category (push, email, in-app for
+courses/payments/system/live-classes)
+26.7 Direct link to system notification settings: Settings.ACTION_APP_NOTIFICATION_SETTINGS intent
+(Android 13+)
+26.8 API integration: GET /api/settings (notifications), PUT /api/settings (update preferences)
+26.9 PrivacySettingsScreen: profile visibility toggle, data sharing opt-out, analytics opt-out
+26.10 Privacy dashboard link: Intent to Android Privacy Dashboard (Android 10+)
+26.11 API integration: GET /api/settings (privacy), PUT /api/settings (update)
+26.12 LanguageSettingsScreen: Bengali/English radio buttons, content language preference dropdown
+26.13 AppCompat delegate for locale switching: updateLocale() in Application class, recreate activity on
+change
+26.14 ContextWrapper for runtime locale change: attachBaseContext() override in BaseActivity, persist
+choice in DataStore
+Phase 27: Settings Part 2 #77-82 (6 Pages)
+
+--- PAGE 27 ---
+Pages: #77-82 | Estimated Duration: 3-4 days
+27.1 ThemeSettingsScreen: Light/Dark/System radio group, accent color picker (5 preset colors)
+27.2 Dynamic color (Material You) on Android 12+: isSystemInDynamicColor() check,
+dynamicColorScheme() application
+27.3 Accent color picker: 5 color swatches (sky-blue, green, purple, orange, red), tap to apply, persist in
+DataStore
+27.4 DownloadSettingsScreen: quality selector (720p/1080p), auto-download on Wi-Fi toggle, storage
+path
+27.5 SAF directory picker: ActivityResultContracts.OpenDocumentTree for download location, persist URI
+permission
+27.6 Storage stats display: available/used storage, breakdown by course downloads, cache, other
+27.7 VideoQualityScreen: Auto/720p/1080p radio group, bandwidth saver mode toggle
+27.8 ExoPlayer track selection parameters: DefaultTrackSelector with max video bitrate based on quality
+setting
+27.9 NetworkDataScreen: Wi-Fi only toggle, data saver mode toggle, bandwidth limit input
+27.10 ConnectivityManager integration: registerNetworkCallback for Wi-Fi state, metered network
+detection
+27.11 ContentProtectionScreen: screenshot block toggle, download restriction toggle, secure player mode
+toggle
+27.12 FLAG_SECURE toggle + device admin warning: warn that device admin apps may conflict, show
+current state
+27.13 ActiveSessionsScreen: device list with model, OS, last active time, remote logout button per device
+27.14 Device fingerprint display: Build.MODEL, Build.VERSION.RELEASE, last IP, last active timestamp
+27.15 API integration: GET /api/settings (sessions), DELETE /api/settings/sessions/:id (remote logout)
+Phase 28: Help & Support #83-90 + Exam #91-95 (13 Pages)
+Pages: #83-95 | Estimated Duration: 5-6 days
+28.1 HelpScreen: hub with category cards (Getting Started, Courses, Payment, Technical) + search bar
+28.2 FAQScreen: AnimatedExpandable categories (courses, payment, technical) with search filter,
+expandable Q&A; pairs
+28.3 ContactSupportScreen: chat option, email option, phone option with operating hours display
+28.4 Intent-based email/phone launch: ACTION_SENDTO for email, ACTION_DIAL for phone,
+ACTION_VIEW for WhatsApp
+28.5 API integration: POST /api/support/tickets (create ticket)
+28.6 TicketDetailScreen: status timeline (Open > In Progress > Resolved), message thread, file
+attachments
+28.7 Image picker for attachments: ActivityResultContracts.PickVisualMedia, compress + upload as
+multipart
+28.8 API integration: GET /api/support/tickets/:id, GET /api/support/tickets/:id/messages, POST
+/api/support/tickets/:id/messages
+28.9 ReportIssueScreen: bug report form (category dropdown, severity selector, description textarea)
+28.10 Screenshot capture + log collector: take screenshot (excluding FLAG_SECURE areas), attach logs
+from Logcat buffer
+28.11 TermsOfServiceScreen: full terms in scrollable markdown view
+28.12 PrivacyPolicyScreen: full privacy policy in scrollable markdown view
+28.13 RefundPolicyScreen: refund conditions, process, timeline in scrollable markdown view
+28.
+--- PAGE 28 ---
+28.15 Countdown to exam date: animated countdown timer to upcoming exam
+28.16 ExamScheduleScreen: exam routine with date/time/subject columns, countdown timers per exam
+28.17 Calendar integration + alarm scheduling: add exam to calendar, set reminder alarm via
+AlarmManager
+28.18 ExamResultsScreen: GPA display, subject-wise marks table, Canvas-drawn analysis charts
+28.19 ExamPracticeScreen: model test, previous year questions, full-screen quiz mode with timer
+28.20 Full-screen quiz mode with timer service: immersive mode, countdown timer in Foreground Service,
+auto-submit
+28.21 ExamTipsScreen: study hack cards, time management strategies, daily tip notification via
+WorkManager
+28.22 Daily tip notification: periodic WorkManager (daily at 9 AM), random tip from local JSON
+Phase 29: Social #96-101 + Payment #102-104 + Misc #105-109 +
+Error #110-111 + Security Hardening
+Pages: #96-111 | Estimated Duration: 6-8 days
+29.1 LeaderboardScreen: top students ranking with XP points, weekly/monthly/all-time tabs, animated
+rank change
+29.2 Animated rank change: number animation on position change, avatar list with staggered animation
+29.3 StudyGroupsScreen: group cards with join/create, shared notes, member avatars
+29.4 Real-time updates with polling: 30s interval poll for group updates, WorkManager for background
+29.5 PeerConnectionsScreen: follow/message peers, collaboration suggestions based on department
+29.6 Intent-based messaging: open WhatsApp/Telegram/SMS via Intent with peer contact
+29.7 CommunityScreen: forum with posts, comments, upvotes (same Discussion component, different
+data source)
+29.8 FeedbackScreen: rating bar (1-5 stars) + text feedback form, Google In-App Review API prompt
+29.9 RoadmapScreen: upcoming features list with voting buttons, progress bars, haptic feedback on vote
+29.10 PaymentSuccessScreen: Lottie success animation, receipt details, "Go to Course" CTA, deep link
+from PipraPay redirect
+29.11 PaymentFailedScreen: error illustration, failure reason text, retry button, support link, deep link
+handling
+29.12 PaymentCancelScreen: cancel confirmation, return to course button, alternative payment methods
+29.13 PipraPay Chrome Custom Tab integration: launch payment URL in CustomTabsIntent, handle
+redirect deep links
+29.14 PricingScreen: Free vs Premium plan comparison table, feature checklist, BottomSheet for plan
+selection
+29.15 ChangelogScreen: version history with new features and bug fixes, markdown rendering, version
+filter dropdown
+29.16 MaintenanceScreen: maintenance mode display, estimated return time, auto-retry with
+WorkManager (5 min intervals)
+29.17 TermsScreen + PrivacyScreen: shortened terms of service and privacy policy, markdown rendering
+29.18 Error404Screen: animated "page not found" illustration, "Go Home" button, deep link fallback
+29.19 Error500Screen: server error illustration, refresh button, support link, auto-retry with exponential
+backoff
+29.20 Certificate pinning: pin Cloudflare Worker hostname, backup pins in 
+--- PAGE 29 ---
+29.22 R8 obfuscation + string encryption: full R8 optimization, DexGuard-compatible string encryption,
+anti-tampering (APK signature verification)
+29.23 FCM + OneSignal push notification setup: dual channel, FCM for Android-optimized delivery,
+OneSignal for web push + broader reach
+29.24 Overlay detection: detect screen overlay attacks
+(Settings.ACTION_MANAGE_OVERLAY_PERMISSION check), block sensitive operations when overlay
+detected
+29.25 Final security audit + signing config + release AAB generation: full security review, keystore from
+GitHub Secrets, signed AAB upload to Play Console
+16. Shared Components & Composables
+The web app defines 14 shared components used across all pages. Each will be implemented as a
+reusable Jetpack Compose composable function forming the design system foundation. These
+are built in Phase 3 and used throughout all subsequent phases.
+Component
+File
+Description
+TopBar
+TopBar.kt
+App bar with logo, search, bell (badge), avatar. Collapsing scroll on
+detail screens.
+BottomNav
+BottomNav.kt
+4-tab navigation (Home, Explore, My Courses, Profile). Badge +
+animated indicator.
+Sidebar
+Sidebar.kt
+Drawer with user header, grouped menu, logout button.
+GlassCard
+GlassCard.kt
+Semi-transparent card with blur, border, 16dp corners, shadow.
+GradientButton
+GradientButton.kt
+135deg gradient button, 12dp corners, press scale 0.98x.
+DakkhoProgressBar
+DakkhoProgressBar.kt
+Gradient fill, rounded caps, animated (Animatable).
+ShimmerEffect
+ShimmerEffect.kt
+Infinite transition shimmer loading placeholder.
+EmptyState
+EmptyState.kt
+Lottie animation + title + subtitle + CTA button.
+AnimatedPage
+AnimatedPage.kt
+fadeInUp transition wrapper (translateY 12dp + alpha, 400ms).
+AnimatedCounter
+AnimatedCounter.kt
+Number animation from 0 to target value.
+CourseCardGrid
+CourseCardGrid.kt
+LazyVerticalGrid of course cards (thumbnail, title, rating, price).
+SensitiveActionPromp
+t
+SensitiveActionPrompt.k
+t
+BiometricPrompt for destructive actions.
+ContentProtection
+ContentProtection.kt
+FLAG_SECURE wrapper composable, toggleable via settings.
+CustomContextMenu
+CustomContextMenu.kt
+Override context menu to prevent copy on protected content.
+17. CI/CD & Build Pipeline
+The project uses GitHub Actions for automated builds. The workflow triggers on push to main
+and pull requests, producing both debug APK and release AAB. Build steps: (1) Checkout code,
+(2) Setup JDK 17 (Temurin), (3) Setup Gradle cache, (4) Grant execute permission for gradlew, (5)
+Run unit tests, (6) Build debug APK (./gradlew assembleDebug), (7) Build release AAB (./gradlew
+bundleRelease), (8) Sign release with keystore from GitHub Secrets, (9) Upload artifacts, (10)
+
+--- PAGE 30 ---
+Create GitHub Release on tag push. Signing configuration uses keystore file, keystore password,
+key 
+alias, 
+and 
+key 
+password 
+stored 
+as 
+GitHub 
+Secrets. 
+The 
+repository 
+is 
+at
+https://github.com/grayrat2026/dakkho-student-mobile.
+18. Testing Strategy
+The testing strategy follows the testing pyramid: 70% unit tests, 20% integration tests, 10% UI
+tests. Unit tests cover ViewModels, Use Cases, Repositories, and Mappers using JUnit 5 and
+MockK for mocking. Integration tests verify Room database operations, Retrofit API calls (using
+MockWebServer), and WorkManager tasks. UI tests use Compose Testing framework to verify
+screen rendering, user interactions, and navigation flows. End-to-end tests cover critical paths:
+signup, login, course enrollment, video playback, payment flow, and certificate generation.
+Performance profiling uses Android Profiler for memory leaks, baseline profiles for startup
+time, and benchmark library for critical path measurement.
+19. Parallel Execution Strategy
+The 29 phases can be parallelized using shared brain (subagent) delegation. The dependency
+graph allows the following parallel groups: Phase 1-3 must be sequential (foundation). After
+Phase 3, Phases 4-6 (Auth) can run in parallel. Phases 7-9 (Main A) run in parallel, then 10-12
+(Main B) in parallel. Phase 13 (Course Detail) must complete before Phase 14 (Video Player).
+After Phase 13, Phases 15-17 (Course sub-pages), 18-19 (Instructor), 20-22 (User Activity), 23-24
+(Department/Semester), and 25-27 (Profile/Settings) can all run in parallel. Phase 28
+(Help/Exam) and Phase 29 (Social/Payment/Security) are the final sequential phases. With 2-3
+developers or subagents working in parallel, the total timeline reduces from 15 weeks to
+approximately 8-10 weeks.
+Parallel Group
+Phases
+Can Start After
+Foundation (Sequential)
+1, 2, 3
+Day 1
+Auth (Parallel)
+4, 5, 6
+Phase 3 complete
+Main A (Parallel)
+7, 8, 9
+Phase 6 complete
+Main B (Parallel)
+10, 11, 12
+Phase 6 complete
+Course Core (Sequential)
+13, 14
+Phase 12 complete
+Course Sub (Parallel)
+15, 16, 17
+Phase 13 complete
+Instructor (Parallel)
+18, 19
+Phase 13 complete
+User Activity (Parallel)
+20, 21, 22
+Phase 14 complete
+Dept/Sem (Parallel)
+23, 24
+Phase 12 complete
+Profile/Settings (Parallel)
+25, 26, 27
+Phase 22 complete
+Final (Sequential)
+28, 29
+Phase 27 complete
