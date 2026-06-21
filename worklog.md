@@ -114,3 +114,34 @@ Stage Summary:
 - Total project: ~105 Kotlin files
 - GitHub: https://github.com/grayrat2026/dakkho-student-mobile/tree/native-android-rewrite
 - Next: Phase 13 (Course Detail #14)
+
+---
+Task ID: 15
+Agent: Main
+Task: Phase 15 — Course Curriculum #16 & Reviews #17
+
+Work Log:
+- Read Phase 15 specs from plan PDF (12 sub-phases)
+- Added POST /api/courses/:id/reviews endpoint to CourseApiService with SubmitReviewRequest DTO
+- Added rating filter parameter to GET reviews endpoint
+- Added RatingBreakdown domain model with percentage calculations
+- Added title field to Review and ReviewDto models
+- Added submitCourseReview() to CourseRepository interface and CourseRepositoryImpl
+- Created CourseCurriculumViewModel with expandable tree state management, progress tracking, expand/collapse all
+- Created CourseCurriculumScreen with animated expandable tree (Subject→Class→Unit→Lesson), circular progress indicators, completion checkmarks, download toggles, empty state
+- Created CourseReviewsViewModel with rating filter, pagination, submit review, rating breakdown calculation
+- Created CourseReviewsScreen with rating summary, Canvas-drawn breakdown bars, filter chips, review list with pagination, write review ModalBottomSheet with interactive star rating
+- Added Route.CourseCurriculum and Route.CourseReviews with navigation parameters
+- Wired both routes in DakkhoNavHost with slide transitions
+- Updated CourseDetailScreen to pass onNavigateToCurriculum and onNavigateToReviews callbacks
+- Updated CourseCurriculumTab with "View All" button
+- Updated CourseReviewsTab with "View All Reviews" button
+- Updated README with Phase 15 completion, project structure, API endpoints
+- Committed (68f430a) and pushed to GitHub
+
+Stage Summary:
+- 4 new Kotlin files, 11 modified files (15 total changed)
+- Phase 1-15 completed
+- Total project: ~115 Kotlin files
+- GitHub: https://github.com/grayrat2026/dakkho-student-mobile/tree/native-android-rewrite
+- Next: Phase 16 (Course Q&A #18, Announcements #19, Resources #20)
