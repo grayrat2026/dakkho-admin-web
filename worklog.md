@@ -145,3 +145,33 @@ Stage Summary:
 - Total project: ~115 Kotlin files
 - GitHub: https://github.com/grayrat2026/dakkho-student-mobile/tree/native-android-rewrite
 - Next: Phase 16 (Course Q&A #18, Announcements #19, Resources #20)
+
+---
+Task ID: 16
+Agent: Main
+Task: Phase 16 — Course Q&A #18, Announcements #19, Resources #20
+
+Work Log:
+- Added DiscussionApiService with thread list, detail, create, reply, like, delete endpoints
+- Added AnnouncementApiService with list and detail endpoints
+- Created domain models: Discussion, DiscussionReply, Announcement with DTOs and response wrappers
+- Created DiscussionRepository interface and DiscussionRepositoryImpl with full CRUD
+- Created AnnouncementRepository interface and AnnouncementRepositoryImpl
+- Built QnAScreen with: thread list (LazyColumn + pagination), thread detail view, ask question ModalBottomSheet, reply ModalBottomSheet, like toggle, pinned thread indicator
+- Built AnnouncementsScreen with: announcement list with type badges (info/warning/update/urgent), detail view with instructor info, pinned/unread indicators
+- Built ResourcesScreen with: search bar, filter chips (All/PDF/Images), resource cards with file type icons, download with progress, downloaded indicator
+- Updated CourseQnATab with real content: compact discussion cards, View All button, Ask Question CTA for enrolled students
+- Updated CourseAnnouncementsTab with real content: compact announcement cards with type badges, View All button
+- Added Route.CourseQnA, Route.CourseAnnouncements, Route.CourseResources to Route.kt
+- Wired all three new routes in DakkhoNavHost with slide transitions
+- Updated CourseDetailScreen to pass onNavigateToQnA, onNavigateToAnnouncements, onNavigateToResources callbacks
+- Updated DI modules: NetworkModule with DiscussionApiService + AnnouncementApiService providers, RepositoryModule with bindings
+- Updated README with Phase 16 completion, new API endpoints
+- Committed (163d670) and pushed to GitHub
+
+Stage Summary:
+- 12 new Kotlin files, 10 modified files (22 total changed)
+- Phase 1-16 completed
+- Total project: ~127 Kotlin files
+- GitHub: https://github.com/grayrat2026/dakkho-student-mobile/tree/native-android-rewrite
+- Next: Phase 17 (Course Notes #21, Quizzes #22, Progress #23)
