@@ -1,0 +1,720 @@
+     1→# DAKKHO Master Plan — Full Feature Roadmap
+     2→
+     3→> **Last Updated**: 2026-06-08  
+     4→> **Status Legend**: ✅ Done | 🔧 In Progress | ⬜ Planned | ❌ Blocked
+     5→
+     6→---
+     7→
+     8→## 🚨 CRITICAL BUGS (Fix NOW — Before Any New Feature)
+     9→
+    10→| # | Bug | Status | Details |
+    11→|---|-----|--------|---------|
+    12→| B1 | Paid course free enrollment | ⬜ | `EnrollmentPage.handleFreeEnroll` catch block navigates directly to video-player, bypassing payment. Also `packages.find(p => p.price === 0) \|\| packages[0]` picks paid pkg as fallback. |
+    13→| B2 | `price` vs `price_bdt` mismatch | ⬜ | Appwrite stores `price_bdt`, frontend checks `course.price`. Course shows as Free when price_bdt exists. |
+    14→| B3 | Instructor shows 3 courses, admin shows 2 | ⬜ | Instructor profile counts ALL courses (including deleted/unpublished). Need `is_deleted=false AND is_published=true` filter. |
+    15→| B4 | Enrollment button always shows "Enroll Now" | ⬜ | No `is_enrolled` / `watch_progress` check. Need 3-state button: Enroll Now / Start Learning / Continue. |
+    16→| B5 | `video_url` unknown attribute error | ✅ | Fixed: Standalone worker was mapping `videoUrl → video_url` but Appwrite only has `videoUrl`. Removed snake_case mapping. Deployed. |
+    17→
+    18→---
+    19→
+    20→## Phase 0: Infrastructure & Core Fixes (CURRENT)
+    21→
+    22→### 0.1 — Fix Paid Course Free Enrollment Bug
+    23→- **Status**: 🔧 In Progress
+    24→- **Files**: `dakkho-student-web/src/components/dakkho/course/EnrollmentPage.tsx`, `worker/src/routes/student-api.ts`
+    25→- **What**:
+    26→  - [ ] Remove `navigate('video-player')` from `handleFreeEnroll` catch block — show error instead
+    27→  - [ ] Fix `packages.find(p => p.price === 0) || packages[0]` — only use free packages
+    28→  - [ ] Add backend `POST /student/enroll/free` endpoint that validates course price === 0 before creating enrollment
+    29→  - [ ] Add server-side price validation: if course.price > 0, reject free enrollment
+    30→
+    31→### 0.2 — Fix Course Price Field Mapping
+    32→- **Status**: ⬜
+    33→- **Files**: `worker/src/routes/courses.ts`, student web `data-hooks.ts`, `api-client.ts`
+    34→- **What**:
+    35→  - [ ] In `mapCourseFromAppwrite`, add `price: doc.price_bdt || 0` mapping
+    36→  - [ ] In student web data hooks, map `price_bdt → price` when reading courses
+    37→  - [ ] Ensure admin panel creates course with both `price` and `price_bdt` attributes
+    38→
+    39→### 0.3 — Enrollment Button Logic (3-State)
+    40→- **Status**: ⬜
+    41→- **What**:
+    42→  - [ ] `is_enrolled = false` → **[Enroll Now / Buy Now]** button → navigate to enrollment page
+    43→  - [ ] `is_enrolled = true AND watch_progress = 0` → **[Start Learning →]** → navigate to first video
+    44→  - [ ] `is_enrolled = true AND watch_progress > 0` → **[Continue →]** → navigate to `last_watched_video_id` at `last_position`
+    45→  - [ ] Add toast: "Resuming from Section 2 • Lecture 4..."
+    46→
+    47→### 0.4 — D1 Migration & Deployment
+    48→- **Status**: ⬜
+    49→- **What**:
+    50→  - [ ] Run `POST /migration/d1-tables` to create `course_reviews`, `course_learning_items`, `lesson_resources`, `books`, `book_orders`
+    51→  - [ ] Deploy worker via `npx wrangler deploy` from `worker/` directory
+    52→  - [ ] Deploy student web via `npx wrangler pages deploy out/ --project-name=dakkho-student`
+    53→  - [ ] Deploy admin web via `npx wrangler pages deploy out/ --project-name=dakkho-admin`
+    54→  - [ ] End-to-end test: signup → login → browse course → enroll (free + paid) → watch video
+    55→
+    56→### 0.5 — PipraPay Automatic Webhook Verification (P1 — UPGRADED from Phase 4.5)
+    57→- **Status**: ⬜
+    58→- **Priority**: 🟠 P1 (was P3 — upgraded because manual verify is unreliable)
+    59→- **What**:
+    60→  - [ ] Configure PipraPay webhook URL: `https://dakkho-admin-api.dakkho-admin.workers.dev/api/payment/webhook`
+    61→  - [ ] On payment success → auto-verify + auto-enroll (no admin manual step)
+    62→  - [ ] On payment fail → log + notify student to retry
+    63→  - [ ] Webhook signature verification (PipraPay secret key)
+    64→  - [ ] Idempotency: same `pp_id` processed only once
+    65→  - [ ] Fallback: manual verify still available for edge cases
+    66→  - [ ] PipraPay sandbox + live mode toggle in admin settings
+    67→  - [ ] Test with PipraPay sandbox before going live
+    68→
+    69→---
+    70→
+    71→## Phase 1: Soft Delete & Data Integrity
+    72→
+    73→### 1.1 — Soft Delete System (7-Day Trash)
+    74→- **Status**: ⬜
+    75→- **What**:
+    76→  - [ ] Add `is_deleted` (BOOLEAN DEFAULT 0) and `deleted_at` and `deleted_by` columns to: courses, videos, users, instructors
+    77→  - [ ] All queries add `WHERE is_deleted = 0` filter
+    78→  - [ ] Admin delete action sets `is_deleted = 1, deleted_at = NOW()` instead of hard delete
+    79→  - [ ] Add `GET /admin/trash` endpoint to list deleted items
+    80→  - [ ] Add `POST /admin/trash/:type/:id/restore` to restore within 7 days
+    81→  - [ ] Add scheduled worker (cron) to permanently delete items where `deleted_at < NOW() - 7 days`
+    82→  - [ ] User delete: soft delete user + related profile/courses, keep payment history for 1 year
+    83→  - [ ] Course delete: soft delete course + cascade to enrollments (keep for audit)
+    84→  - [ ] Video delete: soft delete video + related progress data
+    85→
+    86→### 1.2 — Instructor Course Count Fix
+    87→- **Status**: ⬜
+    88→- **What**:
+    89→  - [ ] Instructor profile: count only `is_deleted = false AND is_published = true` courses
+    90→  - [ ] Instructor API: filter courses by published + not-deleted status
+    91→  - [ ] Admin dashboard: count all courses (including unpublished), but exclude deleted
+    92→
+    93→---
+    94→
+    95→## Phase 2: Instructor Page Redesign & Features
+    96→
+    97→### 2.1 — Instructor Profile Page Overhaul
+    98→- **Status**: ⬜
+    99→- **What**:
+   100→  - [ ] Bio section with **Markdown support** (react-markdown renderer)
+   101→  - [ ] Social links: YouTube, GitHub, Facebook, LinkedIn (stored in Appwrite instructor doc)
+   102→  - [ ] Expertise tags: Electronics, IoT, Embedded Systems, etc. (stored as array)
+   103→  - [ ] Joined date display
+   104→  - [ ] Instructor Verification Badge:
+   105→    - ✅ Verified Instructor (admin manually approve)
+   106→    - 🎓 BTEB Certified (diploma certificate upload)
+   107→    - Show badge on profile + course cards
+   108→
+   109→### 2.2 — Instructor Courses Tab
+   110→- **Status**: ⬜
+   111→- **What**:
+   112→  - [ ] Show only `is_deleted = false AND is_published = true` courses
+   113→  - [ ] Sort options: Latest / Most Popular / Rating
+   114→  - [ ] Course card: enrollment count, rating, price/FREE badge
+   115→  - [ ] 3-state button: Enroll Now / Start Learning / Continue (as per 0.3)
+   116→
+   117→### 2.3 — Instructor Reviews Tab
+   118→- **Status**: ⬜
+   119→- **What**:
+   120→  - [ ] Overall rating breakdown (5★ → 1★ bar chart)
+   121→  - [ ] Recent reviews with pagination
+   122→  - [ ] Helpful/Unhelpful voting
+   123→
+   124→### 2.4 — Instructor Settings Modal
+   125→- **Status**: ⬜
+   126→- **What**:
+   127→  - [ ] Profile Edit (name, bio, avatar, cover)
+   128→  - [ ] Social Links editor
+   129→  - [ ] Notification Preferences (new enrollment, new review, payment received)
+   130→  - [ ] Payout Info (bKash/Nagad number)
+   131→  - [ ] Visibility toggle (Public / Unlisted)
+   132→  - [ ] Danger Zone: Deactivate Account (7-day trash), Transfer Courses to another instructor
+   133→
+   134→---
+   135→
+   136→## Phase 3: Enrollment Analytics & Access Control
+   137→
+   138→### 3.1 — Enrollment Analytics Dashboard
+   139→- **Status**: ⬜
+   140→- **What**:
+   141→  - [ ] Today/Week/Month enrollment counts + revenue
+   142→  - [ ] Dropout Rate (avg lectures before dropout)
+   143→  - [ ] Most-watched / Least-watched lecture stats
+   144→  - [ ] Available for Admin + Instructor (own courses only)
+   145→
+   146→### 3.2 — Course Access Expiry
+   147→- **Status**: ⬜
+   148→- **What**:
+   149→  - [ ] Instructor/Admin can set: lifetime / 6 months / 1 year access
+   150→  - [ ] 7-day before expiry: notify user
+   151→  - [ ] Show re-enroll option with discounted price
+   152→
+   153→### 3.3 — Course Preview Lock
+   154→- **Status**: ⬜
+   155→- **What**:
+   156→  - [ ] Not enrolled → only first N lectures free (instructor/admin sets N)
+   157→  - [ ] After preview limit → paywall popup: "Enroll to access remaining {X} lectures"
+   158→  - [ ] Video player: check enrollment before playing non-preview videos
+   159→
+   160→### 3.4 — Watch Time Heatmap (Instructor Analytics) — NEW
+   161→- **Status**: ⬜
+   162→- **What**:
+   163→  - [ ] Track watch progress in 10-second intervals per video
+   164→  - [ ] D1 table: `video_heatmap` (video_id, second_range, view_count, drop_count)
+   165→  - [ ] Instructor sees color-coded heatmap on video timeline:
+   166→    - 🟢 Green = most watched / rewatched sections
+   167→    - 🟡 Yellow = normal watch rate
+   168→    - 🔴 Red = sections where most students skip/drop off
+   169→  - [ ] Insights text: "এই 2 মিনিট কেউ দেখে না — এই অংশ improve করুন"
+   170→  - [ ] Aggregate heatmap: all students combined
+   171→  - [ ] Per-video analytics page: avg watch time, completion rate, peak drop-off point
+   172→  - [ ] Admin sees heatmap across all courses
+   173→  - [ ] Data collection: piggyback on video progress auto-save (Phase 5.1) — aggregate every 10s interval
+   174→
+   175→---
+   176→
+   177→## Phase 4: Admin Bulk Actions & Security
+   178→
+   179→### 4.1 — Bulk Actions (Admin Panel)
+   180→- **Status**: ⬜
+   181→- **What**:
+   182→  - [ ] Multi-select courses/videos/users
+   183→  - [ ] Bulk Delete → Trash
+   184→  - [ ] Bulk Publish/Unpublish
+   185→  - [ ] Bulk Move to different instructor
+   186→  - [ ] Export data (CSV)
+   187→
+   188→### 4.2 — Enrollment Lock (Anti-abuse)
+   189→- **Status**: ⬜
+   190→- **What**:
+   191→  - [ ] Same IP 10+ free enroll in 1 hour → block + alert
+   192→  - [ ] Payment without valid TrxID → reject
+   193→  - [ ] bKash/Nagad TrxID used more than once → block/deactivate user
+   194→  - [ ] Blocked user login shows: "Contact Support — Your account is {status}"
+   195→  - [ ] Suspicious pattern → auto flag for admin review
+   196→
+   197→### 4.3 — Role-Based Access Control (RBAC)
+   198→- **Status**: ⬜
+   199→- **What**:
+   200→  - [ ] Admin roles: Super Admin / Content Moderator / Support Agent / Finance
+   201→  - [ ] Each role has different permissions
+   202→  - [ ] Support agent: only view tickets, cannot delete
+   203→  - [ ] Super Admin: full access
+   204→
+   205→### 4.4 — Audit Log
+   206→- **Status**: ⬜
+   207→- **What**:
+   208→  - [ ] Record: who, when, what action, on what resource
+   209→  - [ ] "Admin X deleted Course Y at 3:45 AM on June 23"
+   210→  - [ ] Suspicious activity alert (e.g., bulk delete at 3 AM)
+   211→  - [ ] 90-day retention
+   212→
+   213→### 4.5 — Manual Payment Verification (Fallback only — Primary is 0.5 Webhook)
+   214→- **Status**: ⬜
+   215→- **What**:
+   216→  - [ ] Admin can approve/reject manual payments via bKash/Nagad TrxID
+   217→  - [ ] Student support ticket → direct enrollment
+   218→  - [ ] Partial refund option (triggered from admin, actioned via PipraPay)
+   219→  - [ ] Note: Primary payment flow is now automatic via webhook (Phase 0.5). Manual is fallback only.
+   220→
+   221→---
+   222→
+   223→## Phase 5: Video & Learning Features
+   224→
+   225→### 5.1 — Video Progress Auto-save
+   226→- **Status**: ⬜
+   227→- **What**:
+   228→  - [ ] Every 10 seconds: save progress to backend (no spinner)
+   229→  - [ ] Offline: save to IndexedDB, sync when online
+   230→  - [ ] Show "Last watched 2 hours ago" label
+   231→  - [ ] Also feeds data into Watch Time Heatmap (Phase 3.4)
+   232→
+   233→### 5.2 — Picture-in-Picture (PiP)
+   234→- **Status**: ⬜
+   235→- **What**:
+   236→  - [ ] Floating video window when app minimized
+   237→  - [ ] Background audio play
+   238→
+   239→### 5.3 — Playback Speed
+   240→- **Status**: ⬜
+   241→- **What**:
+   242→  - [ ] 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x options
+   243→  - [ ] Remember per-user default speed
+   244→
+   245→### 5.4 — Screen Lock during Video
+   246→- **Status**: ⬜
+   247→- **What**:
+   248→  - [ ] Lock button to prevent accidental pause/seek
+   249→  - [ ] Only volume/brightness work when locked
+   250→  - [ ] Manual on/off toggle for student
+   251→
+   252→### 5.5 — Video Watermark (Anti-piracy)
+   253→- **Status**: ⬜
+   254→- **What**:
+   255→  - [ ] Subtle logged-in user name/ID watermark
+   256→  - [ ] Dynamic position (moves corner to corner)
+   257→  - [ ] Report piracy button
+   258→
+   259→### 5.6 — Device Limit
+   260→- **Status**: ⬜
+   261→- **What**:
+   262→  - [ ] Max 1 device simultaneous watch per account
+   263→  - [ ] New device login → notify old device
+   264→  - [ ] "Logout other devices" option
+   265→
+   266→### 5.7 — Note-Taking (In-video)
+   267→- **Status**: ⬜
+   268→- **What**:
+   269→  - [ ] Take notes during video, auto-link to timestamp
+   270→  - [ ] "2:34 — Ohm's law: V=IR" → click to jump to moment
+   271→  - [ ] Export notes as PDF
+   272→
+   273→### 5.8 — Video Bookmarks (One-Tap) — NEW
+   274→- **Status**: ⬜
+   275→- **What**:
+   276→  - [ ] One-tap bookmark button on video player → saves current timestamp
+   277→  - [ ] D1 table: `video_bookmarks` (id, user_id, video_id, course_id, timestamp_seconds, label, created_at)
+   278→  - [ ] Auto-label: "Bookmark at 5:34" (user can edit label later)
+   279→  - [ ] "My Bookmarks" page — grouped by course, then by video
+   280→  - [ ] Click bookmark → jump directly to that second in the video
+   281→  - [ ] Visual markers on video progress bar (small dots for each bookmark)
+   282→  - [ ] Delete bookmark (swipe or long-press on mobile)
+   283→  - [ ] Bookmark count per video shown in video details
+   284→  - [ ] Different from Notes (5.7) — bookmarks are quick timestamps, notes are text content
+   285→
+   286→### 5.9 — Doubt Section (Q&A per Lecture)
+   287→- **Status**: ⬜
+   288→- **What**:
+   289→  - [ ] Q&A thread below each video
+   290→  - [ ] Student asks, instructor or other students answer
+   291→  - [ ] Upvote system — most helpful answer on top
+   292→  - [ ] Instructor reply gets 🎓 badge
+   293→  - [ ] Unanswered questions → auto-notify instructor
+   294→
+   295→### 5.10 — Lecture Resource Attachments — NEW
+   296→- **Status**: ⬜
+   297→- **What**:
+   298→  - [ ] Instructor/Admin can attach PDF/image files to each lecture (stored in R2)
+   299→  - [ ] D1 table `lesson_resources` already exists — use it fully
+   300→  - [ ] R2 bucket: `dakkho-resources` — upload endpoint already exists
+   301→  - [ ] Student view: resource list below video player (only if enrolled)
+   302→  - [ ] Download button for enrolled students
+   303→  - [ ] In-app PDF viewer (react-pdf or iframe) — no external app needed
+   304→  - [ ] Image preview (lightbox)
+   305→  - [ ] Resource count shown on course curriculum (e.g., "5 resources")
+   306→  - [ ] Admin: manage resources in video edit dialog (add/remove/reorder)
+   307→  - [ ] File size limit: 50MB per resource
+   308→
+   309→---
+   310→
+   311→## Phase 6: Gamification & Engagement
+   312→
+   313→### 6.1 — Streak System
+   314→- **Status**: ⬜
+   315→- **What**:
+   316→  - [ ] Consecutive days learning counter
+   317→  - [ ] 7-day streak = 🔥 badge, 30-day = 🏆 badge
+   318→  - [ ] Day-before-break push notification: "You haven't studied today, streak will break!"
+   319→  - [ ] Leaderboard: most active students this month (per course/batch)
+   320→
+   321→### 6.2 — Smart Push Notifications
+   322→- **Status**: ⬜
+   323→- **What**:
+   324→  - [ ] New lecture upload → notify enrolled students
+   325→  - [ ] "80% of your batch completed Lecture 5, you're falling behind"
+   326→  - [ ] Weekly summary: "0 minutes studied this week"
+   327→  - [ ] Payment success/failure instant notify
+   328→
+   329→### 6.3 — Announcement System
+   330→- **Status**: ⬜
+   331→- **What**:
+   332→  - [ ] Instructor/Admin: course-level announcements
+   333→  - [ ] Platform-wide announcements (maintenance, new feature)
+   334→  - [ ] Read/unread tracking
+   335→
+   336→---
+   337→
+   338→## Phase 7: Coupon, Bundle & Affiliate
+   339→
+   340→### 7.1 — Coupon / Discount System
+   341→- **Status**: ⬜
+   342→- **What**:
+   343→  - [ ] Instructor/Admin can create coupons
+   344→  - [ ] Types: Percentage (20% off) / Fixed (৳100 off) / Free (100% off)
+   345→  - [ ] Expiry date, max usage limit, per-user limit
+   346→  - [ ] Admin global coupon (works on all courses)
+   347→  - [ ] Referral code system — student refers → discount
+   348→
+   349→### 7.2 — Bundle / Pack
+   350→- **Status**: ⬜
+   351→- **What**:
+   352→  - [ ] Multiple courses bundled together at discount
+   353→  - [ ] "3rd Semester Complete Pack — ৳ 499 (separately ৳ 800)"
+   354→  - [ ] Auto-enroll in all bundled courses
+   355→  - [ ] Email + App notification at bundle end: "Submit TxnID for uninterrupted access"
+   356→
+   357→### 7.3 — Affiliate Program
+   358→- **Status**: ⬜
+   359→- **What**:
+   360→  - [ ] Student shares affiliate link → 10-15% commission on sale
+   361→  - [ ] Dashboard: earnings, clicks, conversions
+   362→  - [ ] Minimum ৳ 200 → course discount
+   363→
+   364→### 7.4 — Flash Sale / Limited-Time Offer
+   365→- **Status**: ⬜
+   366→- **What**:
+   367→  - [ ] Admin sets time-limited sale
+   368→  - [ ] Course card countdown timer: "⏰ 2:34:10 remaining"
+   369→  - [ ] Sale ends → original price auto-restore
+   370→
+   371→---
+   372→
+   373→## Phase 8: Community & Social
+   374→
+   375→### 8.1 — Student Community / Forum
+   376→- **Status**: ⬜
+   377→- **What**:
+   378→  - [ ] Course-specific discussion board
+   379→  - [ ] General Polytechnic Q&A board
+   380→  - [ ] Post, reply, upvote, save
+   381→  - [ ] Instructor featured answer
+   382→
+   383→### 8.2 — Peer Study Group
+   384→- **Status**: ⬜
+   385→- **What**:
+   386→  - [ ] Same-course students can create groups
+   387→  - [ ] Group chat (in-app)
+   388→  - [ ] Study session scheduling
+   389→
+   390→### 8.3 — Re-engagement Campaign
+   391→- **Status**: ⬜
+   392→- **What**:
+   393→  - [ ] 14 days no login → "Did you forget us?" email/SMS
+   394→  - [ ] 30 days → special offer "Come back, 20% off"
+   395→  - [ ] Incomplete course reminder: "Only 3 lectures left!"
+   396→
+   397→### 8.4 — Student Public Profile — NEW
+   398→- **Status**: ⬜
+   399→- **What**:
+   400→  - [ ] Student profile page: completed courses, certificates, streak, join date
+   401→  - [ ] Privacy setting: Public / Private / Course-mates only (student controls)
+   402→  - [ ] Shareable link: `dakkho.pro.bd/student/himadri`
+   403→  - [ ] Profile sections:
+   404→    - Header: avatar, name, technology, institute, semester
+   405→    - Stats: courses completed, total hours studied, current streak, longest streak
+   406→    - Badges: earned achievement badges (from streak/gamification system)
+   407→    - Courses: completed + in-progress (only if profile is public)
+   408→  - [ ] Instructor can view their course students' profiles
+   409→  - [ ] D1 table: `student_profiles` (user_id, is_public, show_streak, show_courses, show_badges, slug, updated_at)
+   410→  - [ ] Slug generation: auto from fullName, uniqueness check
+   411→  - [ ] Profile page SEO: meta tags for public profiles
+   412→
+   413→---
+   414→
+   415→## Phase 9: Search & Recommendation
+   416→
+   417→### 9.1 — Smart Search
+   418→- **Status**: ⬜
+   419→- **What**:
+   420→  - [ ] Search course title + instructor name + topic simultaneously
+   421→  - [ ] "3rd semester digital electronics" → relevant courses
+   422→  - [ ] Search history + trending searches
+   423→  - [ ] Typo tolerance: "electrnics" → "electronics"
+   424→
+   425→### 9.2 — Recommendation Engine
+   426→- **Status**: ⬜
+   427→- **What**:
+   428→  - [ ] "Courses like what you've watched" section
+   429→  - [ ] Batch-mates reading (anonymized)
+   430→  - [ ] "After this course, students usually take..." suggestions
+   431→  - [ ] Based on user interest & situation (not random)
+   432→
+   433→---
+   434→
+   435→## Phase 10: Live Class & Course Builder
+   436→
+   437→### 10.1 — Live Class Integration
+   438→- **Status**: ⬜
+   439→- **What**:
+   440→  - [ ] Scheduled live class calendar
+   441→  - [ ] 30-min before reminder notification
+   442→  - [ ] Live recording auto-upload to course
+   443→  - [ ] Chat + Q&A during live (moderated)
+   444→  - [ ] Attendance tracking
+   445→
+   446→### 10.2 — Course Builder Improvement
+   447→- **Status**: ⬜
+   448→- **What**:
+   449→  - [ ] Drag & drop lecture reorder
+   450→  - [ ] Bulk video upload
+   451→  - [ ] Quiz inside Chapter/Section
+   452→  - [ ] Free preview toggle per lecture
+   453→  - [ ] Course thumbnail auto-generate from first video frame
+   454→
+   455→### 10.3 — Student Management (Admin)
+   456→- **Status**: ⬜
+   457→- **What**:
+   458→  - [ ] Manually enroll a student (admin gift)
+   459→  - [ ] Forcibly reset student progress (re-attempt)
+   460→  - [ ] Ban student from course (with/without refund)
+   461→  - [ ] Bulk message enrolled students
+   462→
+   463→### 10.4 — Co-instructor Support
+   464→- **Status**: ⬜
+   465→- **What**:
+   466→  - [ ] Multiple instructors per course
+   467→  - [ ] Revenue split (60/40, 70/30)
+   468→  - [ ] Each instructor gets credit on their name
+   469→
+   470→---
+   471→
+   472→## Phase 11: Revenue & Finance
+   473→
+   474→### 11.1 — Revenue Dashboard (Admin + Instructor)
+   475→- **Status**: ⬜
+   476→- **What**:
+   477→  - [ ] Daily / Weekly / Monthly / Yearly revenue graph
+   478→  - [ ] Course-wise breakdown
+   479→  - [ ] Pending payout vs received
+   480→  - [ ] Tax-ready export (CSV/PDF)
+   481→  - [ ] Coupon performance analytics
+   482→
+   483→---
+   484→
+   485→## Phase 12: Security & Trust
+   486→
+   487→### 12.1 — Course Review Verification
+   488→- **Status**: ⬜
+   489→- **What**:
+   490→  - [ ] Only enrolled + 30%+ progress students can review
+   491→  - [ ] Fake review prevention
+   492→  - [ ] Instructor can flag review, admin verifies
+   493→
+   494→### 12.2 — Two-Factor Authentication (2FA)
+   495→- **Status**: ⬜
+   496→- **What**:
+   497→  - [ ] Instructor: mandatory 2FA (Authenticator app)
+   498→  - [ ] Student: optional 2FA
+   499→  - [ ] TOTP-based (Google Authenticator compatible)
+   500→
+   501→### 12.3 — Platform Health Dashboard
+   502→- **Status**: ⬜
+   503→- **What**:
+   504→  - [ ] Total users, DAU, MAU
+   505→  - [ ] Server load, error rate
+   506→  - [ ] Payment success rate (bKash/Nagad separately)
+   507→  - [ ] Most crashed pages / error logs
+   508→
+   509→### 12.4 — Error Monitoring (Sentry Integration) — NEW
+   510→- **Status**: ⬜
+   511→- **What**:
+   512→  - [ ] Sentry integration for Cloudflare Worker (backend)
+   513→    - Use `@sentry/cloudflare` or Sentry tunnel endpoint
+   514→    - Capture unhandled exceptions in Hono error handler
+   515→    - Attach user ID, route, request metadata to each event
+   516→  - [ ] Sentry integration for Next.js (frontend — admin + student)
+   517→    - Use `@sentry/nextjs` SDK
+   518→    - Capture React errors, API failures, unhandled promise rejections
+   519→    - Source maps upload for readable stack traces
+   520→  - [ ] Auto-report: every uncaught error → Sentry, no manual step
+   521→  - [ ] Stack trace with: file, line number, function name
+   522→  - [ ] User context: user ID, email, role, route
+   523→  - [ ] Performance monitoring: API response times, page load times
+   524→  - [ ] Alert rules:
+   525→    - Error spike > 10 in 5 min → Slack/Discord notification
+   526→    - New error type → email admin
+   527→  - [ ] Dashboard in admin panel: error rate graph (connects to Phase 12.3)
+   528→  - [ ] DSN and config stored in Cloudflare environment variables
+   529→  - [ ] Sampling rate: 100% for errors, 10% for performance traces
+   530→
+   531→---
+   532→
+   533→## Phase 13: Instructor Separate Site
+   534→
+   535→### 13.1 — Instructor Web App (Separate from Student)
+   536→- **Status**: ⬜
+   537→- **What**:
+   538→  - [ ] New Next.js project: `dakkho-instructor-web`
+   539→  - [ ] Same theme/UI as student app but instructor-focused
+   540→  - [ ] No student features (no explore, no community, etc.)
+   541→  - [ ] **Separate subdomain on Cloudflare Pages** (e.g., `instructor.dakkho.pro.bd` or `dakkho-instructor.pages.dev`)
+   542→  - [ ] Login only (NO signup) + mandatory 2FA (Authenticator)
+   543→  - [ ] "Request to become instructor" option — sends request to admin with:
+   544→    - Personal details (extensive: education, experience, certifications)
+   545→    - Proof documents upload
+   546→    - Background verification info
+   547→  - [ ] Admin approves/denies instructor requests
+   548→  - [ ] Instructor Dashboard: own courses, students, revenue, analytics
+   549→  - [ ] Course management: CRUD own courses only
+   550→  - [ ] Video upload & management
+   551→  - [ ] Student progress viewer
+   552→  - [ ] Revenue & payout dashboard
+   553→  - [ ] Announcement & notification system
+   554→  - [ ] Settings: profile, social links, payout info, 2FA
+   555→
+   556→---
+   557→
+   558→## Phase 14: Content Drip & Learning Path — NEW
+   559→
+   560→### 14.1 — Content Drip (Scheduled Unlock)
+   561→- **Status**: ⬜
+   562→- **What**:
+   563→  - [ ] Instructor/Admin sets drip schedule per course:
+   564→    - "Week 1 → Lecture 1-5, Week 2 → Lecture 6-10"
+   565→    - Or: "Enroll করার X দিন পর lecture unlock হবে"
+   566→  - [ ] D1 table: `content_drip_rules` (id, course_id, lecture_range_start, lecture_range_end, unlock_after_days, created_by)
+   567→  - [ ] Student sees locked lectures with: "Available in 3 days 🔒"
+   568→  - [ ] Unlock happens automatically based on enrollment date
+   569→  - [ ] Instructor can override: manually unlock for specific student
+   570→  - [ ] Drip preview in course builder (timeline view)
+   571→  - [ ] Use case: Cohort-based learning — all students progress together
+   572→  - [ ] Notification: "Lecture 6-10 এখন আনলক! 🎉" when new batch unlocks
+   573→
+   574→### 14.2 — Learning Path / Roadmap
+   575→- **Status**: ⬜
+   576→- **What**:
+   577→  - [ ] BTEB semester-based curated course sequences
+   578→  - [ ] Example: "Electronics Diploma 3rd Semester Path" → 5 courses in order
+   579→  - [ ] D1 table: `learning_paths` (id, title, title_bn, description, technology_id, semester, thumbnail_url, is_published, sort_order, created_by, created_at)
+   580→  - [ ] D1 table: `learning_path_courses` (id, path_id, course_id, sort_order, is_required)
+   581→  - [ ] D1 table: `user_path_progress` (id, user_id, path_id, completed_courses_json, current_course_id, started_at, completed_at)
+   582→  - [ ] Visual progress: "3/5 courses completed — 60% done"
+   583→  - [ ] Progress bar + milestones per path
+   584→  - [ ] Admin/Instructor creates paths in admin panel
+   585→  - [ ] Student browses paths: "আপনার সেমিস্টারের লার্নিং পাথ"
+   586→  - [ ] Path detail page: ordered course list with progress status
+   587→  - [ ] Auto-suggest next course in path after completing one
+   588→  - [ ] Path completion certificate (future)
+   589→
+   590→---
+   591→
+   592→## Phase 15: Webhook System — NEW
+   593→
+   594→### 15.1 — Webhook Infrastructure
+   595→- **Status**: ⬜
+   596→- **What**:
+   597→  - [ ] Outgoing webhooks: notify external services on platform events
+   598→    - PipraPay payment success/fail → already handled (Phase 0.5)
+   599→    - New enrollment → configurable webhook
+   600→    - Course published → configurable webhook
+   601→  - [ ] Incoming webhooks: receive data from external services
+   602→    - Third-party integration support (future CRM, analytics, etc.)
+   603→  - [ ] D1 table: `webhook_subscriptions` (id, event_type, target_url, secret, is_active, created_by, created_at)
+   604→  - [ ] D1 table: `webhook_logs` (id, subscription_id, event_type, payload, response_status, response_body, attempts, created_at)
+   605→  - [ ] Admin panel: manage webhooks (add/edit/delete/toggle)
+   606→  - [ ] Webhook logs viewer in admin panel:
+   607→    - Filter by event type, status, date
+   608→    - View full payload and response
+   609→    - Retry failed webhooks
+   610→  - [ ] Retry mechanism: failed delivery → retry 3 times with exponential backoff (1min, 5min, 15min)
+   611→  - [ ] Signature verification: HMAC-SHA256 signature in `X-Webhook-Signature` header
+   612→  - [ ] Rate limiting: max 100 webhooks per minute per subscription
+   613→  - [ ] Event types: `payment.success`, `payment.failed`, `enrollment.created`, `course.published`, `user.registered`, `review.created`
+   614→
+   615→---
+   616→
+   617→## Phase 16: Appwrite → D1 Full Migration — PLANNED (IMPLEMENT WHEN TOLD)
+   618→
+   619→### 16.1 — Migration Strategy
+   620→- **Status**: ⬜
+   621→- **Note**: This is a LONG-TERM migration. Do NOT implement until explicitly told. Current system uses both Appwrite (NoSQL) and D1 (SQL) — this dual-database approach increases complexity. Goal: migrate everything to D1, remove Appwrite dependency entirely.
+   622→- **What**:
+   623→  - [ ] Phase A: Audit all Appwrite collections and their attributes
+   624→  - [ ] Phase B: Create corresponding D1 tables for each Appwrite collection:
+   625→    - `users` → `users` (D1)
+   626→    - `courses` → `courses` (D1)
+   627→    - `videos` → `videos` (D1)
+   628→    - `instructors` → `instructors` (D1)
+   629→    - `enrollments` → `enrollments` (D1)
+   630→    - `categories` → `categories` (D1)
+   631→    - `notifications` → `notifications` (D1)
+   632→    - `discussions` → `discussions` (D1)
+   633→    - `watch_progress` → `watch_progress` (D1)
+   634→    - `bookmarks` → `bookmarks` (D1)
+   635→    - `user_settings` → `user_settings` (D1)
+   636→  - [ ] Phase C: Data migration script — copy all Appwrite documents to D1 rows
+   637→  - [ ] Phase D: Update worker API routes to use D1 instead of Appwrite
+   638→  - [ ] Phase E: Update student web API client to match new D1-based responses
+   639→  - [ ] Phase F: Update admin web to use D1-based API
+   640→  - [ ] Phase G: Remove Appwrite SDK and config from all projects
+   641→  - [ ] Phase H: Test everything end-to-end
+   642→  - **Benefits**: Single source of truth (D1 SQL), simpler queries, joins, transactions, no attribute mapping headaches
+   643→  - **Risk**: Large migration, needs careful testing. Appwrite auth (login/signup) needs replacement with custom JWT auth on D1.
+   644→
+   645→---
+   646→
+   647→## Architecture Notes
+   648→
+   649→### Tech Stack
+   650→- **Backend**: Hono 4 on Cloudflare Workers
+   651→- **Database**: Cloudflare D1 (SQL) + Appwrite (NoSQL) — **Long-term: migrate fully to D1 (Phase 16)**
+   652→- **File Storage**: Cloudflare R2 (buckets: `dakkho-videos`, `dakkho-thumbnails`, `dakkho-avatars`, `dakkho-resources`)
+   653→- **Cache**: Cloudflare KV (namespace: `f61a482ba88a45bebb35dfd600cd742d`)
+   654→- **Admin Web**: Next.js (`output: "export"`) → Cloudflare Pages (`dakkho-admin.pages.dev`)
+   655→- **Student Web**: Next.js (`output: "export"`) → Cloudflare Pages (`dakkhostudent.pages.dev` / `dakkho.pro.bd`)
+   656→- **Instructor Web**: Next.js (NEW) → Cloudflare Pages (**separate subdomain**, e.g., `instructor.dakkho.pro.bd` or `dakkho-instructor.pages.dev`)
+   657→- **Error Monitoring**: Sentry (Phase 12.4)
+   658→- **Payment**: PipraPay (automatic webhook verification — Phase 0.5)
+   659→- **Email**: Resend
+   660→- **Push**: OneSignal
+   661→- **State**: Zustand
+   662→- **Deploy**: `npx wrangler pages deploy out/ --project-name=<name>` (web), `npx wrangler deploy` (worker)
+   663→
+   664→### GitHub Repos
+   665→- Worker: `https://github.com/grayrat2026/dakkho-admin`
+   666→- Admin Web: `https://github.com/grayrat2026/dakkho-admin-web`
+   667→- Student Web: `https://github.com/grayrat2026/dakkho-student-web`
+   668→- Instructor Web: (NEW — to be created)
+   669→
+   670→### Cloudflare
+   671→- D1 Database ID: `2e3dabbe-44c7-a7d1-eba001aa0a4a` (name: `dakkho-admin-db`)
+   672→- R2 Buckets: `dakkho-videos`, `dakkho-thumbnails`, `dakkho-avatars`, `dakkho-resources`
+   673→- KV Namespace: `f61a482ba88a45bebb35dfd600cd742d`
+   674→- Worker URL: `https://dakkho-admin-api.dakkho-admin.workers.dev`
+   675→
+   676→### Appwrite
+   677→- Endpoint: `https://sgp.cloud.appwrite.io/v1`
+   678→- Project: `dakkho`
+   679→- Database: `dakkho_main`
+   680→- Collections: users, courses, videos, instructors, categories, enrollments, notifications, discussions, user_settings, bookmarks, watch_progress
+   681→- **All Appwrite collection attributes use CAMELCASE** (videoUrl, courseId, thumbnailUrl, isPublished, etc.)
+   682→- **Do NOT send snake_case attributes to Appwrite** — causes "Unknown attribute" errors
+   683→
+   684→---
+   685→
+   686→## Execution Priority
+   687→
+   688→| Priority | Phase | Timeline | Notes |
+   689→|----------|-------|----------|-------|
+   690→| 🔴 P0 | Phase 0 (Bug fixes + PipraPay webhook + deploy) | NOW | Webhook auto-verify upgraded to P1 |
+   691→| 🟠 P1 | Phase 1 (Soft delete) | Next | |
+   692→| 🟡 P2 | Phase 2 (Instructor redesign) | After P1 | |
+   693→| 🟢 P3-P4 | Analytics + Heatmap, Bulk, Security | After P2 | Heatmap is new in P3 |
+   694→| 🔵 P5-P6 | Video features (bookmarks, resources), Gamification | After P3 | Bookmarks + Resources new in P5 |
+   695→| 🟣 P7-P8 | Coupon/Bundle, Community + Student Profile | After P5 | Student Profile new in P8 |
+   696→| ⚪ P9-P11 | Search, Live Class, Revenue | After P7 | |
+   697→| 🔶 P12 | Security + Sentry | After P8 | Sentry new in P12 |
+   698→| 🔷 P13 | Instructor Separate Site (subdomain) | After P9 | Subdomain-based, not path-based |
+   699→| 🔹 P14 | Content Drip + Learning Path | After P10 | Entirely new phase |
+   700→| 🔺 P15 | Webhook System | After P0 | Can start earlier — needed for PipraPay |
+   701→| ⬛ P16 | Appwrite → D1 Full Migration | WHEN TOLD | Long-term, do NOT start without instruction |
+   702→
+   703→---
+   704→
+   705→## Feature Count Summary
+   706→
+   707→| Category | Count | New in This Update |
+   708→|----------|-------|--------------------|
+   709→| Critical Bugs | 5 | +1 (B5 video_url — fixed) |
+   710→| Phase 0 | 5 items | +1 (0.5 PipraPay webhook) |
+   711→| Phase 3 | 4 items | +1 (3.4 Watch Time Heatmap) |
+   712→| Phase 5 | 10 items | +2 (5.8 Video Bookmarks, 5.10 Lecture Resources) |
+   713→| Phase 8 | 4 items | +1 (8.4 Student Public Profile) |
+   714→| Phase 12 | 4 items | +1 (12.4 Sentry Integration) |
+   715→| Phase 14 | 2 items | +2 (14.1 Content Drip, 14.2 Learning Path) — NEW PHASE |
+   716→| Phase 15 | 1 item | +1 (15.1 Webhook System) — NEW PHASE |
+   717→| Phase 16 | 1 item | +1 (16.1 Appwrite → D1 Migration) — NEW PHASE |
+   718→| **Total Phases** | **17** (0-16) | +3 new phases |
+   719→| **Total Feature Items** | **~80** | +10 new items |
+   720→

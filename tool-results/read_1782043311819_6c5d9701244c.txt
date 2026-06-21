@@ -1,0 +1,805 @@
+     1→package com.dakkho.android.presentation.screens.instructorprofile
+     2→
+     3→import androidx.compose.foundation.background
+     4→import androidx.compose.foundation.clickable
+     5→import androidx.compose.foundation.layout.Arrangement
+     6→import androidx.compose.foundation.layout.Box
+     7→import androidx.compose.foundation.layout.Column
+     8→import androidx.compose.foundation.layout.PaddingValues
+     9→import androidx.compose.foundation.layout.Row
+    10→import androidx.compose.foundation.layout.Spacer
+    11→import androidx.compose.foundation.layout.fillMaxSize
+    12→import androidx.compose.foundation.layout.fillMaxWidth
+    13→import androidx.compose.foundation.layout.height
+    14→import androidx.compose.foundation.layout.padding
+    15→import androidx.compose.foundation.layout.size
+    16→import androidx.compose.foundation.layout.width
+    17→import androidx.compose.foundation.lazy.LazyColumn
+    18→import androidx.compose.foundation.lazy.LazyRow
+    19→import androidx.compose.foundation.lazy.items
+    20→import androidx.compose.foundation.lazy.rememberLazyListState
+    21→import androidx.compose.foundation.shape.CircleShape
+    22→import androidx.compose.foundation.shape.RoundedCornerShape
+    23→import androidx.compose.material.icons.Icons
+    24→import androidx.compose.material.icons.filled.PlayArrow
+    25→import androidx.compose.material3.CircularProgressIndicator
+    26→import androidx.compose.material3.ExperimentalMaterial3Api
+    27→import androidx.compose.material3.Icon
+    28→import androidx.compose.material3.IconButton
+    29→import androidx.compose.material3.MaterialTheme
+    30→import androidx.compose.material3.Scaffold
+    31→import androidx.compose.material3.Tab
+    32→import androidx.compose.material3.TabRow
+    33→import androidx.compose.material3.Text
+    34→import androidx.compose.material3.TopAppBar
+    35→import androidx.compose.material3.TopAppBarDefaults
+    36→import androidx.compose.runtime.Composable
+    37→import androidx.compose.runtime.LaunchedEffect
+    38→import androidx.compose.runtime.derivedStateOf
+    39→import androidx.compose.runtime.getValue
+    40→import androidx.compose.runtime.remember
+    41→import androidx.compose.ui.Alignment
+    42→import androidx.compose.ui.Modifier
+    43→import androidx.compose.ui.draw.clip
+    44→import androidx.compose.ui.graphics.Brush
+    45→import androidx.compose.ui.graphics.Color
+    46→import androidx.compose.ui.input.nestedscroll.nestedScroll
+    47→import androidx.compose.ui.layout.ContentScale
+    48→import androidx.compose.ui.res.painterResource
+    49→import androidx.compose.ui.text.font.FontWeight
+    50→import androidx.compose.ui.text.style.TextOverflow
+    51→import androidx.compose.ui.unit.dp
+    52→import androidx.compose.ui.unit.sp
+    53→import androidx.hilt.navigation.compose.hiltViewModel
+    54→import androidx.lifecycle.compose.collectAsStateWithLifecycle
+    55→import coil.compose.AsyncImage
+    56→import com.dakkho.android.domain.model.Course
+    57→import com.dakkho.android.domain.model.InstructorDetail
+    58→import com.dakkho.android.presentation.components.AnimatedPage
+    59→import com.dakkho.android.presentation.components.EmptyState
+    60→import com.dakkho.android.presentation.components.GlassCard
+    61→import com.dakkho.android.presentation.components.ShimmerEffect
+    62→import com.dakkho.android.presentation.theme.DesignToken
+    63→import com.dakkho.android.presentation.theme.Neutral400
+    64→import com.dakkho.android.presentation.theme.Neutral500
+    65→import com.dakkho.android.presentation.theme.SkyBlue
+    66→import com.dakkho.android.presentation.theme.Warning
+    67→
+    68→@OptIn(ExperimentalMaterial3Api::class)
+    69→@Composable
+    70→fun InstructorProfileScreen(
+    71→    onBackClick: () -> Unit,
+    72→    onNavigateToCourse: (String) -> Unit,
+    73→    viewModel: InstructorProfileViewModel = hiltViewModel()
+    74→) {
+    75→    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    76→    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    77→
+    78→    AnimatedPage {
+    79→        Scaffold(
+    80→            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+    81→            topBar = {
+    82→                TopAppBar(
+    83→                    title = {
+    84→                        Text(
+    85→                            text = uiState.instructor?.name ?: "Instructor Profile",
+    86→                            style = MaterialTheme.typography.titleLarge.copy(
+    87→                                fontWeight = FontWeight.Bold
+    88→                            ),
+    89→                            maxLines = 1,
+    90→                            overflow = TextOverflow.Ellipsis
+    91→                        )
+    92→                    },
+    93→                    navigationIcon = {
+    94→                        IconButton(onClick = onBackClick) {
+    95→                            Icon(
+    96→                                painter = painterResource(id = android.R.drawable.ic_menu_revert),
+    97→                                contentDescription = "Back"
+    98→                            )
+    99→                        }
+   100→                    },
+   101→                    scrollBehavior = scrollBehavior
+   102→                )
+   103→            }
+   104→        ) { paddingValues ->
+   105→            when {
+   106→                uiState.isLoading -> {
+   107→                    ShimmerInstructorProfile(modifier = Modifier.padding(paddingValues))
+   108→                }
+   109→                uiState.error != null && uiState.instructor == null -> {
+   110→                    EmptyState(
+   111→                        icon = painterResource(id = android.R.drawable.ic_dialog_alert),
+   112→                        title = "Could not load profile",
+   113→                        subtitle = uiState.error,
+   114→                        onActionClick = { viewModel.loadInstructor() },
+   115→                        actionLabel = "Retry",
+   116→                        modifier = Modifier.padding(paddingValues)
+   117→                    )
+   118→                }
+   119→                uiState.instructor != null -> {
+   120→                    InstructorProfileContent(
+   121→                        instructor = uiState.instructor!!,
+   122→                        courses = uiState.courses,
+   123→                        selectedTab = uiState.selectedTab,
+   124→                        onSelectTab = viewModel::selectTab,
+   125→                        onCourseClick = onNavigateToCourse,
+   126→                        isLoadingCourses = uiState.isLoadingCourses,
+   127→                        hasMoreCourses = uiState.hasMoreCourses,
+   128→                        onLoadMoreCourses = viewModel::loadMoreCourses,
+   129→                        modifier = Modifier.padding(paddingValues)
+   130→                    )
+   131→                }
+   132→            }
+   133→        }
+   134→    }
+   135→}
+   136→
+   137→@Composable
+   138→fun InstructorProfileContent(
+   139→    instructor: InstructorDetail,
+   140→    courses: List<Course>,
+   141→    selectedTab: Int,
+   142→    onSelectTab: (Int) -> Unit,
+   143→    onCourseClick: (String) -> Unit,
+   144→    isLoadingCourses: Boolean,
+   145→    hasMoreCourses: Boolean,
+   146→    onLoadMoreCourses: () -> Unit,
+   147→    modifier: Modifier = Modifier
+   148→) {
+   149→    val tabs = listOf("About", "Courses")
+   150→    val listState = rememberLazyListState()
+   151→
+   152→    val shouldLoadMore by remember {
+   153→        derivedStateOf {
+   154→            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+   155→            val totalItems = listState.layoutInfo.totalItemsCount
+   156→            lastVisibleItem >= totalItems - 3
+   157→        }
+   158→    }
+   159→
+   160→    LaunchedEffect(shouldLoadMore) {
+   161→        if (shouldLoadMore && selectedTab == 1) {
+   162→            onLoadMoreCourses()
+   163→        }
+   164→    }
+   165→
+   166→    LazyColumn(
+   167→        state = listState,
+   168→        modifier = modifier.fillMaxSize(),
+   169→        contentPadding = PaddingValues(horizontal = DesignToken.Space.dp16, vertical = DesignToken.Space.dp8)
+   170→    ) {
+   171→        // ── Cover + Avatar Header ──
+   172→        item {
+   173→            InstructorProfileHeader(instructor = instructor)
+   174→        }
+   175→
+   176→        // ── Stats Row ──
+   177→        item {
+   178→            InstructorStatsRow(instructor = instructor)
+   179→        }
+   180→
+   181→        // ── Bio Section (always visible, truncated in About tab) ──
+   182→        if (!instructor.bio.isNullOrBlank() && selectedTab == 0) {
+   183→            item {
+   184→                Spacer(modifier = Modifier.height(DesignToken.Space.dp8))
+   185→                InstructorBioSection(instructor = instructor)
+   186→            }
+   187→        }
+   188→
+   189→        // ── Social Links ──
+   190→        if (instructor.socialLinks.hasAny && selectedTab == 0) {
+   191→            item {
+   192→                Spacer(modifier = Modifier.height(DesignToken.Space.dp12))
+   193→                InstructorSocialLinks(socialLinks = instructor.socialLinks)
+   194→            }
+   195→        }
+   196→
+   197→        // ── Tab Row ──
+   198→        item {
+   199→            Spacer(modifier = Modifier.height(DesignToken.Space.dp16))
+   200→            TabRow(
+   201→                selectedTabIndex = selectedTab,
+   202→                containerColor = Color.Transparent,
+   203→                contentColor = MaterialTheme.colorScheme.onSurface
+   204→            ) {
+   205→                tabs.forEachIndexed { index, title ->
+   206→                    Tab(
+   207→                        selected = selectedTab == index,
+   208→                        onClick = { onSelectTab(index) },
+   209→                        text = {
+   210→                            Text(
+   211→                                text = if (index == 1) "$title (${instructor.courseCount})" else title,
+   212→                                fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
+   213→                            )
+   214→                        }
+   215→                    )
+   216→                }
+   217→            }
+   218→        }
+   219→
+   220→        // ── Tab Content ──
+   221→        if (selectedTab == 0) {
+   222→            // About Tab
+   223→            if (!instructor.bio.isNullOrBlank()) {
+   224→                item {
+   225→                    Spacer(modifier = Modifier.height(DesignToken.Space.dp12))
+   226→                    Text(
+   227→                        text = instructor.bio,
+   228→                        style = MaterialTheme.typography.bodyMedium,
+   229→                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+   230→                        lineHeight = 22.sp
+   231→                    )
+   232→                }
+   233→            }
+   234→
+   235→            if (!instructor.specialization.isNullOrBlank()) {
+   236→                item {
+   237→                    Spacer(modifier = Modifier.height(DesignToken.Space.dp12))
+   238→                    Column {
+   239→                        Text(
+   240→                            text = "Specialization",
+   241→                            style = MaterialTheme.typography.titleSmall.copy(
+   242→                                fontWeight = FontWeight.Bold
+   243→                            ),
+   244→                            color = MaterialTheme.colorScheme.onSurface
+   245→                        )
+   246→                        Spacer(modifier = Modifier.height(DesignToken.Space.dp4))
+   247→                        Text(
+   248→                            text = instructor.specialization,
+   249→                            style = MaterialTheme.typography.bodyMedium,
+   250→                            color = SkyBlue
+   251→                        )
+   252→                    }
+   253→                }
+   254→            }
+   255→
+   256→            // Joined date
+   257→            if (!instructor.createdAt.isNullOrBlank()) {
+   258→                item {
+   259→                    Spacer(modifier = Modifier.height(DesignToken.Space.dp12))
+   260→                    Row(
+   261→                        verticalAlignment = Alignment.CenterVertically
+   262→                    ) {
+   263→                        Icon(
+   264→                            painter = painterResource(id = android.R.drawable.ic_menu_today),
+   265→                            contentDescription = "Joined",
+   266→                            tint = Neutral500,
+   267→                            modifier = Modifier.size(16.dp)
+   268→                        )
+   269→                        Spacer(modifier = Modifier.width(DesignToken.Space.dp4))
+   270→                        Text(
+   271→                            text = "Joined ${formatDate(instructor.createdAt)}",
+   272→                            style = MaterialTheme.typography.bodySmall,
+   273→                            color = Neutral500
+   274→                        )
+   275→                    }
+   276→                }
+   277→            }
+   278→        } else {
+   279→            // Courses Tab
+   280→            if (courses.isEmpty() && !isLoadingCourses) {
+   281→                item {
+   282→                    Spacer(modifier = Modifier.height(DesignToken.Space.dp32))
+   283→                    EmptyState(
+   284→                        icon = painterResource(id = android.R.drawable.ic_menu_gallery),
+   285→                        title = "No courses yet",
+   286→                        subtitle = "This instructor hasn't published any courses"
+   287→                    )
+   288→                }
+   289→            } else {
+   290→                items(courses, key = { it.id }) { course ->
+   291→                    Spacer(modifier = Modifier.height(DesignToken.Space.dp8))
+   292→                    InstructorCourseCard(
+   293→                        course = course,
+   294→                        onClick = { onCourseClick(course.id) }
+   295→                    )
+   296→                }
+   297→
+   298→                if (isLoadingCourses) {
+   299→                    item {
+   300→                        Box(
+   301→                            modifier = Modifier
+   302→                                .fillMaxWidth()
+   303→                                .padding(DesignToken.Space.dp16),
+   304→                            contentAlignment = Alignment.Center
+   305→                        ) {
+   306→                            CircularProgressIndicator(
+   307→                                modifier = Modifier.size(24.dp),
+   308→                                strokeWidth = 2.dp,
+   309→                                color = SkyBlue
+   310→                            )
+   311→                        }
+   312→                    }
+   313→                }
+   314→            }
+   315→        }
+   316→
+   317→        // Bottom spacer
+   318→        item {
+   319→            Spacer(modifier = Modifier.height(DesignToken.Space.dp24))
+   320→        }
+   321→    }
+   322→}
+   323→
+   324→@Composable
+   325→fun InstructorProfileHeader(
+   326→    instructor: InstructorDetail,
+   327→    modifier: Modifier = Modifier
+   328→) {
+   329→    Column(
+   330→        modifier = modifier.fillMaxWidth(),
+   331→        horizontalAlignment = Alignment.CenterHorizontally
+   332→    ) {
+   333→        // Cover image or gradient
+   334→        Box(
+   335→            modifier = Modifier
+   336→                .fillMaxWidth()
+   337→                .height(120.dp)
+   338→                .clip(RoundedCornerShape(DesignToken.Space.dp12)),
+   339→            contentAlignment = Alignment.Center
+   340→        ) {
+   341→            if (instructor.coverUrl != null) {
+   342→                AsyncImage(
+   343→                    model = instructor.coverUrl,
+   344→                    contentDescription = "Cover",
+   345→                    contentScale = ContentScale.Crop,
+   346→                    modifier = Modifier.fillMaxSize()
+   347→                )
+   348→            } else {
+   349→                // Gradient fallback
+   350→                Box(
+   351→                    modifier = Modifier
+   352→                        .fillMaxSize()
+   353→                        .background(
+   354→                            brush = Brush.horizontalGradient(
+   355→                                colors = listOf(
+   356→                                    SkyBlue.copy(alpha = 0.3f),
+   357→                                    SkyBlue.copy(alpha = 0.1f),
+   358→                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+   359→                                )
+   360→                            )
+   361→                        )
+   362→                )
+   363→            }
+   364→
+   365→            // Avatar overlapping cover
+   366→            // Avatar is rendered below the cover in the Column
+   367→        }
+   368→
+   369→        Spacer(modifier = Modifier.height(DesignToken.Space.dp8))
+   370→
+   371→        // Avatar
+   372→        Box(
+   373→            modifier = Modifier.size(80.dp),
+   374→            contentAlignment = Alignment.Center
+   375→        ) {
+   376→            if (instructor.avatarUrl != null) {
+   377→                AsyncImage(
+   378→                    model = instructor.avatarUrl,
+   379→                    contentDescription = instructor.name,
+   380→                    contentScale = ContentScale.Crop,
+   381→                    modifier = Modifier
+   382→                        .size(80.dp)
+   383→                        .clip(CircleShape)
+   384→                )
+   385→            } else {
+   386→                Box(
+   387→                    modifier = Modifier
+   388→                        .size(80.dp)
+   389→                        .clip(CircleShape)
+   390→                        .background(SkyBlue.copy(alpha = 0.15f)),
+   391→                    contentAlignment = Alignment.Center
+   392→                ) {
+   393→                    Text(
+   394→                        text = instructor.name.take(1).uppercase(),
+   395→                        style = MaterialTheme.typography.displaySmall.copy(
+   396→                            fontWeight = FontWeight.Bold
+   397→                        ),
+   398→                        color = SkyBlue
+   399→                    )
+   400→                }
+   401→            }
+   402→        }
+   403→
+   404→        Spacer(modifier = Modifier.height(DesignToken.Space.dp8))
+   405→
+   406→        // Name
+   407→        Text(
+   408→            text = instructor.name,
+   409→            style = MaterialTheme.typography.headlineSmall.copy(
+   410→                fontWeight = FontWeight.Bold
+   411→            ),
+   412→            color = MaterialTheme.colorScheme.onSurface
+   413→        )
+   414→
+   415→        // Title / Specialization
+   416→        if (instructor.title != null) {
+   417→            Spacer(modifier = Modifier.height(2.dp))
+   418→            Text(
+   419→                text = instructor.title,
+   420→                style = MaterialTheme.typography.bodyMedium,
+   421→                color = SkyBlue
+   422→            )
+   423→        }
+   424→
+   425→        // Rating
+   426→        Row(
+   427→            verticalAlignment = Alignment.CenterVertically,
+   428→            modifier = Modifier.padding(top = DesignToken.Space.dp4)
+   429→        ) {
+   430→            Icon(
+   431→                painter = painterResource(id = android.R.drawable.btn_star_big_on),
+   432→                contentDescription = "Rating",
+   433→                tint = Warning,
+   434→                modifier = Modifier.size(16.dp)
+   435→            )
+   436→            Spacer(modifier = Modifier.width(4.dp))
+   437→            Text(
+   438→                text = String.format("%.1f", instructor.rating),
+   439→                style = MaterialTheme.typography.bodyMedium.copy(
+   440→                    fontWeight = FontWeight.Bold
+   441→                ),
+   442→                color = MaterialTheme.colorScheme.onSurface
+   443→            )
+   444→        }
+   445→    }
+   446→}
+   447→
+   448→@Composable
+   449→fun InstructorStatsRow(
+   450→    instructor: InstructorDetail,
+   451→    modifier: Modifier = Modifier
+   452→) {
+   453→    Row(
+   454→        modifier = modifier
+   455→            .fillMaxWidth()
+   456→            .padding(vertical = DesignToken.Space.dp16),
+   457→        horizontalArrangement = Arrangement.SpaceEvenly
+   458→    ) {
+   459→        StatItem(
+   460→            label = "Courses",
+   461→            value = "${instructor.courseCount}"
+   462→        )
+   463→        StatItem(
+   464→            label = "Students",
+   465→            value = formatStudentCount(instructor.studentCount)
+   466→        )
+   467→        StatItem(
+   468→            label = "Rating",
+   469→            value = String.format("%.1f", instructor.rating)
+   470→        )
+   471→    }
+   472→}
+   473→
+   474→@Composable
+   475→fun StatItem(
+   476→    label: String,
+   477→    value: String,
+   478→    modifier: Modifier = Modifier
+   479→) {
+   480→    GlassCard(modifier = modifier.weight(1f)) {
+   481→        Column(
+   482→            modifier = Modifier
+   483→                .fillMaxWidth()
+   484→                .padding(vertical = DesignToken.Space.dp12),
+   485→            horizontalAlignment = Alignment.CenterHorizontally
+   486→        ) {
+   487→            Text(
+   488→                text = value,
+   489→                style = MaterialTheme.typography.titleLarge.copy(
+   490→                    fontWeight = FontWeight.Bold
+   491→                ),
+   492→                color = SkyBlue
+   493→            )
+   494→            Spacer(modifier = Modifier.height(2.dp))
+   495→            Text(
+   496→                text = label,
+   497→                style = MaterialTheme.typography.labelSmall,
+   498→                color = Neutral500
+   499→            )
+   500→        }
+   501→    }
+   502→}
+   503→
+   504→@Composable
+   505→fun InstructorBioSection(
+   506→    instructor: InstructorDetail,
+   507→    modifier: Modifier = Modifier
+   508→) {
+   509→    Column(modifier = modifier) {
+   510→        Text(
+   511→            text = "About",
+   512→            style = MaterialTheme.typography.titleMedium.copy(
+   513→                fontWeight = FontWeight.Bold
+   514→            ),
+   515→            color = MaterialTheme.colorScheme.onSurface
+   516→        )
+   517→        Spacer(modifier = Modifier.height(DesignToken.Space.dp4))
+   518→        val bioText = instructor.bio ?: ""
+   519→        val isLong = bioText.length > 200
+   520→        Text(
+   521→            text = if (isLong) bioText.take(200) + "..." else bioText,
+   522→            style = MaterialTheme.typography.bodyMedium,
+   523→            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+   524→            lineHeight = 20.sp
+   525→        )
+   526→        if (isLong) {
+   527→            Spacer(modifier = Modifier.height(DesignToken.Space.dp4))
+   528→            Text(
+   529→                text = "Read more in About tab",
+   530→                style = MaterialTheme.typography.labelMedium,
+   531→                color = SkyBlue
+   532→            )
+   533→        }
+   534→    }
+   535→}
+   536→
+   537→@Composable
+   538→fun InstructorSocialLinks(
+   539→    socialLinks: com.dakkho.android.domain.model.SocialLinks,
+   540→    modifier: Modifier = Modifier
+   541→) {
+   542→    Column(modifier = modifier) {
+   543→        Text(
+   544→            text = "Social Links",
+   545→            style = MaterialTheme.typography.titleMedium.copy(
+   546→                fontWeight = FontWeight.Bold
+   547→            ),
+   548→            color = MaterialTheme.colorScheme.onSurface
+   549→        )
+   550→        Spacer(modifier = Modifier.height(DesignToken.Space.dp8))
+   551→        LazyRow(
+   552→            horizontalArrangement = Arrangement.spacedBy(DesignToken.Space.dp8)
+   553→        ) {
+   554→            socialLinks.youtube?.let { url ->
+   555→                item { SocialLinkChip(label = "YouTube", url = url) }
+   556→            }
+   557→            socialLinks.github?.let { url ->
+   558→                item { SocialLinkChip(label = "GitHub", url = url) }
+   559→            }
+   560→            socialLinks.facebook?.let { url ->
+   561→                item { SocialLinkChip(label = "Facebook", url = url) }
+   562→            }
+   563→            socialLinks.linkedin?.let { url ->
+   564→                item { SocialLinkChip(label = "LinkedIn", url = url) }
+   565→            }
+   566→            socialLinks.website?.let { url ->
+   567→                item { SocialLinkChip(label = "Website", url = url) }
+   568→            }
+   569→        }
+   570→    }
+   571→}
+   572→
+   573→@Composable
+   574→fun SocialLinkChip(
+   575→    label: String,
+   576→    url: String,
+   577→    modifier: Modifier = Modifier
+   578→) {
+   579→    GlassCard(modifier = modifier) {
+   580→        Row(
+   581→            modifier = Modifier
+   582→                .padding(horizontal = DesignToken.Space.dp12, vertical = DesignToken.Space.dp8),
+   583→            verticalAlignment = Alignment.CenterVertically
+   584→        ) {
+   585→            Icon(
+   586→                painter = painterResource(id = android.R.drawable.ic_menu_share),
+   587→                contentDescription = label,
+   588→                tint = SkyBlue,
+   589→                modifier = Modifier.size(14.dp)
+   590→            )
+   591→            Spacer(modifier = Modifier.width(DesignToken.Space.dp4))
+   592→            Text(
+   593→                text = label,
+   594→                style = MaterialTheme.typography.labelMedium.copy(
+   595→                    fontWeight = FontWeight.Medium
+   596→                ),
+   597→                color = SkyBlue
+   598→            )
+   599→        }
+   600→    }
+   601→}
+   602→
+   603→@Composable
+   604→fun InstructorCourseCard(
+   605→    course: Course,
+   606→    onClick: () -> Unit,
+   607→    modifier: Modifier = Modifier
+   608→) {
+   609→    GlassCard(
+   610→        modifier = modifier.clickable(onClick = onClick)
+   611→    ) {
+   612→        Row(
+   613→            modifier = Modifier
+   614→                .fillMaxWidth()
+   615→                .padding(DesignToken.Space.dp12),
+   616→            verticalAlignment = Alignment.CenterVertically
+   617→        ) {
+   618→            // Thumbnail
+   619→            if (course.thumbnailUrl != null) {
+   620→                AsyncImage(
+   621→                    model = course.thumbnailUrl,
+   622→                    contentDescription = course.title,
+   623→                    contentScale = ContentScale.Crop,
+   624→                    modifier = Modifier
+   625→                        .size(72.dp)
+   626→                        .clip(RoundedCornerShape(8.dp))
+   627→                )
+   628→            } else {
+   629→                Box(
+   630→                    modifier = Modifier
+   631→                        .size(72.dp)
+   632→                        .clip(RoundedCornerShape(8.dp))
+   633→                        .background(SkyBlue.copy(alpha = 0.1f)),
+   634→                    contentAlignment = Alignment.Center
+   635→                ) {
+   636→                    Icon(
+   637→                        imageVector = Icons.Default.PlayArrow,
+   638→                        contentDescription = "Course",
+   639→                        tint = SkyBlue,
+   640→                        modifier = Modifier.size(24.dp)
+   641→                    )
+   642→                }
+   643→            }
+   644→
+   645→            Spacer(modifier = Modifier.width(DesignToken.Space.dp12))
+   646→
+   647→            // Course info
+   648→            Column(modifier = Modifier.weight(1f)) {
+   649→                Text(
+   650→                    text = course.title,
+   651→                    style = MaterialTheme.typography.titleSmall.copy(
+   652→                        fontWeight = FontWeight.SemiBold
+   653→                    ),
+   654→                    color = MaterialTheme.colorScheme.onSurface,
+   655→                    maxLines = 2,
+   656→                    overflow = TextOverflow.Ellipsis
+   657→                )
+   658→
+   659→                Spacer(modifier = Modifier.height(DesignToken.Space.dp4))
+   660→
+   661→                Row(
+   662→                    horizontalArrangement = Arrangement.spacedBy(DesignToken.Space.dp8),
+   663→                    verticalAlignment = Alignment.CenterVertically
+   664→                ) {
+   665→                    // Level badge
+   666→                    if (!course.level.isNullOrBlank()) {
+   667→                        Text(
+   668→                            text = course.level.replaceFirstChar { it.uppercase() },
+   669→                            style = MaterialTheme.typography.labelSmall,
+   670→                            color = Neutral500
+   671→                        )
+   672→                    }
+   673→
+   674→                    // Rating
+   675→                    course.rating?.let { rating ->
+   676→                        Row(verticalAlignment = Alignment.CenterVertically) {
+   677→                            Icon(
+   678→                                painter = painterResource(id = android.R.drawable.btn_star_big_on),
+   679→                                contentDescription = "Rating",
+   680→                                tint = Warning,
+   681→                                modifier = Modifier.size(10.dp)
+   682→                            )
+   683→                            Spacer(modifier = Modifier.width(2.dp))
+   684→                            Text(
+   685→                                text = String.format("%.1f", rating),
+   686→                                style = MaterialTheme.typography.labelSmall,
+   687→                                color = MaterialTheme.colorScheme.onSurface
+   688→                            )
+   689→                        }
+   690→                    }
+   691→
+   692→                    // Student count
+   693→                    course.enrollmentCount?.let { count ->
+   694→                        Text(
+   695→                            text = "${formatStudentCount(count)} students",
+   696→                            style = MaterialTheme.typography.labelSmall,
+   697→                            color = Neutral500
+   698→                        )
+   699→                    }
+   700→                }
+   701→
+   702→                // Price
+   703→                Spacer(modifier = Modifier.height(DesignToken.Space.dp2))
+   704→                val priceText = when {
+   705→                    course.price == null || course.price == 0.0 -> "Free"
+   706→                    course.discountedPrice != null && course.discountedPrice < course.price -> {
+   707→                        "৳${course.discountedPrice.toInt()}"
+   708→                    }
+   709→                    else -> "৳${course.price.toInt()}"
+   710→                }
+   711→                Text(
+   712→                    text = priceText,
+   713→                    style = MaterialTheme.typography.labelMedium.copy(
+   714→                        fontWeight = FontWeight.Bold
+   715→                    ),
+   716→                    color = if (priceText == "Free") Color(0xFF10B981) else SkyBlue
+   717→                )
+   718→            }
+   719→        }
+   720→    }
+   721→}
+   722→
+   723→@Composable
+   724→fun ShimmerInstructorProfile(modifier: Modifier = Modifier) {
+   725→    Column(
+   726→        modifier = modifier
+   727→            .fillMaxSize()
+   728→            .padding(DesignToken.Space.dp16),
+   729→        horizontalAlignment = Alignment.CenterHorizontally
+   730→    ) {
+   731→        ShimmerEffect(
+   732→            modifier = Modifier
+   733→                .fillMaxWidth()
+   734→                .height(120.dp)
+   735→                .clip(RoundedCornerShape(DesignToken.Space.dp12))
+   736→        )
+   737→        Spacer(modifier = Modifier.height(DesignToken.Space.dp16))
+   738→        ShimmerEffect(
+   739→            modifier = Modifier
+   740→                .size(80.dp)
+   741→                .clip(CircleShape)
+   742→        )
+   743→        Spacer(modifier = Modifier.height(DesignToken.Space.dp12))
+   744→        ShimmerEffect(
+   745→            modifier = Modifier
+   746→                .width(180.dp)
+   747→                .height(24.dp)
+   748→        )
+   749→        Spacer(modifier = Modifier.height(DesignToken.Space.dp8))
+   750→        ShimmerEffect(
+   751→            modifier = Modifier
+   752→                .width(120.dp)
+   753→                .height(16.dp)
+   754→        )
+   755→        Spacer(modifier = Modifier.height(DesignToken.Space.dp24))
+   756→        Row(
+   757→            modifier = Modifier.fillMaxWidth(),
+   758→            horizontalArrangement = Arrangement.SpaceEvenly
+   759→        ) {
+   760→            repeat(3) {
+   761→                ShimmerEffect(
+   762→                    modifier = Modifier
+   763→                        .weight(1f)
+   764→                        .height(60.dp)
+   765→                        .padding(horizontal = DesignToken.Space.dp4)
+   766→                )
+   767→            }
+   768→        }
+   769→        Spacer(modifier = Modifier.height(DesignToken.Space.dp24))
+   770→        repeat(3) {
+   771→            ShimmerEffect(
+   772→                modifier = Modifier
+   773→                    .fillMaxWidth()
+   774→                    .height(80.dp)
+   775→                    .padding(vertical = DesignToken.Space.dp4)
+   776→            )
+   777→        }
+   778→    }
+   779→}
+   780→
+   781→private fun formatStudentCount(count: Int): String {
+   782→    return when {
+   783→        count >= 1000 -> String.format("%.1fk", count / 1000f)
+   784→        else -> count.toString()
+   785→    }
+   786→}
+   787→
+   788→private fun formatDate(dateStr: String): String {
+   789→    return try {
+   790→        // Handle ISO date format: 2026-01-15T10:30:00 or 2026-01-15
+   791→        val datePart = dateStr.substringBefore("T").substringBefore(" ")
+   792→        val parts = datePart.split("-")
+   793→        if (parts.size == 3) {
+   794→            val months = listOf("", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+   795→                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+   796→            val monthIndex = parts[1].toIntOrNull() ?: 1
+   797→            "${months.getOrElse(monthIndex) { "Jan" }} ${parts[0]}"
+   798→        } else {
+   799→            dateStr
+   800→        }
+   801→    } catch (e: Exception) {
+   802→        dateStr
+   803→    }
+   804→}
+   805→

@@ -1,0 +1,736 @@
+     1→# DAKKHO Student App — Full Sync & Fix Prompt
+     2→
+     3→> **Purpose**: Use this prompt to sync your DAKKHO Student App with the Admin Panel backend (Cloudflare Workers + D1). Every API, credential, schema mismatch, and integration point is documented below.
+     4→
+     5→---
+     6→
+     7→## 1. ARCHITECTURE OVERVIEW
+     8→
+     9→### Admin Panel (Already Deployed & Working)
+    10→- **Frontend**: Next.js 16 (static export) on Cloudflare Pages  
+    11→  URL: `https://dakkho-admin.pages.dev/`
+    12→- **Backend**: Cloudflare Workers + Hono router  
+    13→  URL: `https://dakkho-admin-api.dakkho-admin.workers.dev/`
+    14→- **Database**: Cloudflare D1 (SQLite) — 18 tables  
+    15→  DB ID: `2e3dabbe-1e5d-44c7-a7d1-eba001aa0a4a`
+    16→- **Storage**: Cloudflare R2 — 4 buckets (Videos, Thumbnails, Avatars, Resources)
+    17→- **Auth**: Appwrite (Admin) + D1 Sessions (Student)
+    18→- **Email**: Resend (`noreply@dakkho.pro.bd` verified)
+    19→- **Push**: OneSignal (REST API only on Admin, SDK on Student)
+    20→
+    21→### Student App (Current State — Needs Sync)
+    22→- **Framework**: Next.js 16 with `output: "standalone"` (VPS deployment)
+    23→- **Current Auth**: Appwrite SDK client-side login (needs to be replaced with Worker API)
+    24→- **Current DB**: Local Prisma/SQLite + Appwrite (needs migration to Worker API)
+    25→- **Current Storage**: AWS S3 SDK for R2 (needs replacement with Worker API)
+    26→- **Current Realtime**: MQTT (HiveMQ) + Supabase (should be replaced with OneSignal + polling/Worker)
+    27→- **Current Config**: Local SQLite `AppConfig` table (should use Worker `/api/` endpoints)
+    28→
+    29→---
+    30→
+    31→## 2. ALL CREDENTIALS
+    32→
+    33→### Cloudflare
+    34→```
+    35→API Token: <REDACTED>
+    36→D1 Database ID: 2e3dabbe-1e5d-44c7-a7d1-eba001aa0a4a
+    37→D1 Database Name: dakkho-admin-db
+    38→KV Namespace ID: f61a482ba88a45bebb35dfd600cd742d
+    39→R2 Access Key: <REDACTED>
+    40→R2 Secret Key: <REDACTED>
+    41→R2 Buckets: dakkho-videos, dakkho-thumbnails, dakkho-avatars, dakkho-resources
+    42→Account ID: (derive from R2 endpoint or API token)
+    43→```
+    44→
+    45→### Appwrite
+    46→```
+    47→Endpoint: https://sgp.cloud.appwrite.io/v1
+    48→Project ID: dakkho
+    49→Database ID: dakkho_main
+    50→API Key: standard_c465097b57e28bd7eed617fae6e488b82587b8474d66def111cf4693351e3c89b558bf391bee4aa87dccb718d9d03a69a7257dbd59696c8f164aa5b4b44fc987b374bd8532429dccd318bbc1e15e683eaf429e57e04f2f5fbd8f1fc522e67494dcf855901261f4a4cd709c90a20fd407df4fc5826b807cf9d4b42e4478684c28
+    51→Collections: users, courses, videos, instructors, institutes, enrollments, notifications, discussions, user_settings, bookmarks, watch_progress, categories
+    52→```
+    53→
+    54→### Resend (Email)
+    55→```
+    56→API Key: re_YBYgjXfu_JAQbAR51HADxWUUpPEBKgdG2
+    57→From Email: noreply@dakkho.pro.bd (verified)
+    58→Support Email: support@dakkho.pro.bd
+    59→```
+    60→
+    61→### OneSignal (Push Notifications — Student App ONLY)
+    62→```
+    63→App ID: ba6c42b2-d564-4254-b422-a2bed67d8b0f
+    64→REST API Key: os_v2_app_xjwefmwvmrbfjnbcuk7nm7mlb7qhz7ujskjusb5miltyyxv4opdr4cs5rgwu335t23x2c2k4m2tra6lkzw3zs77ugqnq7q3ipdn2zzi
+    65→Safari Web ID: web.onesignal.auto.028d9952-ba2c-477b-babc-6aee5c5ba0de
+    66→Key ID: qhz7ujskjusb5miltyyxv4opd
+    67→```
+    68→**IMPORTANT**: OneSignal SDK goes ONLY on Student App. Admin Panel sends push via REST API only.
+    69→
+    70→### Admin Login
+    71→```
+    72→Email: himadrient@proton.me
+    73→Password: <REDACTED>
+    74→```
+    75→
+    76→---
+    77→
+    78→## 3. WORKER API ENDPOINTS (Student App Must Call These)
+    79→
+    80→Base URL: `https://dakkho-admin-api.dakkho-admin.workers.dev`
+    81→
+    82→### 3.1 Public Student API (No Auth Required)
+    83→
+    84→| Method | Endpoint | Description | Response Shape |
+    85→|--------|----------|-------------|----------------|
+    86→| GET | `/api/institutes` | List active institutes | `{ institutes: Institute[], total: number }` |
+    87→| GET | `/api/institutes/:id` | Get single institute | `{ institute: Institute }` |
+    88→| GET | `/api/technologies` | List active technologies | `{ technologies: Technology[] }` |
+    89→| GET | `/api/events` | List active events | `{ events: Event[] }` |
+    90→| GET | `/api/live-classes` | List upcoming live classes | `{ liveClasses: LiveClass[] }` |
+    91→| GET | `/api/coupons/validate?code=XXX` | Validate coupon code | `{ valid: boolean, coupon?: CouponInfo }` |
+    92→| GET | `/api/course-packages?courseId=XXX` | Get packages for course | `{ packages: Package[] }` |
+    93→
+    94→**Query params for `/api/institutes`**: `page`, `limit`, `division`, `search`
+    95→
+    96→### 3.2 Authenticated Student API (Bearer Token Required)
+    97→
+    98→| Method | Endpoint | Description | Request Body |
+    99→|--------|----------|-------------|--------------|
+   100→| POST | `/api/institutes/requests` | Request new institute | `{ institute_name, institute_name_bn?, division?, district? }` |
+   101→| GET | `/api/institutes/requests/mine` | Get my institute requests | — |
+   102→| POST | `/api/push/register` | Register push token | `{ push_token, device_type?, device_info? }` |
+   103→| DELETE | `/api/push/unregister` | Unregister push token | `{ push_token }` |
+   104→| POST | `/api/payments/submit` | Submit manual payment | `{ package_id, trx_id, phone?, proof_url? }` |
+   105→| GET | `/api/packages/mine` | Get my active packages | — |
+   106→
+   107→**Auth header**: `Authorization: Bearer <student_session_token>`
+   108→
+   109→### 3.3 Student Auth (Worker-Managed, NOT Appwrite Sessions)
+   110→
+   111→The Student App must create sessions through the Worker API. The current Appwrite `Account.createEmailPasswordSession()` approach must be replaced.
+   112→
+   113→**Required new endpoints to add on Worker** (not yet implemented):
+   114→- `POST /api/auth/signup` — Create student account in Appwrite + D1 session
+   115→- `POST /api/auth/login` — Login via Appwrite + create D1 student session → return token
+   116→- `POST /api/auth/logout` — Deactivate D1 student session
+   117→- `GET /api/auth/me` — Get current student profile
+   118→- `POST /api/auth/forgot-password` — Initiate password reset
+   119→- `POST /api/auth/verify-otp` — Verify email OTP
+   120→
+   121→---
+   122→
+   123→## 4. D1 DATABASE SCHEMA (18 Tables)
+   124→
+   125→### Tables Student App Needs to Know
+   126→
+   127→#### `institutes`
+   128→```sql
+   129→id INTEGER PK, name TEXT, name_bn TEXT, division TEXT, district TEXT,
+   130→eiin_number TEXT, type TEXT DEFAULT 'polytechnic', is_requested INTEGER DEFAULT 0,
+   131→requested_by TEXT, approved_by TEXT, approved_at TEXT, is_active INTEGER DEFAULT 1,
+   132→created_at TEXT, updated_at TEXT
+   133→-- 63 seeded polytechnics across 8 divisions
+   134→```
+   135→
+   136→#### `technologies`
+   137→```sql
+   138→id INTEGER PK, name TEXT, name_bn TEXT, short_code TEXT UNIQUE,
+   139→description TEXT, is_active INTEGER DEFAULT 1, created_at TEXT, updated_at TEXT
+   140→-- 7 seeded: CIVIL, CST, ELECTRICAL, EMED, ELEX, MECH, POWER
+   141→```
+   142→
+   143→#### `course_packages`
+   144→```sql
+   145→id INTEGER PK, course_id TEXT NOT NULL, package_type TEXT NOT NULL,
+   146→price REAL NOT NULL, duration_months INTEGER DEFAULT 6,
+   147→max_users INTEGER DEFAULT 1, is_auto_assign INTEGER DEFAULT 1,
+   148→is_active INTEGER DEFAULT 1, created_by TEXT, created_at TEXT, updated_at TEXT
+   149→-- package_type: 'single' or 'friend' (2 users)
+   150→```
+   151→
+   152→#### `user_packages`
+   153→```sql
+   154→id INTEGER PK, user_id TEXT NOT NULL, package_id INTEGER NOT NULL,
+   155→course_id TEXT NOT NULL, package_type TEXT NOT NULL,
+   156→activated_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+   157→shared_with TEXT, status TEXT DEFAULT 'active', created_at TEXT
+   158→```
+   159→
+   160→#### `payments`
+   161→```sql
+   162→id INTEGER PK, user_id TEXT NOT NULL, package_id INTEGER, course_id TEXT,
+   163→amount REAL NOT NULL, currency TEXT DEFAULT 'BDT', gateway TEXT NOT NULL,
+   164→gateway_trx_id TEXT, gateway_payment_id TEXT, status TEXT DEFAULT 'pending',
+   165→proof_url TEXT, trx_id_submitted TEXT, phone_submitted TEXT,
+   166→verified_by TEXT, verified_at TEXT, metadata TEXT DEFAULT '{}',
+   167→created_at TEXT, updated_at TEXT
+   168→```
+   169→
+   170→#### `payment_config`
+   171→```sql
+   172→id INTEGER PK, gateway TEXT NOT NULL, is_active INTEGER DEFAULT 0,
+   173→config TEXT DEFAULT '{}', sandbox_mode INTEGER DEFAULT 1,
+   174→instructions TEXT, instructions_bn TEXT, created_at TEXT, updated_at TEXT
+   175→-- 3 seeded: manual (active), sslcommerz (inactive), bkash (inactive)
+   176→```
+   177→
+   178→#### `events`
+   179→```sql
+   180→id INTEGER PK, title TEXT, title_bn TEXT, description TEXT, description_bn TEXT,
+   181→event_type TEXT NOT NULL, banner_url TEXT, start_date TEXT NOT NULL, end_date TEXT,
+   182→is_featured INTEGER DEFAULT 0, metadata TEXT DEFAULT '{}', is_active INTEGER DEFAULT 1,
+   183→created_by TEXT, created_at TEXT, updated_at TEXT
+   184→```
+   185→
+   186→#### `live_class_schedules`
+   187→```sql
+   188→id INTEGER PK, course_id TEXT, title TEXT, title_bn TEXT, description TEXT,
+   189→instructor_id TEXT, technology_id INTEGER, scheduled_at TEXT NOT NULL,
+   190→duration_minutes INTEGER DEFAULT 60, meeting_url TEXT, platform TEXT DEFAULT 'jitsi',
+   191→status TEXT DEFAULT 'scheduled', recording_url TEXT, is_active INTEGER DEFAULT 1,
+   192→created_by TEXT, created_at TEXT, updated_at TEXT
+   193→```
+   194→
+   195→#### `coupons`
+   196→```sql
+   197→id INTEGER PK, code TEXT UNIQUE, discount_type TEXT, discount_value REAL,
+   198→max_discount REAL, min_purchase REAL DEFAULT 0, usage_limit INTEGER,
+   199→usage_count INTEGER DEFAULT 0, per_user_limit INTEGER DEFAULT 1,
+   200→valid_from TEXT, valid_until TEXT, applicable_courses TEXT, applicable_technologies TEXT,
+   201→is_active INTEGER DEFAULT 1, created_by TEXT, created_at TEXT, updated_at TEXT
+   202→```
+   203→
+   204→#### `discounts`
+   205→```sql
+   206→id INTEGER PK, name TEXT, name_bn TEXT, description TEXT,
+   207→discount_type TEXT, discount_value REAL, applicable_type TEXT NOT NULL,
+   208→applicable_ids TEXT, valid_from TEXT, valid_until TEXT,
+   209→is_auto_apply INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1,
+   210→created_by TEXT, created_at TEXT, updated_at TEXT
+   211→```
+   212→
+   213→#### `student_sessions`
+   214→```sql
+   215→id TEXT PK, user_id TEXT NOT NULL UNIQUE, email TEXT NOT NULL, name TEXT,
+   216→device_info TEXT, ip_address TEXT, created_at TEXT, expires_at TEXT NOT NULL,
+   217→is_active INTEGER DEFAULT 1
+   218→-- 1 device strictly per student (user_id UNIQUE)
+   219→```
+   220→
+   221→#### `user_2fa`
+   222→```sql
+   223→id INTEGER PK, user_id TEXT NOT NULL UNIQUE, method TEXT DEFAULT 'email',
+   224→totp_secret TEXT, totp_verified INTEGER DEFAULT 0, backup_codes TEXT,
+   225→is_enabled INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT
+   226→```
+   227→
+   228→#### `user_push_tokens`
+   229→```sql
+   230→id INTEGER PK, user_id TEXT NOT NULL, push_token TEXT NOT NULL UNIQUE,
+   231→device_type TEXT, device_info TEXT, is_active INTEGER DEFAULT 1,
+   232→created_at TEXT, updated_at TEXT
+   233→```
+   234→
+   235→#### `notification_logs`
+   236→```sql
+   237→id INTEGER PK, type TEXT, category TEXT, title TEXT, message TEXT,
+   238→target_type TEXT, target_id TEXT, sent_count INTEGER DEFAULT 0,
+   239→failed_count INTEGER DEFAULT 0, metadata TEXT DEFAULT '{}',
+   240→created_by TEXT, created_at TEXT
+   241→```
+   242→
+   243→#### `institute_requests`
+   244→```sql
+   245→id INTEGER PK, user_id TEXT NOT NULL, user_email TEXT, user_name TEXT,
+   246→institute_name TEXT NOT NULL, institute_name_bn TEXT, division TEXT, district TEXT,
+   247→status TEXT DEFAULT 'pending', admin_note TEXT, reviewed_by TEXT, reviewed_at TEXT,
+   248→created_at TEXT, updated_at TEXT
+   249→```
+   250→
+   251→#### Other tables (admin-only): `admin_sessions`, `app_config`, `audit_logs`
+   252→
+   253→---
+   254→
+   255→## 5. CRITICAL MISMATCHES TO FIX
+   256→
+   257→### 5.1 AUTH SYSTEM — Must Replace
+   258→
+   259→**Current Student App**:
+   260→- Uses Appwrite SDK `Account.createEmailPasswordSession()` client-side
+   261→- Session is Appwrite cookie-based, not compatible with Worker API
+   262→- Signup creates user in Appwrite, sends OTP via Resend from Next.js API route
+   263→- OTP stored in-memory (lost on restart)
+   264→
+   265→**Required Changes**:
+   266→1. **Remove** all Appwrite SDK auth calls from Student App
+   267→2. **Replace** with Worker API calls:
+   268→   - Login: `POST /api/auth/login` → returns `{ token, user }` 
+   269→   - Signup: `POST /api/auth/signup` → creates Appwrite user + sends OTP via Worker
+   270→   - Verify OTP: `POST /api/auth/verify-otp`
+   271→   - Logout: `POST /api/auth/logout` → deactivates D1 session
+   272→   - Forgot Password: `POST /api/auth/forgot-password`
+   273→3. **Store** the returned `token` in localStorage as `dakkho_student_token`
+   274→4. **Send** `Authorization: Bearer <token>` on all authenticated Worker API calls
+   275→5. **Session enforcement**: 1 device strictly — if user logs in elsewhere, old session is invalidated
+   276→
+   277→**Worker endpoints to ADD** (not yet built):
+   278→```
+   279→POST /api/auth/signup   — Create Appwrite user + D1 session + OTP email
+   280→POST /api/auth/login    — Validate Appwrite creds + create D1 session → return token
+   281→POST /api/auth/logout   — Deactivate D1 session
+   282→GET  /api/auth/me       — Return current user profile
+   283→POST /api/auth/forgot-password — Appwrite recovery + Resend email
+   284→POST /api/auth/verify-otp      — Verify OTP, mark email verified
+   285→```
+   286→
+   287→### 5.2 TECHNOLOGIES LIST — Outdated
+   288→
+   289→**Current Student App** (`src/lib/constants.ts`):
+   290→```typescript
+   291→export const TECHNOLOGIES = [
+   292→  'Computer Science & Technology (CSE)',
+   293→  'Electronics & Telecommunication Engineering (ETE)',
+   294→  // ... 20 items - WRONG names, WRONG count
+   295→];
+   296→```
+   297→
+   298→**Admin D1 has** (7 technologies):
+   299→```
+   300→Civil Technology (CIVIL) — সিভিল টেকনোলজি
+   301→Computer Science and Technology (CST) — কম্পিউটার সায়েন্স এন্ড টেকনোলজি
+   302→Electrical Technology (ELECTRICAL) — ইলেকট্রিক্যাল টেকনোলজি
+   303→Electromedical Technology (EMED) — ইলেক্ট্রোমেডিক্যাল টেকনোলজি
+   304→Electronics Technology (ELEX) — ইলেকট্রনিক্স টেকনোলজি
+   305→Mechanical Technology (MECH) — মেকানিক্যাল টেকনোলজি
+   306→Power Technology (POWER) — পাওয়ার টেকনোলজি
+   307→```
+   308→
+   309→**Fix**: 
+   310→1. Remove hardcoded `TECHNOLOGIES` from `constants.ts`
+   311→2. Fetch from `GET /api/technologies` at app startup
+   312→3. Cache in Zustand store
+   313→4. Update Department pages to use D1 technology names + short_codes
+   314→5. Map sidebar departments to technology short_codes
+   315→
+   316→### 5.3 INSTITUTES LIST — Hardcoded Mock
+   317→
+   318→**Current Student App**:
+   319→- Uses `POLYTECHNIC_INSTITUTES` from `mock-data.ts` (hardcoded 63 names, no IDs/divisions/Bengali names)
+   320→- Signup form uses this mock list for institute dropdown
+   321→
+   322→**Fix**:
+   323→1. Replace `POLYTECHNIC_INSTITUTES` mock with API call: `GET /api/institutes`
+   324→2. Each institute now has: `id, name, name_bn, division, district, eiin_number, type`
+   325→3. Signup form dropdown should show `name` + `name_bn` + division badge
+   326→4. Send `institute_id` (not institute name string) when signing up
+   327→5. Support "Request Institute" button that calls `POST /api/institutes/requests`
+   328→
+   329→### 5.4 SUBSCRIPTION/PRICING PAGE — Completely Wrong
+   330→
+   331→**Current Student App** (`SubscriptionPage.tsx`):
+   332→- Shows 3 subscription plans: Free / Pro / Premium (monthly pricing)
+   333→- This is WRONG — DAKKHO uses **Course Packages** (not subscription plans)
+   334→
+   335→**Required Changes**:
+   336→1. **Delete** `SubscriptionPage.tsx` current content
+   337→2. **Replace** with Course Package selection:
+   338→   - Show packages for a specific course (fetched from `GET /api/course-packages?courseId=XXX`)
+   339→   - Package types: `single` (1 user) or `friend` (2 users, shared)
+   340→   - Duration: 6 months (semester-based, auto-assigned)
+   341→   - Price set by admin per course
+   342→3. **Payment flow**:
+   343→   - Select package → Submit manual payment (`POST /api/payments/submit`)
+   344→   - Show payment instructions from `payment_config` (fetched from Worker)
+   345→   - Student enters Transaction ID + phone number
+   346→   - Wait for admin verification
+   347→   - Check payment status via `GET /api/packages/mine`
+   348→
+   349→### 5.5 LIVE SESSIONS PAGE — Using Mock Data
+   350→
+   351→**Current Student App**:
+   352→- `LiveSessionsPage.tsx` uses hardcoded `MOCK_SESSIONS`
+   353→- No real data from Worker
+   354→
+   355→**Fix**:
+   356→1. Replace mock data with `GET /api/live-classes`
+   357→2. Each live class has: `id, title, title_bn, scheduled_at, duration_minutes, meeting_url, platform, status, technology_id`
+   358→3. Show "Join" button when `status === 'live'`
+   359→4. Show "Set Reminder" for `status === 'scheduled'`
+   360→5. Show "Watch Replay" when `recording_url` exists
+   361→
+   362→### 5.6 NOTIFICATIONS PAGE — Not Using Worker
+   363→
+   364→**Current Student App**:
+   365→- Uses `MOCK_NOTIFICATIONS` from `mock-data.ts`
+   366→- Zustand store manages local notification state
+   367→
+   368→**Fix**:
+   369→1. OneSignal SDK integration for push notifications:
+   370→   ```javascript
+   371→   // In layout.tsx or app startup
+   372→   OneSignal.init({ appId: 'ba6c42b2-d564-4254-b422-a2bed67d8b0f' });
+   373→   ```
+   374→2. Register push token after login: `POST /api/push/register`
+   375→3. Unregister on logout: `DELETE /api/push/unregister`
+   376→4. For in-app notification display, consider polling or SSE from Worker (or use OneSignal's in-app messages)
+   377→
+   378→### 5.7 VIDEO STREAMING — R2 Access Pattern Wrong
+   379→
+   380→**Current Student App**:
+   381→- Uses AWS S3 SDK (`@aws-sdk/client-s3`) to generate presigned R2 URLs from Next.js API routes
+   382→- `src/lib/r2.ts` requires `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_ACCESS_KEY_ID`, `CLOUDFLARE_R2_SECRET_ACCESS_KEY`
+   383→- `GET /api/video/stream-url?key=XXX` generates presigned URL
+   384→
+   385→**Fix**:
+   386→1. **Remove** `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner` dependencies
+   387→2. **Remove** `src/lib/r2.ts` entirely
+   388→3. **Replace** `GET /api/video/stream-url` with a call to Worker:
+   389→   - Worker already has native R2 bindings (no S3 SDK needed)
+   390→   - Add a new Worker endpoint: `GET /api/video/stream-url?key=XXX&bucket=XXX`
+   391→   - Worker generates presigned URL using native R2 binding
+   392→4. **Simpler alternative**: Use Worker's `R2_VIDEOS.get()` to create a direct download URL
+   393→
+   394→### 5.8 MQTT + Supabase — Should Be Removed
+   395→
+   396→**Current Student App**:
+   397→- `src/lib/mqtt.ts` — HiveMQ Cloud MQTT for real-time messaging
+   398→- `src/lib/supabase.ts` — Supabase client for realtime subscriptions
+   399→- These are unnecessary; OneSignal handles push notifications
+   400→
+   401→**Fix**:
+   402→1. **Remove** `src/lib/mqtt.ts` and `mqtt` dependency
+   403→2. **Remove** `src/lib/supabase.ts` and `@supabase/supabase-js` dependency
+   404→3. Replace real-time features with:
+   405→   - Push notifications via OneSignal
+   406→   - Polling for data refresh (e.g., check payment status every 30s)
+   407→   - Optional: Add SSE endpoint on Worker for live updates
+   408→
+   409→### 5.9 CONFIG API — Use Worker Instead of Local SQLite
+   410→
+   411→**Current Student App**:
+   412→- `GET /api/config` reads from local Prisma/SQLite (`ContentProtection`, `AppConfig` tables)
+   413→- `GET /api/config/ui` reads UI config from local DB
+   414→
+   415→**Fix**:
+   416→1. Replace with Worker endpoints:
+   417→   - `GET /api/config` → returns `app_config` from D1
+   418→   - Add Worker endpoints for feature flags, UI config, content protection settings
+   419→2. Cache config in Zustand store on app startup
+   420→3. Remove local Prisma/SQLite dependency for config
+   421→
+   422→### 5.10 PRISMA + LOCAL SQLITE — Remove Entirely
+   423→
+   424→**Current Student App**:
+   425→- `prisma/schema.prisma` with SQLite (User, Course, Video, etc.)
+   426→- `src/lib/db.ts` — PrismaClient
+   427→- `db/custom.db` — Local SQLite file
+   428→
+   429→**This must be completely removed**. All data comes from:
+   430→- **Appwrite** (courses, videos, instructors, enrollments, bookmarks, watch progress)
+   431→- **D1 via Worker** (institutes, technologies, packages, payments, events, live classes, sessions)
+   432→- **R2 via Worker** (video streaming, file storage)
+   433→
+   434→### 5.11 DEPLOYMENT TARGET
+   435→
+   436→**Current**: VPS with standalone Node.js (Caddy reverse proxy)
+   437→**Target**: Cloudflare Pages with custom domain `dakkho.pro.bd`
+   438→
+   439→**Changes needed**:
+   440→1. Change `next.config.ts`: `output: "export"` (static, like Admin Panel)
+   441→2. Remove all Next.js API routes (`src/app/api/**`) — all backend goes through Worker
+   442→3. Remove `prisma/`, `src/lib/db.ts`, `src/lib/r2.ts`, `src/lib/mqtt.ts`, `src/lib/supabase.ts`
+   443→4. Deploy to Cloudflare Pages: `wrangler pages deploy out --project-name=dakkho-student`
+   444→5. Add custom domain: `dakkho.pro.bd`
+   445→6. Update Worker CORS to include `https://dakkho.pro.bd`
+   446→
+   447→---
+   448→
+   449→## 6. FILE-BY-FILE CHANGES REQUIRED
+   450→
+   451→### Files to DELETE
+   452→```
+   453→prisma/schema.prisma
+   454→prisma/seed-config.ts
+   455→src/lib/db.ts
+   456→src/lib/r2.ts
+   457→src/lib/mqtt.ts
+   458→src/lib/supabase.ts
+   459→src/lib/otp-store.ts
+   460→src/app/api/auth/signup/route.ts
+   461→src/app/api/auth/verify-otp/route.ts
+   462→src/app/api/auth/forgot-password/route.ts
+   463→src/app/api/config/route.ts
+   464→src/app/api/config/ui/route.ts
+   465→src/app/api/config/content-protection/route.ts
+   466→src/app/api/email/send-otp/route.ts
+   467→src/app/api/user/delete-account/route.ts
+   468→src/app/api/user/settings/route.ts
+   469→src/app/api/video/stream-url/route.ts
+   470→src/app/api/video/thumbnail/route.ts
+   471→src/app/api/route.ts
+   472→db/custom.db
+   473→```
+   474→
+   475→### Files to CREATE
+   476→```
+   477→src/lib/api-client.ts     — Worker API client (like Admin's api-client.ts)
+   478→src/lib/auth.ts           — Auth functions using Worker API
+   479→src/lib/onesignal.ts      — OneSignal SDK initialization
+   480→```
+   481→
+   482→### Files to MODIFY (Major)
+   483→```
+   484→next.config.ts            — Change to output: "export", add env vars
+   485→.env                      — Replace with Worker API URL + OneSignal App ID
+   486→src/lib/constants.ts      — Remove TECHNOLOGIES, fetch from API
+   487→src/lib/store.ts          — Replace auth store with Worker-based auth
+   488→src/lib/mock-data.ts      — Remove or replace with API calls
+   489→src/lib/appwrite.ts       — Keep but refactor: remove Auth methods, keep DB reads
+   490→src/lib/appwrite-server.ts — Keep for SSR data fetching (if needed)
+   491→src/lib/resend.ts         — Remove (email handled by Worker now)
+   492→src/components/dakkho/DakkhoApp.tsx — Update auth flow
+   493→src/components/dakkho/auth/LoginPage.tsx — Use Worker API login
+   494→src/components/dakkho/auth/SignupPage.tsx — Use Worker API signup + D1 institutes/technologies
+   495→src/components/dakkho/live/LiveSessionsPage.tsx — Fetch from Worker API
+   496→src/components/dakkho/profile/SubscriptionPage.tsx — Replace with Course Packages
+   497→src/components/dakkho/notifications/NotificationsPage.tsx — Integrate OneSignal
+   498→src/components/dakkho/home/HomePage.tsx — Fetch real data
+   499→src/components/dakkho/video/VideoPlayerPage.tsx — Use Worker stream URL
+   500→src/components/dakkho/shared/Sidebar.tsx — Dynamic departments from API
+   501→```
+   502→
+   503→---
+   504→
+   505→## 7. NEW API CLIENT (Replace All Fetch Calls)
+   506→
+   507→Create `src/lib/api-client.ts`:
+   508→
+   509→```typescript
+   510→const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 
+   511→  'https://dakkho-admin-api.dakkho-admin.workers.dev';
+   512→
+   513→const AUTH_TOKEN_KEY = 'dakkho_student_token';
+   514→
+   515→export function getAuthToken(): string | null {
+   516→  if (typeof window === 'undefined') return null;
+   517→  return localStorage.getItem(AUTH_TOKEN_KEY);
+   518→}
+   519→
+   520→export function setAuthToken(token: string): void {
+   521→  localStorage.setItem(AUTH_TOKEN_KEY, token);
+   522→}
+   523→
+   524→export function clearAuthToken(): void {
+   525→  localStorage.removeItem(AUTH_TOKEN_KEY);
+   526→}
+   527→
+   528→async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+   529→  const url = `${API_BASE}${path}`;
+   530→  const headers: Record<string, string> = {
+   531→    'Content-Type': 'application/json',
+   532→    ...(options.headers as Record<string, string> || {}),
+   533→  };
+   534→
+   535→  const token = getAuthToken();
+   536→  if (token) {
+   537→    headers['Authorization'] = `Bearer ${token}`;
+   538→  }
+   539→
+   540→  const res = await fetch(url, { ...options, headers });
+   541→  const data = await res.json();
+   542→
+   543→  if (!res.ok) {
+   544→    throw { status: res.status, ...data };
+   545→  }
+   546→
+   547→  return data as T;
+   548→}
+   549→
+   550→export const api = {
+   551→  get: <T>(path: string) => request<T>(path, { method: 'GET' }),
+   552→  post: <T>(path: string, body: unknown) => request<T>(path, { 
+   553→    method: 'POST', body: JSON.stringify(body) 
+   554→  }),
+   555→  put: <T>(path: string, body: unknown) => request<T>(path, { 
+   556→    method: 'PUT', body: JSON.stringify(body) 
+   557→  }),
+   558→  delete: <T>(path: string, body?: unknown) => request<T>(path, { 
+   559→    method: 'DELETE', body: body ? JSON.stringify(body) : undefined 
+   560→  }),
+   561→};
+   562→```
+   563→
+   564→---
+   565→
+   566→## 8. ONESIGNAL INTEGRATION
+   567→
+   568→```html
+   569→<!-- Add to src/app/layout.tsx <head> -->
+   570→<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+   571→<script>
+   572→  window.OneSignalDeferred = window.OneSignalDeferred || [];
+   573→  window.OneSignalDeferred.push(function(OneSignal) {
+   574→    OneSignal.init({
+   575→      appId: "ba6c42b2-d564-4254-b422-a2bed67d8b0f",
+   576→      safari_web_id: "web.onesignal.auto.028d9952-ba2c-477b-babc-6aee5c5ba0de",
+   577→      notifyButton: { enable: true },
+   578→    });
+   579→  });
+   580→</script>
+   581→```
+   582→
+   583→After login, register the push token:
+   584→```typescript
+   585→const onesignalUserId = await OneSignal.User.PushSubscription.id;
+   586→if (onesignalUserId) {
+   587→  await api.post('/api/push/register', {
+   588→    push_token: onesignalUserId,
+   589→    device_type: 'web',
+   590→    device_info: navigator.userAgent,
+   591→  });
+   592→}
+   593→```
+   594→
+   595→---
+   596→
+   597→## 9. ENVIRONMENT VARIABLES
+   598→
+   599→### `.env` (Student App)
+   600→```env
+   601→NEXT_PUBLIC_API_BASE_URL=https://dakkho-admin-api.dakkho-admin.workers.dev
+   602→NEXT_PUBLIC_APPWRITE_ENDPOINT=https://sgp.cloud.appwrite.io/v1
+   603→NEXT_PUBLIC_APPWRITE_PROJECT_ID=dakkho
+   604→NEXT_PUBLIC_APPWRITE_DATABASE_ID=dakkho_main
+   605→NEXT_PUBLIC_ONESIGNAL_APP_ID=ba6c42b2-d564-4254-b422-a2bed67d8b0f
+   606→NEXT_PUBLIC_ONESIGNAL_SAFARI_WEB_ID=web.onesignal.auto.028d9952-ba2c-477b-babc-6aee5c5ba0de
+   607→```
+   608→
+   609→### Remove from `.env` (No Longer Needed)
+   610→```env
+   611→# DELETE THESE:
+   612→DATABASE_URL=file:...                        # Prisma/SQLite removed
+   613→CLOUDFLARE_ACCOUNT_ID=...                    # R2 via Worker now
+   614→CLOUDFLARE_R2_ACCESS_KEY_ID=...             # R2 via Worker now
+   615→CLOUDFLARE_R2_SECRET_ACCESS_KEY=...         # R2 via Worker now
+   616→NEXT_PUBLIC_MQTT_BROKER_URL=...             # MQTT removed
+   617→NEXT_PUBLIC_MQTT_USERNAME=...               # MQTT removed
+   618→NEXT_PUBLIC_MQTT_PASSWORD=...               # MQTT removed
+   619→NEXT_PUBLIC_SUPABASE_URL=...                # Supabase removed
+   620→NEXT_PUBLIC_SUPABASE_ANON_KEY=...           # Supabase removed
+   621→APPWRITE_API_KEY=...                         # Server-side Appwrite → Worker handles
+   622→RESEND_API_KEY=...                           # Email → Worker handles
+   623→```
+   624→
+   625→---
+   626→
+   627→## 10. WORKER ENDPOINTS TO ADD
+   628→
+   629→The following endpoints don't exist yet on the Worker and MUST be added before the Student App can function:
+   630→
+   631→### 10.1 Student Auth Endpoints
+   632→
+   633→```typescript
+   634→// POST /api/auth/signup
+   635→// Body: { fullName, email, password, instituteId, technology }
+   636→// 1. Create user in Appwrite via server SDK
+   637→// 2. Create D1 student session
+   638→// 3. Send OTP email via Resend
+   639→// 4. Return: { success, token, userId }
+   640→
+   641→// POST /api/auth/login
+   642→// Body: { email, password }
+   643→// 1. Verify credentials against Appwrite
+   644→// 2. Check if existing session exists (1 device rule)
+   645→// 3. Create D1 student session
+   646→// 4. Return: { success, token, user }
+   647→
+   648→// POST /api/auth/logout
+   649→// Header: Authorization: Bearer <token>
+   650→// 1. Deactivate D1 student session
+   651→// 2. Unregister push token
+   652→
+   653→// GET /api/auth/me
+   654→// Header: Authorization: Bearer <token>
+   655→// 1. Validate session
+   656→// 2. Return user profile from Appwrite + D1
+   657→
+   658→// POST /api/auth/forgot-password
+   659→// Body: { email }
+   660→// 1. Create Appwrite recovery
+   661→// 2. Send reset email via Resend
+   662→
+   663→// POST /api/auth/verify-otp
+   664→// Body: { email, otp }
+   665→// 1. Verify OTP from D1/Redis
+   666→// 2. Mark email verified in Appwrite
+   667→```
+   668→
+   669→### 10.2 Video Streaming Endpoint
+   670→
+   671→```typescript
+   672→// GET /api/video/stream-url?key=XXX&bucket=XXX
+   673→// Header: Authorization: Bearer <token>
+   674→// 1. Validate student session
+   675→// 2. Check if user has active package for this course
+   676→// 3. Generate presigned URL using R2 binding
+   677→// 4. Return: { url }
+   678→```
+   679→
+   680→### 10.3 Config Endpoints
+   681→
+   682→```typescript
+   683→// GET /api/config
+   684→// Return app_config from D1 (features, streaming settings, etc.)
+   685→
+   686→// GET /api/config/payment
+   687→// Return active payment config (instructions for manual payment)
+   688→```
+   689→
+   690→### 10.4 Course Data Endpoints
+   691→
+   692→```typescript
+   693→// GET /api/courses — List courses (from Appwrite or D1)
+   694→// GET /api/courses/:id — Get course details
+   695→// GET /api/courses/:id/videos — Get videos for a course
+   696→// GET /api/instructors — List instructors
+   697→// GET /api/instructors/:id — Get instructor details
+   698→```
+   699→
+   700→---
+   701→
+   702→## 11. IMPLEMENTATION PRIORITY ORDER
+   703→
+   704→1. **Add Student Auth endpoints to Worker** (`/api/auth/*`) — CRITICAL
+   705→2. **Create API client** in Student App (`src/lib/api-client.ts`)
+   706→3. **Replace Auth system** — LoginPage, SignupPage, store
+   707→4. **Replace mock data** — institutes, technologies from Worker API
+   708→5. **Add OneSignal SDK** — push notifications
+   709→6. **Fix SubscriptionPage** → Course Packages
+   710→7. **Fix LiveSessionsPage** → Worker API data
+   711→8. **Fix VideoPlayerPage** → Worker stream URL
+   712→9. **Remove dead code** — Prisma, R2, MQTT, Supabase, local API routes
+   713→10. **Deploy to Cloudflare Pages** — `dakkho.pro.bd`
+   714→11. **Update Worker CORS** — add student domain
+   715→
+   716→---
+   717→
+   718→## 12. KEY DESIGN DECISIONS (Reference)
+   719→
+   720→| Decision | Choice | Reason |
+   721→|----------|--------|--------|
+   722→| Auth System | D1 Sessions via Worker | 1 device strictly, session management |
+   723→| Push Notifications | OneSignal SDK | Admin sends via REST API, Student receives |
+   724→| Payment | Manual verify (default) | SSLCommerz + bKash plug-and-play ready |
+   725→| Course Packages | Single + Friend (2) | 6 months/semester auto-assign |
+   726→| 2FA | Email OTP + TOTP | User choice |
+   727→| Data Source | Appwrite + D1 via Worker | Appwrite for content, D1 for platform data |
+   728→| Video Storage | R2 (via Worker) | Native binding, no S3 SDK |
+   729→| Student App Host | Cloudflare Pages | Custom domain dakkho.pro.bd |
+   730→| Email | Resend (via Worker) | noreply@dakkho.pro.bd verified |
+   731→| Realtime | OneSignal + Polling | Replace MQTT/Supabase |
+   732→
+   733→---
+   734→
+   735→*Generated: 2026-06-04 | DAKKHO Platform Sync Document*
+   736→

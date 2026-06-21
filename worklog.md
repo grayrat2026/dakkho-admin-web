@@ -213,3 +213,40 @@ Stage Summary:
 - Total project: ~127 Kotlin files
 - GitHub: https://github.com/grayrat2026/dakkho-student-mobile/tree/native-android-rewrite
 - Next: Phase 17 (Course Notes #21, Quizzes #22, Progress #23)
+
+---
+Task ID: 18
+Agent: Main
+Task: Phase 18 — Instructor List #24 & Profile #25
+
+Work Log:
+- Created InstructorRepository interface with getInstructors, getInstructorDetail, getInstructorCourses
+- Created InstructorRepositoryImpl with DTO→Domain mapping, social_links JSON parsing
+- Created InstructorListViewModel with debounced search, pagination, pull-to-refresh
+- Created InstructorListScreen with search bar, infinite scroll LazyColumn, shimmer loading, empty states
+- Created InstructorProfileViewModel with detail loading, course pagination, tab switching
+- Created InstructorProfileScreen with cover image, avatar, stats row (Courses/Students/Rating),
+  bio section, social links chips, About/Courses tabs, instructor course cards with price/rating
+- Enhanced Instructor domain model with InstructorDetail (bio, coverUrl, specialization, socialLinks)
+- Added SocialLinks data class with YouTube/GitHub/Facebook/LinkedIn/Website fields
+- Enhanced InstructorDto with cover_url, specialization, total_courses, total_students fields
+- Enhanced InstructorDetailDto with cover_url, specialization, email, social_links, is_active, created_at
+- Updated InstructorApiService with paginated endpoints (getInstructorsPaginated, getInstructorCourses),
+  added custom response wrappers matching D1 backend format
+- Added Route.InstructorList to Route.kt
+- Replaced InstructorProfile PlaceholderScreen with real InstructorProfileScreen in DakkhoNavHost
+- Added InstructorList route with navigation to InstructorProfile
+- Updated HomeScreen with onNavigateToInstructorList callback for FeaturedInstructors "See All"
+- Updated HomeViewModel to use InstructorRepository instead of direct API service for featured instructors
+- Updated SearchViewModel to use getInstructorsPaginated with server-side search
+- Updated ExploreViewModel technologies loading for new response format
+- Updated RepositoryModule with InstructorRepository binding
+- Updated README with Phase 18 completion, new API endpoints
+- Committed (42efae1) and pushed to GitHub
+
+Stage Summary:
+- 8 new Kotlin files, 9 modified files (17 total changed)
+- Phase 1-18 completed
+- Total project: ~140 Kotlin files
+- GitHub: https://github.com/grayrat2026/dakkho-student-mobile/tree/native-android-rewrite
+- Next: Phase 19 (Instructor Sub-pages #26-29)
