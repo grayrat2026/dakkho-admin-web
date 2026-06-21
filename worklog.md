@@ -250,3 +250,41 @@ Stage Summary:
 - Total project: ~140 Kotlin files
 - GitHub: https://github.com/grayrat2026/dakkho-student-mobile/tree/native-android-rewrite
 - Next: Phase 19 (Instructor Sub-pages #26-29)
+
+---
+Task ID: 19
+Agent: Main
+Task: Phase 19 — Instructor Sub-pages #26-29
+
+Work Log:
+- Read Phase 19 specs from plan PDF (12 sub-phases)
+- Created InstructorCoursesViewModel with paginated course loading, pull-to-refresh
+- Created InstructorCoursesScreen with course list, View All link, shimmer loading, empty states
+- Created InstructorReviewsViewModel with rating filter, pagination, rating breakdown
+- Created InstructorReviewsScreen with Canvas-drawn 5-bar rating breakdown chart, review list with pagination, rating filter chips
+- Created InstructorScheduleViewModel with live class loading, month navigation, date selection, events-by-date grouping
+- Created InstructorScheduleScreen with interactive month calendar (event dots, date selection, month navigation), live class event cards with Join button, past classes section
+- Created InstructorContactViewModel with instructor detail loading
+- Created InstructorContactScreen with email/social link cards, Intent-based launching (ACTION_SENDTO, ACTION_VIEW), platform-colored icons
+- Added LiveClassApiService: GET /api/live-classes with instructor_id filter
+- Added LiveClass domain model with LiveClassStatus enum (SCHEDULED, LIVE, ENDED, CANCELLED)
+- Added LiveClassDto with Moshi annotations
+- Added GET /api/instructors/:id/reviews endpoint to InstructorApiService with InstructorReviewsResponse
+- Added InstructorReviewsResult wrapper with RatingBreakdown
+- Expanded InstructorRepository with getInstructorReviews() and getInstructorLiveClasses()
+- Expanded InstructorRepositoryImpl with DTO→Domain mappers for reviews and live classes, parseRatingBreakdown()
+- Updated InstructorProfileScreen: expanded from 2 tabs to 5 tabs (About/Courses/Reviews/Schedule/Contact) with ScrollableTabRow
+- Added InstructorProfileTabs constants for tab index management
+- Added 4 new Route classes: InstructorCourses, InstructorReviews, InstructorSchedule, InstructorContact
+- Wired all 4 new routes in DakkhoNavHost with slide transitions
+- Updated InstructorProfileScreen in NavHost with new navigation callbacks
+- Updated NetworkModule with LiveClassApiService provider
+- Updated README with Phase 19 completion, new API endpoints
+- Committed (5ba0c54) and pushed to GitHub
+
+Stage Summary:
+- 10 new Kotlin files, 9 modified files (19 total changed)
+- Phase 1-19 completed
+- Total project: ~150 Kotlin files
+- GitHub: https://github.com/grayrat2026/dakkho-student-mobile/tree/native-android-rewrite
+- Next: Phase 20 (My Courses #30 & Bookmarks #31)
