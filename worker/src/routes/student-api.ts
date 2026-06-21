@@ -15,6 +15,7 @@ import { DEFAULT_CONFIG, type ServerConfig } from '../lib/types';
 import { getBucketForType, getPublicUrl } from '../lib/r2';
 import { getErrorMessage, generateId, getSessionExpiry } from '../lib/utils';
 import { hashPassword, verifyPassword } from '../lib/auth-password';
+import { getLiveKitConfig, generateLiveKitToken, generateRoomName } from '../lib/livekit';
 
 const studentApiRoutes = new Hono<{ Bindings: Env; Variables: StudentAuthVariables }>();
 
@@ -230,13 +231,310 @@ studentApiRoutes.get('/events', async (c) => {
 
 // ─── Live Classes ───
 
+// GET /live-classes — List active live classes (public)
 studentApiRoutes.get('/live-classes', async (c) => {
   try {
-    const result = await c.env.DB.prepare(
-      "SELECT * FROM live_class_schedules WHERE is_active = 1 AND status IN ('scheduled', 'live') ORDER BY scheduled_at ASC"
-    ).all();
+    const status = c.req.query('status'); // 'live', 'scheduled', 'all'
+    const courseId = c.req.query('course_id');
+    const instructorId = c.req.query('instructor_id');
 
-    return c.json({ liveClasses: result.results });
+    let query = "SELECT * FROM live_class_schedules WHERE is_active = 1";
+    const params: any[] = [];
+
+    if (status && status !== 'all') {
+      query += " AND status = ?";
+      params.push(status);
+    } else {
+      query += " AND status IN ('scheduled', 'live')";
+    }
+
+    if (courseId) {
+      query += " AND course_id = ?";
+      params.push(courseId);
+    }
+
+    if (instructorId) {
+      query += " AND instructor_id = ?";
+      params.push(instructorId);
+    }
+
+    query += " ORDER BY scheduled_at ASC";
+
+    const result = await c.env.DB.prepare(query).bind(...params).all();
+
+    // Enrich with instructor names and LiveKit URL if platform is livekit
+    const livekitConfig = await getLiveKitConfig(c.env.KV_CONFIG);
+    const enrichedClasses = await Promise.all(
+      (result.results as any[]).map(async (cls) => {
+        // Look up instructor name
+        if (cls.instructor_id) {
+          const instructor = await c.env.DB.prepare(
+            'SELECT name FROM instructors WHERE id = ?'
+          ).bind(cls.instructor_id).first<{ name: string }>();
+          (cls as any).instructor_name = instructor?.name || null;
+        }
+        // Look up course name
+        if (cls.course_id) {
+          const course = await c.env.DB.prepare(
+            'SELECT title FROM courses WHERE id = ?'
+          ).bind(cls.course_id).first<{ title: string }>();
+          (cls as any).course_name = course?.title || null;
+        }
+        // Add LiveKit URL for livekit platform classes
+        if (cls.platform === 'livekit' && livekitConfig) {
+          (cls as any).livekit_url = livekitConfig.url;
+        }
+        return cls;
+      })
+    );
+
+    return c.json({ liveClasses: enrichedClasses });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// GET /live-classes/featured — Get featured/upcoming live classes (public)
+studentApiRoutes.get('/live-classes/featured', async (c) => {
+  try {
+    const limit = parseInt(c.req.query('limit') || '5');
+
+    // Get currently live + next upcoming
+    const liveResult = await c.env.DB.prepare(
+      "SELECT * FROM live_class_schedules WHERE is_active = 1 AND status = 'live' ORDER BY scheduled_at DESC LIMIT ?"
+    ).bind(limit).all();
+
+    const upcomingResult = await c.env.DB.prepare(
+      "SELECT * FROM live_class_schedules WHERE is_active = 1 AND status = 'scheduled' AND scheduled_at > datetime('now') ORDER BY scheduled_at ASC LIMIT ?"
+    ).bind(limit).all();
+
+    const livekitConfig = await getLiveKitConfig(c.env.KV_CONFIG);
+
+    const enrichClass = async (cls: any) => {
+      if (cls.instructor_id) {
+        const instructor = await c.env.DB.prepare(
+          'SELECT name, avatar_url FROM instructors WHERE id = ?'
+        ).bind(cls.instructor_id).first();
+        cls.instructor_name = (instructor as any)?.name || null;
+        cls.instructor_avatar = (instructor as any)?.avatar_url || null;
+      }
+      if (cls.course_id) {
+        const course = await c.env.DB.prepare(
+          'SELECT title FROM courses WHERE id = ?'
+        ).bind(cls.course_id).first();
+        cls.course_name = (course as any)?.title || null;
+      }
+      if (cls.platform === 'livekit' && livekitConfig) {
+        cls.livekit_url = livekitConfig.url;
+      }
+      return cls;
+    };
+
+    const live = await Promise.all((liveResult.results as any[]).map(enrichClass));
+    const upcoming = await Promise.all((upcomingResult.results as any[]).map(enrichClass));
+
+    return c.json({ live, upcoming });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// GET /live-classes/:id — Get live class detail (public)
+studentApiRoutes.get('/live-classes/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const cls = await c.env.DB.prepare(
+      'SELECT * FROM live_class_schedules WHERE id = ? AND is_active = 1'
+    ).bind(id).first();
+
+    if (!cls) {
+      return c.json({ error: 'Live class not found' }, 404);
+    }
+
+    // Enrich with instructor and course info
+    const result: any = { ...cls };
+
+    if ((cls as any).instructor_id) {
+      const instructor = await c.env.DB.prepare(
+        'SELECT name, avatar_url FROM instructors WHERE id = ?'
+      ).bind((cls as any).instructor_id).first();
+      result.instructor_name = (instructor as any)?.name || null;
+      result.instructor_avatar = (instructor as any)?.avatar_url || null;
+    }
+
+    if ((cls as any).course_id) {
+      const course = await c.env.DB.prepare(
+        'SELECT title, thumbnail_url FROM courses WHERE id = ?'
+      ).bind((cls as any).course_id).first();
+      result.course_name = (course as any)?.title || null;
+      result.course_thumbnail = (course as any)?.thumbnail_url || null;
+    }
+
+    // Add LiveKit URL if applicable
+    if ((cls as any).platform === 'livekit') {
+      const livekitConfig = await getLiveKitConfig(c.env.KV_CONFIG);
+      if (livekitConfig) {
+        result.livekit_url = livekitConfig.url;
+      }
+    }
+
+    // Check current participant count from KV
+    const participantCount = await c.env.KV_CONFIG.get(`LIVEKIT_PARTICIPANTS:${(cls as any).id}`);
+    result.participant_count = participantCount ? parseInt(participantCount) : 0;
+
+    return c.json({ liveClass: result });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// POST /live-classes/:id/join — Generate LiveKit token for student to join
+studentApiRoutes.post('/live-classes/:id/join', async (c) => {
+  try {
+    const auth = await getStudentAuth(c);
+    if (!auth.authorized || !auth.userId) {
+      return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const id = c.req.param('id');
+    const cls = await c.env.DB.prepare(
+      'SELECT * FROM live_class_schedules WHERE id = ? AND is_active = 1'
+    ).bind(id).first();
+
+    if (!cls) {
+      return c.json({ error: 'Live class not found' }, 404);
+    }
+
+    const liveClass = cls as any;
+
+    // Check if class is joinable (scheduled within 15 min or live)
+    if (liveClass.status === 'cancelled') {
+      return c.json({ error: 'This class has been cancelled' }, 400);
+    }
+
+    if (liveClass.status === 'completed' || liveClass.status === 'ended') {
+      return c.json({ error: 'This class has ended' }, 400);
+    }
+
+    // If class is scheduled, check if it's within 15 minutes of start time
+    if (liveClass.status === 'scheduled') {
+      const scheduledTime = new Date(liveClass.scheduled_at).getTime();
+      const now = Date.now();
+      const minutesUntilStart = (scheduledTime - now) / (1000 * 60);
+      if (minutesUntilStart > 15) {
+        return c.json({ error: 'Class is not open for joining yet. Opens 15 minutes before start.' }, 400);
+      }
+    }
+
+    // If course_id is set, verify enrollment
+    if (liveClass.course_id) {
+      const enrollment = await c.env.DB.prepare(
+        'SELECT id FROM enrollments WHERE user_id = ? AND course_id = ? AND status = ?'
+      ).bind(auth.userId, liveClass.course_id, 'active').first();
+      if (!enrollment) {
+        return c.json({ error: 'You must be enrolled in this course to join the live class' }, 403);
+      }
+    }
+
+    // For LiveKit platform: generate token
+    if (liveClass.platform === 'livekit') {
+      const livekitConfig = await getLiveKitConfig(c.env.KV_CONFIG);
+      if (!livekitConfig) {
+        return c.json({ error: 'LiveKit is not configured' }, 503);
+      }
+
+      const roomName = generateRoomName(liveClass.id);
+      const token = await generateLiveKitToken({
+        apiKey: livekitConfig.apiKey,
+        apiSecret: livekitConfig.apiSecret,
+        identity: `student-${auth.userId}`,
+        name: auth.name || auth.email || 'Student',
+        room: roomName,
+        canPublish: true,
+        canSubscribe: true,
+        canPublishData: true,
+        canAdmin: false,
+        ttl: 4 * 60 * 60, // 4 hours
+        metadata: JSON.stringify({
+          userId: auth.userId,
+          role: 'student',
+          classId: liveClass.id,
+          courseId: liveClass.course_id || null,
+        }),
+      });
+
+      // Track participant count in KV
+      const currentCount = await c.env.KV_CONFIG.get(`LIVEKIT_PARTICIPANTS:${liveClass.id}`);
+      const newCount = (currentCount ? parseInt(currentCount) : 0) + 1;
+      await c.env.KV_CONFIG.put(`LIVEKIT_PARTICIPANTS:${liveClass.id}`, String(newCount), { expirationTtl: 86400 });
+
+      // If class was scheduled and it's time, update status to live
+      if (liveClass.status === 'scheduled') {
+        const scheduledTime = new Date(liveClass.scheduled_at).getTime();
+        const now = Date.now();
+        if (scheduledTime - now <= 15 * 60 * 1000) {
+          await c.env.DB.prepare(
+            "UPDATE live_class_schedules SET status = 'live' WHERE id = ? AND status = 'scheduled'"
+          ).bind(liveClass.id).run();
+        }
+      }
+
+      return c.json({
+        token,
+        url: livekitConfig.url,
+        roomName,
+        identity: `student-${auth.userId}`,
+        classId: liveClass.id,
+        title: liveClass.title,
+      });
+    }
+
+    // For non-LiveKit platforms (jitsi, zoom, meet, custom): return meeting URL
+    if (liveClass.meeting_url) {
+      return c.json({
+        meetingUrl: liveClass.meeting_url,
+        platform: liveClass.platform,
+        classId: liveClass.id,
+        title: liveClass.title,
+      });
+    }
+
+    return c.json({ error: 'No meeting link available for this class' }, 404);
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// POST /live-classes/:id/reminder — Set/unset reminder for a live class
+studentApiRoutes.post('/live-classes/:id/reminder', async (c) => {
+  try {
+    const auth = await getStudentAuth(c);
+    if (!auth.authorized || !auth.userId) {
+      return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const id = c.req.param('id');
+    const { enabled } = await c.req.json();
+
+    // Store reminder in KV with TTL matching class scheduled time
+    const cls = await c.env.DB.prepare(
+      'SELECT scheduled_at FROM live_class_schedules WHERE id = ? AND is_active = 1'
+    ).bind(id).first();
+
+    if (!cls) {
+      return c.json({ error: 'Live class not found' }, 404);
+    }
+
+    const key = `REMINDER:${auth.userId}:${id}`;
+    if (enabled) {
+      const scheduledAt = new Date((cls as any).scheduled_at).getTime();
+      const ttlSeconds = Math.max(60, Math.floor((scheduledAt - Date.now()) / 1000) + 300); // 5 min after scheduled
+      await c.env.KV_CONFIG.put(key, JSON.stringify({ userId: auth.userId, classId: id, scheduledAt: (cls as any).scheduled_at }), { expirationTtl: Math.min(ttlSeconds, 86400 * 7) });
+    } else {
+      await c.env.KV_CONFIG.delete(key);
+    }
+
+    return c.json({ success: true, reminderSet: enabled });
   } catch (error) {
     return c.json({ error: getErrorMessage(error) }, 500);
   }

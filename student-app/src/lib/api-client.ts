@@ -232,8 +232,22 @@ export const eventApi = {
 
 // Live Classes
 export const liveClassApi = {
-  list: () =>
-    api.get<{ liveClasses: LiveClass[] }>('/api/live-classes'),
+  list: (params?: { status?: string; course_id?: string; instructor_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.course_id) query.set('course_id', params.course_id);
+    if (params?.instructor_id) query.set('instructor_id', params.instructor_id);
+    const qs = query.toString();
+    return api.get<{ liveClasses: LiveClass[] }>(`/api/live-classes${qs ? `?${qs}` : ''}`);
+  },
+  detail: (id: number) =>
+    api.get<{ liveClass: LiveClass }>(`/api/live-classes/${id}`),
+  featured: (limit = 5) =>
+    api.get<{ live: LiveClass[]; upcoming: LiveClass[] }>(`/api/live-classes/featured?limit=${limit}`),
+  getLiveKitToken: (id: number) =>
+    api.post<{ token?: string; url?: string; room?: string; meetingUrl?: string; platform?: string }>(`/api/live-classes/${id}/join`, {}),
+  setReminder: (id: number, enabled: boolean) =>
+    api.post<{ success: boolean; reminderSet: boolean }>(`/api/live-classes/${id}/reminder`, { enabled }),
 };
 
 // Course Packages

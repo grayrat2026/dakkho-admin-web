@@ -19,6 +19,7 @@ const platformConfig: Record<string, { label: string; icon: typeof Video; color:
   jitsi: { label: 'Jitsi', icon: Video, color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
   zoom: { label: 'Zoom', icon: Video, color: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800/30 dark:text-neutral-300' },
   meet: { label: 'Meet', icon: Video, color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400' },
+  livekit: { label: 'Dakkho Live', icon: Radio, color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
 };
 
 function formatCountdown(scheduledAt: string): string {
@@ -291,6 +292,7 @@ export function CourseLive() {
                     <div>
                       <label className="text-sm font-semibold text-foreground mb-1.5 block">Platform</label>
                       <select value={newClass.platform} onChange={(e) => setNewClass({ ...newClass, platform: e.target.value as any })} className="w-full px-4 py-2.5 rounded-xl text-sm premium-input">
+                        <option value="livekit">Dakkho Live (Built-in)</option>
                         <option value="jitsi">Jitsi</option>
                         <option value="zoom">Zoom</option>
                         <option value="meet">Google Meet</option>

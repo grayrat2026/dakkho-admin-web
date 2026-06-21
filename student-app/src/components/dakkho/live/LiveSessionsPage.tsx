@@ -17,6 +17,7 @@ import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
 import { EmptyState } from '../shared/EmptyState';
 import { liveClassApi, technologyApi, type LiveClass, type Technology } from '@/lib/api-client';
+import { useNavigationStore } from '@/lib/store';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -52,7 +53,17 @@ function platformIcon(platform: string) {
   const lower = platform?.toLowerCase() || '';
   if (lower.includes('zoom')) return <Video className="w-3 h-3" />;
   if (lower.includes('jitsi')) return <MonitorSmartphone className="w-3 h-3" />;
+  if (lower.includes('livekit')) return <Radio className="w-3 h-3" />;
   return <Radio className="w-3 h-3" />;
+}
+
+function platformLabel(platform: string) {
+  const lower = platform?.toLowerCase() || '';
+  if (lower.includes('livekit')) return 'Dakkho Live';
+  if (lower.includes('zoom')) return 'Zoom';
+  if (lower.includes('jitsi')) return 'Jitsi';
+  if (lower.includes('meet')) return 'Google Meet';
+  return platform;
 }
 
 // ─── Skeleton Card ──────────────────────────────────────────────
@@ -84,6 +95,7 @@ function SessionSkeletonCard() {
 type FetchState = 'loading' | 'success' | 'error';
 
 export function LiveSessionsPage() {
+  const navigate = useNavigationStore((s) => s.navigate);
   const [sessions, setSessions] = useState<LiveClass[]>([]);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [fetchState, setFetchState] = useState<FetchState>('loading');
@@ -320,18 +332,24 @@ export function LiveSessionsPage() {
                           {session.platform && (
                             <span className="flex items-center gap-1 font-medium text-foreground/70">
                               {platformIcon(session.platform)}
-                              {session.platform}
+                              {platformLabel(session.platform)}
                             </span>
                           )}
                         </div>
                       </div>
-                      {session.meeting_url && (
+                      {(session.meeting_url || session.platform === 'livekit') && (
                         <GradientButton
                           size="sm"
                           variant="danger"
-                          onClick={() => window.open(session.meeting_url, '_blank', 'noopener')}
+                          onClick={() => {
+                            if (session.platform === 'livekit') {
+                              navigate('live-class-join', { liveClassId: String(session.id) });
+                            } else if (session.meeting_url) {
+                              window.open(session.meeting_url, '_blank', 'noopener');
+                            }
+                          }}
                         >
-                          Join
+                          {session.platform === 'livekit' ? 'Join Live' : 'Join'}
                         </GradientButton>
                       )}
                     </div>
@@ -392,7 +410,7 @@ export function LiveSessionsPage() {
                           {session.platform && (
                             <span className="flex items-center gap-1 font-medium text-foreground/70">
                               {platformIcon(session.platform)}
-                              {session.platform}
+                              {platformLabel(session.platform)}
                             </span>
                           )}
                         </div>
@@ -467,7 +485,7 @@ export function LiveSessionsPage() {
                           {session.platform && (
                             <span className="flex items-center gap-1 font-medium text-foreground/70">
                               {platformIcon(session.platform)}
-                              {session.platform}
+                              {platformLabel(session.platform)}
                             </span>
                           )}
                         </div>

@@ -54,6 +54,7 @@ const platformBadgeStyles: Record<string, string> = {
   jitsi: 'bg-blue-500/15 text-blue-400 border border-blue-500/20',
   zoom: 'bg-purple-500/15 text-purple-400 border border-purple-500/20',
   meet: 'bg-green-500/15 text-green-400 border border-green-500/20',
+  livekit: 'bg-orange-500/15 text-orange-400 border border-orange-500/20',
   custom: 'bg-gray-500/15 text-gray-400 border border-gray-500/20',
 };
 
@@ -302,7 +303,7 @@ export default function LiveClassesPanel() {
                       <span
                         className={`status-badge ${platformBadgeStyles[cls.platform] || platformBadgeStyles.custom}`}
                       >
-                        {cls.platform === 'meet' ? 'Google Meet' : cls.platform.charAt(0).toUpperCase() + cls.platform.slice(1)}
+                        {cls.platform === 'meet' ? 'Google Meet' : cls.platform === 'livekit' ? 'Dakkho Live' : cls.platform.charAt(0).toUpperCase() + cls.platform.slice(1)}
                       </span>
                     </td>
                     <td>
@@ -497,6 +498,7 @@ export default function LiveClassesPanel() {
                   <option value="jitsi">Jitsi</option>
                   <option value="zoom">Zoom</option>
                   <option value="meet">Google Meet</option>
+                  <option value="livekit">Dakkho Live (Built-in)</option>
                   <option value="custom">Custom</option>
                 </select>
               </div>

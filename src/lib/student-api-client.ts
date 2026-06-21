@@ -81,6 +81,10 @@ export interface LiveClass {
   title_bn: string;
   description: string;
   instructor_id: string;
+  instructor_name?: string;
+  instructor_avatar?: string;
+  course_name?: string;
+  course_thumbnail?: string;
   technology_id: number;
   scheduled_at: string;
   duration_minutes: number;
@@ -88,6 +92,25 @@ export interface LiveClass {
   platform: string;
   status: string;
   recording_url: string;
+  livekit_url?: string;
+  room_name?: string;
+  participant_count?: number;
+}
+
+export interface LiveClassJoinResponse {
+  token?: string;
+  url?: string;
+  roomName?: string;
+  identity?: string;
+  classId?: number;
+  title?: string;
+  meetingUrl?: string;
+  platform?: string;
+}
+
+export interface LiveClassFeaturedResponse {
+  live: LiveClass[];
+  upcoming: LiveClass[];
 }
 
 export interface Event {
@@ -212,8 +235,22 @@ export const eventApi = {
 
 // Live Classes
 export const liveClassApi = {
-  list: () =>
-    api.get<{ liveClasses: LiveClass[] }>('/api/live-classes'),
+  list: (params?: { status?: string; course_id?: string; instructor_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.course_id) query.set('course_id', params.course_id);
+    if (params?.instructor_id) query.set('instructor_id', params.instructor_id);
+    const qs = query.toString();
+    return api.get<{ liveClasses: LiveClass[] }>(`/api/live-classes${qs ? `?${qs}` : ''}`);
+  },
+  detail: (id: number) =>
+    api.get<{ liveClass: LiveClass }>(`/api/live-classes/${id}`),
+  featured: (limit = 5) =>
+    api.get<LiveClassFeaturedResponse>(`/api/live-classes/featured?limit=${limit}`),
+  join: (id: number) =>
+    api.post<LiveClassJoinResponse>(`/api/live-classes/${id}/join`, {}),
+  setReminder: (id: number, enabled: boolean) =>
+    api.post<{ success: boolean; reminderSet: boolean }>(`/api/live-classes/${id}/reminder`, { enabled }),
 };
 
 // Course Packages
