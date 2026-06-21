@@ -77,3 +77,40 @@ Stage Summary:
 - Total project: 91 Kotlin files
 - GitHub: https://github.com/grayrat2026/dakkho-student-mobile/tree/native-android-rewrite
 - Next: Phase 8 (Explore Screen) + Phase 9 (Search Screen)
+
+---
+Task ID: 12
+Agent: Main Agent
+Task: Phase 12 — Watch History #12 & Assignment #13
+
+Work Log:
+- Read Phase 12 specs from plan PDF (WatchHistory + Assignment screens)
+- Enhanced WatchHistoryEntity with videoTitle, courseTitle, thumbnailUrl columns
+- Enhanced WatchHistoryItem domain model with progressPercent computed property
+- Enhanced WatchHistoryDto with video_title, course_title, thumbnail_url fields
+- Created WatchHistoryApiService (GET/DELETE watch-history endpoints)
+- Created AssignmentApiService (GET assignments, POST submit with MultipartBody)
+- Created AssignmentDto + AssignmentItem domain models with AssignmentStatus enum
+- Created WatchHistoryRepository interface + WatchHistoryRepositoryImpl (offline-first Room + API)
+- Created AssignmentRepository interface + AssignmentRepositoryImpl (in-memory cache + API)
+- Created WatchHistoryViewModel with reactive Room flow, delete, clear-all dialog
+- Created AssignmentViewModel with load, refresh, SAF file upload with progress
+- Created WatchHistoryScreen with SwipeToDismiss (left-to-delete), clear-all confirmation dialog
+- Created AssignmentScreen with PullToRefresh, SAF file picker, camera intent, snackbar feedback
+- Created WatchHistoryItemCard with Coil thumbnail, progress bar, duration badge, resume button
+- Created AssignmentItemCard with status badges (Pending=yellow, Submitted=blue, Graded=green), upload button
+- Created empty state composables for both screens
+- Added Route.Assignments(courseId) to Route.kt
+- Wired WatchHistoryScreen and AssignmentScreen in DakkhoNavHost
+- Updated NetworkModule with WatchHistoryApiService + AssignmentApiService providers
+- Updated RepositoryModule with WatchHistoryRepository + AssignmentRepository bindings
+- Updated README with Phase 12 completion, project structure, API endpoints
+- Fixed code review issues: missing imports, unused imports, fully-qualified references
+- Committed (7107035) and pushed to GitHub
+
+Stage Summary:
+- 14 new Kotlin files, 10 modified files (24 total changed)
+- Phase 1-12 completed
+- Total project: ~105 Kotlin files
+- GitHub: https://github.com/grayrat2026/dakkho-student-mobile/tree/native-android-rewrite
+- Next: Phase 13 (Course Detail #14)
