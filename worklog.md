@@ -147,6 +147,44 @@ Stage Summary:
 - Next: Phase 16 (Course Q&A #18, Announcements #19, Resources #20)
 
 ---
+Task ID: 17
+Agent: Main
+Task: Phase 17 — Course Notes #21, Quizzes #22, Progress #23
+
+Work Log:
+- Read Phase 17 specs from plan PDF (13 sub-phases)
+- Created CourseNoteEntity (Room) with timestamp, video position, course ID, content
+- Created CourseNoteDao with CRUD operations + Flow queries for reactive updates
+- Added CourseNoteEntity to DakkhoDatabase, CourseNoteDao to DatabaseModule
+- Created CourseNoteRepository interface + CourseNoteRepositoryImpl with Room-based CRUD
+- Created CourseNotesViewModel with debounced auto-save (1s), timestamp formatting
+- Created CourseNotesScreen with: timestamp-linked note cards, seek-to-position,
+  add note ModalBottomSheet, delete confirmation dialog, note editor view
+- Created QuizApiService: GET /student/quizzes/:courseId, GET detail, POST submit
+- Created Quiz domain models: Quiz, QuizQuestion, QuizAttempt, QuizSubmitResult, DTOs
+- Created QuizRepository interface + QuizRepositoryImpl with full quiz lifecycle
+- Created CourseQuizzesViewModel with CountDownTimer, haptic feedback, auto-submit on timeout
+- Created CourseQuizzesScreen with: quiz list cards, countdown timer in TopAppBar,
+  question navigation dots, animated option cards, score circle (Canvas-drawn),
+  answer review with expandable explanations, retry/back buttons
+- Created CourseProgressViewModel: calculates progress from curriculum + watch history
+- Created CourseProgressScreen with: Canvas-drawn circular progress indicator,
+  weekly study bar chart (7 days), learning path vertical stepper with
+  completion/current/pending states, stats cards
+- Added Route.CourseNotes, Route.CourseQuizzes, Route.CourseProgress
+- Wired all 3 new routes in DakkhoNavHost with slide transitions
+- Updated CourseDetailScreen with onNavigateToNotes/Quizzes/Progress callbacks
+- Updated NetworkModule with QuizApiService provider
+- Updated RepositoryModule with CourseNoteRepository + QuizRepository bindings
+- Updated README with Phase 17 completion, new API endpoints, project structure
+- Committed (f0bba0c) and pushed to GitHub
+
+Stage Summary:
+- 14 new Kotlin files, 9 modified files (23 total changed)
+- Phase 1-17 completed
+- Total project: ~130 Kotlin files
+- GitHub: https://github.com/grayrat2026/dakkho-student-mobile/tree/native-android-rewrite
+- Next: Phase 18 (Instructor List #24 & Profile #25)
 Task ID: 16
 Agent: Main
 Task: Phase 16 — Course Q&A #18, Announcements #19, Resources #20
